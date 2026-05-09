@@ -75,6 +75,23 @@ function WorkbenchStatusCard(props: {
   );
 }
 
+function policyActionLabel(action: string | null | undefined) {
+  if (action === "authorize_auto_execute") return "可自动执行";
+  if (action === "require_review") return "需要人工复核";
+  if (action === "propose") return "生成建议";
+  if (action === "observe") return "保持观察";
+  if (action === "ignore") return "忽略噪声";
+  return "等待决策";
+}
+
+function noTradeBandLabel(state: string | null | undefined) {
+  if (state === "entered_outer") return "外圈";
+  if (state === "cooling") return "冷静";
+  if (state === "exited_inner") return "回归";
+  if (state === "inside") return "内圈";
+  return "未评估";
+}
+
 export default function RebalancePageClient() {
   const wbModel = useDashboardPageModel();
   const searchParams = useSearchParams();
@@ -115,6 +132,7 @@ export default function RebalancePageClient() {
   }, [rp?.currentCycle?.agentDecisionSnapshot]);
 
   const cycle = rp?.currentCycle ?? null;
+  const policyDecision = cycle?.policySnapshot?.decision ?? null;
   const riskStatus = rp?.currentRiskCheck?.overallStatus ?? "pass";
   const statusCards = wbModel.bootstrap && rp ? [
     {
@@ -123,6 +141,19 @@ export default function RebalancePageClient() {
       hint: cycle ? `${triggerSourceLabel(cycle.triggerSource)} · ${cycle.cycleId.slice(0, 8)}` : "生成后可审阅建议",
       icon: <Gauge className="h-4 w-4" />,
       tone: cycle ? cycleStatusTone(cycle.status) : "slate",
+    },
+    {
+      label: "策略决策",
+      value: policyActionLabel(policyDecision?.action),
+      hint: policyDecision
+        ? `行动分 ${policyDecision.score.toFixed(1)} / ${policyDecision.threshold.toFixed(1)} · ${noTradeBandLabel(policyDecision.noTradeBandState)}`
+        : "等待 Policy Engine 评估",
+      icon: <Bot className="h-4 w-4" />,
+      tone: policyDecision?.action === "authorize_auto_execute" || policyDecision?.action === "propose"
+        ? "green" as const
+        : policyDecision?.blockers.length
+          ? "amber" as const
+          : "indigo" as const,
     },
     {
       label: "调仓时点",
@@ -173,7 +204,7 @@ export default function RebalancePageClient() {
           <QuickConfigPopover driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct} />
         </div>
         {statusCards.length > 0 ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {statusCards.map((card) => (
               <WorkbenchStatusCard key={card.label} {...card} />
             ))}

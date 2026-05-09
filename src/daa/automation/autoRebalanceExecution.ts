@@ -2,6 +2,7 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { evaluateAutoRebalanceAuthority, type AutomationAuthorityDecision, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { PreTradeRiskCheck, RebalanceCycle, RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
@@ -72,7 +73,10 @@ function findAutoExecutionRiskBreach(input: {
 }
 
 export async function executeAutoRebalanceCycle(input: {
-  cycle: Pick<RebalanceCycle, "cycleId" | "proposals"> & { riskCheck?: PreTradeRiskCheck | null };
+  cycle: Pick<RebalanceCycle, "cycleId" | "proposals"> & {
+    riskCheck?: PreTradeRiskCheck | null;
+    policySnapshot?: PolicyDecisionSnapshot | null;
+  };
   systemConfig: DaaSystemConfig;
   triggerSource: AutomationAuthorityTrigger;
   totalEquity?: number | null;
@@ -100,6 +104,18 @@ export async function executeAutoRebalanceCycle(input: {
       attempted: false,
       blockedReason: authority.reason,
       error: authority.reason,
+      authority,
+    };
+  }
+
+  const policyAction = input.cycle.policySnapshot?.decision.action ?? null;
+  if (policyAction && policyAction !== "authorize_auto_execute") {
+    const message = `[PolicyEngine 守门] 策略决策为 ${policyAction}，本轮仅允许生成/审阅建议，不自动执行。`;
+    logSwallowed(`${input.triggerSource}.autoExecutePolicyGate`, new Error(message));
+    return {
+      ...base,
+      blockedReason: message,
+      error: message,
       authority,
     };
   }

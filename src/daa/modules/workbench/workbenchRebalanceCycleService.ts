@@ -20,6 +20,12 @@ import {
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
+import { buildInvestmentIntents } from "@/src/daa/modules/intents/intentBuilder";
+import { buildPortfolioStateFromBootstrap } from "@/src/daa/modules/portfolio-state/portfolioStateService";
+import { buildProposalPlan } from "@/src/daa/modules/proposal-planner/proposalPlanner";
+import { evaluatePortfolioPolicy } from "@/src/daa/modules/policy-engine/policyEngine";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
+import { collectPortfolioSignals } from "@/src/daa/modules/signals/signalCollector";
 import { resolveExecutionRoute, syncBrokerOrders } from "./executionVenue";
 import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
@@ -260,7 +266,14 @@ export async function generateWorkbenchRebalanceCycle(
   const bootstrap = applyTargetWeightOverridesToBootstrap(rawBootstrap, input.targetWeightOverrides);
 
   const latestCycle = recentCycles[0] || null;
-  const strategy = systemRow.config.rebalanceStrategy;
+  const policy = resolvePolicyConfig(systemRow.config);
+  const portfolioState = buildPortfolioStateFromBootstrap(bootstrap);
+  const signals = collectPortfolioSignals({
+    portfolioState,
+    systemConfig: systemRow.config,
+    policy,
+    marketContext: bootstrap.marketContext,
+  });
   const marketContext = bootstrap.marketContext || null;
   const now = new Date();
   let cooldownReferenceCycle: DaaStoreRebalanceCycle | null = latestCycle;
@@ -268,6 +281,7 @@ export async function generateWorkbenchRebalanceCycle(
     skippedByCooldown?: boolean;
     cooldownUntil?: string | null;
     attachLatestCycle?: boolean;
+    detailsJson?: Record<string, unknown>;
   } = {}): GenerateRebalanceCycleResult => {
     const attachedCycle = options.attachLatestCycle ? (cooldownReferenceCycle || latestCycle) : null;
     void appendTriggerEventSafe({
@@ -278,6 +292,7 @@ export async function generateWorkbenchRebalanceCycle(
       detailsJson: {
         skippedByCooldown: options.skippedByCooldown === true,
         cooldownUntil: options.cooldownUntil || null,
+        ...(options.detailsJson ?? {}),
       },
     });
     return {
@@ -293,34 +308,34 @@ export async function generateWorkbenchRebalanceCycle(
   };
 
   if (!manual && triggerSource === "calendar") {
-    if (!strategy.calendar.enabled) {
-      return skipWithLatest("定期再平衡未启用，跳过自动生成。");
+    if (!policy.review.enabled) {
+      return skipWithLatest("定期组合复盘未启用，跳过自动生成。");
     }
 
-    if (!isPastUtcTime(now, strategy.analysisTimeUtc)) {
-      return skipWithLatest(`未到定时分析窗口（UTC ${strategy.analysisTimeUtc}）`);
+    if (!isPastUtcTime(now, policy.review.scheduledTimeUtc)) {
+      return skipWithLatest(`未到定期复盘窗口（UTC ${policy.review.scheduledTimeUtc}）`);
     }
 
-    const timeZone = normalizeTimeZoneOrUtc(strategy.timezone);
+    const timeZone = normalizeTimeZoneOrUtc(policy.review.timezone);
     const today = getZonedYmd(now, timeZone);
-    const dueDay = Math.max(1, Math.min(28, Math.trunc(strategy.calendar.dayOfMonth || 1)));
+    const dueDay = Math.max(1, Math.min(28, Math.trunc(policy.review.dayOfMonth || 1)));
 
     // every_3_days 和 weekly 不依赖 dayOfMonth，由 periodKey 去重控制实际间隔
-    const isHighFrequency = strategy.calendar.frequency === "every_3_days" || strategy.calendar.frequency === "weekly";
-    if (!isHighFrequency && (today.day !== dueDay || !isCalendarMonthDue(today.month, strategy.calendar.frequency))) {
+    const isHighFrequency = policy.review.frequency === "every_3_days" || policy.review.frequency === "weekly";
+    if (!isHighFrequency && (today.day !== dueDay || !isCalendarMonthDue(today.month, policy.review.frequency))) {
       return skipWithLatest(
-        `当前不在定期再平衡窗口（${timeZone} 每${strategy.calendar.frequency === "monthly"
+        `当前不在定期组合复盘窗口（${timeZone} 每${policy.review.frequency === "monthly"
           ? "月"
-          : (strategy.calendar.frequency === "quarterly"
+          : (policy.review.frequency === "quarterly"
             ? "季"
-            : (strategy.calendar.frequency === "semi_annual" ? "半年" : "年"))}${dueDay}日）`,
+            : (policy.review.frequency === "semi_annual" ? "半年" : "年"))}${dueDay}日）`,
       );
     }
 
     const currentPeriodKey = buildCalendarPeriodKey({
       date: now,
       timeZone,
-      frequency: strategy.calendar.frequency,
+      frequency: policy.review.frequency,
     });
     const duplicated = recentCycles.some((row) => {
       if (row.triggerSource !== "calendar") return false;
@@ -329,52 +344,28 @@ export async function generateWorkbenchRebalanceCycle(
       const rowPeriodKey = buildCalendarPeriodKey({
         date: new Date(ms),
         timeZone,
-        frequency: strategy.calendar.frequency,
+        frequency: policy.review.frequency,
       });
       return rowPeriodKey === currentPeriodKey;
     });
     if (duplicated) {
-      return skipWithLatest(`当前周期 ${currentPeriodKey} 已生成过定期再平衡建议`);
+      return skipWithLatest(`当前周期 ${currentPeriodKey} 已完成定期组合复盘`);
     }
   }
 
   if (!manual && triggerSource === "drift") {
-    if (!strategy.drift.enabled) {
+    if (!policy.drift.enabled) {
       return skipWithLatest("偏移触发未启用，跳过自动生成。");
-    }
-
-    if (strategy.drift.checkFrequency === "daily") {
-      const todayUtc = now.toISOString().slice(0, 10);
-      const alreadyRanToday = recentCycles.some((row) => {
-        if (row.triggerSource !== "drift") return false;
-        const ts = row.createdAt || row.snapshotAt;
-        return typeof ts === "string" && ts.startsWith(todayUtc);
-      });
-      if (alreadyRanToday) {
-        return skipWithLatest("当日偏移检查已完成，跳过重复触发。", { attachLatestCycle: true });
-      }
-    }
-
-    if (strategy.drift.checkFrequency === "weekly") {
-      const latestDriftCycle = recentCycles.find((row) => row.triggerSource === "drift") || null;
-      if (latestDriftCycle) {
-        const lastMs = Date.parse(latestDriftCycle.createdAt || latestDriftCycle.snapshotAt);
-        const nextDueMs = Number.isFinite(lastMs) ? lastMs + (7 * 24 * 60 * 60 * 1000) : NaN;
-        if (Number.isFinite(nextDueMs) && nextDueMs > Date.now()) {
-          return skipWithLatest("偏移检查频率为每周，当前尚未到下一次检查窗口。");
-        }
-      }
     }
   }
 
-  const cooldownHours = Math.max(1, systemRow.config.rebalanceStrategy.cooldownHours);
+  const cooldownHours = Math.max(1, policy.throttle.autoExecutionCooldownHours);
   const cooldownMs = cooldownHours * 60 * 60 * 1000;
   const latestAutoComparableCycle = isAutoCooldownGuardTrigger({ triggerSource, manual })
     ? (recentCycles.find((row) => row.triggerSource !== "manual" && row.triggerSource !== "risk") || null)
     : null;
   cooldownReferenceCycle = latestAutoComparableCycle || latestCycle;
   let autoCooldownUntil: string | null = null;
-  let shouldCheckAgentRiskReductionException = false;
   if (latestAutoComparableCycle && isCycleWithinCooldownWindow({
     cycle: latestAutoComparableCycle,
     cooldownMs,
@@ -382,14 +373,6 @@ export async function generateWorkbenchRebalanceCycle(
   })) {
     const lastMs = Date.parse(latestAutoComparableCycle.createdAt || latestAutoComparableCycle.snapshotAt);
     autoCooldownUntil = Number.isFinite(lastMs) ? toIsoByMs(lastMs + cooldownMs) : null;
-    if (triggerSource === "agent_trigger") {
-      shouldCheckAgentRiskReductionException = true;
-    } else {
-      return skipWithLatest(
-        `冷静期生效中，${cooldownHours} 小时内不重复自动触发`,
-        { skippedByCooldown: true, cooldownUntil: autoCooldownUntil, attachLatestCycle: true },
-      );
-    }
   }
 
   // ── Step A: 计算 drift draft（纯数学，保持不变）─────────────────────
@@ -398,18 +381,6 @@ export async function generateWorkbenchRebalanceCycle(
     triggerReason: input.triggerReason,
     allowUnheldBuyTargets: hasAgentTargetOverrides,
   });
-
-  // ── drift 触发的阈值守卫（仅自动触发需要）────────────────────────
-  if (!manual && triggerSource === "drift") {
-    const thresholdPct = Math.max(0, strategy.drift.thresholdPct * 100);
-    const hasWatchlistCandidates = systemRow.config.watchlistEntry?.enabled === true;
-    // Watchlist 自动建仓需要在 drift 未超阈值时也能触发，所以仅当两路都不满足才跳过
-    if (draft.maxAbsDriftPct < thresholdPct && !hasWatchlistCandidates) {
-      return skipWithLatest(
-        `最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}% 未超过阈值 ${thresholdPct.toFixed(2)}%`,
-      );
-    }
-  }
 
   // ── Step A.5: Watchlist 自动建仓（信号达标则为 watchlist 资产生成 BUY 提案） ──
   let watchlistEntryProposals: RebalanceProposal[] = [];
@@ -433,16 +404,6 @@ export async function generateWorkbenchRebalanceCycle(
     }
   } catch (err) {
     logSwallowed("workbenchRebalanceCycleService.watchlistEntry", err);
-  }
-
-  // drift 阈值未达但 watchlist 有提案 → 允许通过，继续生成 cycle
-  if (!manual && triggerSource === "drift") {
-    const thresholdPct = Math.max(0, strategy.drift.thresholdPct * 100);
-    if (draft.maxAbsDriftPct < thresholdPct && watchlistEntryProposals.length === 0) {
-      return skipWithLatest(
-        `最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}% 未超过阈值 ${thresholdPct.toFixed(2)}%`,
-      );
-    }
   }
 
   // ── Step B: 现金三层分类 ─────────────────────────────────────────
@@ -623,11 +584,46 @@ export async function generateWorkbenchRebalanceCycle(
       { attachLatestCycle: true },
     );
   }
-  if (shouldCheckAgentRiskReductionException && !isAgentPureRiskReduction) {
-    return skipWithLatest(
-      `冷静期生效中，${cooldownHours} 小时内仅允许纯降风险 SELL；本轮 Agent 调整未满足放行条件`,
-      { skippedByCooldown: true, cooldownUntil: autoCooldownUntil, attachLatestCycle: true },
-    );
+  const intents = buildInvestmentIntents({
+    triggerSource,
+    triggerReason: draft.triggerReason,
+    signals,
+    manual,
+    hasAgentTargetOverrides,
+  });
+  const policyDecision = evaluatePortfolioPolicy({
+    portfolioState,
+    policy,
+    signals,
+    intents,
+    proposals: mergedProposals,
+    triggerSource,
+    manual,
+    latestAutoComparableCycle,
+  });
+  const policySnapshot = {
+    decision: policyDecision,
+    intentIds: intents.map((intent) => intent.intentId),
+    signalIds: signals.map((signal) => signal.signalId),
+  };
+  if (policy.enabled && !policy.shadowMode && (policyDecision.action === "ignore" || policyDecision.action === "observe")) {
+    const reason = policyDecision.blockers[0] || policyDecision.reasons[0] || "策略引擎判断无需行动";
+    return skipWithLatest(`策略引擎保持观察：${reason}`, {
+      attachLatestCycle: true,
+      skippedByCooldown: policyDecision.noTradeBandState === "cooling",
+      cooldownUntil: policyDecision.noTradeBandState === "cooling" ? autoCooldownUntil : null,
+      detailsJson: {
+        policyDecisionId: policyDecision.decisionId,
+        policyAction: policyDecision.action,
+        policyScore: policyDecision.score,
+        policyThreshold: policyDecision.threshold,
+        noTradeBandState: policyDecision.noTradeBandState,
+        blockers: policyDecision.blockers,
+        reasons: policyDecision.reasons,
+        signalIds: policySnapshot.signalIds.slice(0, 30),
+        intentIds: policySnapshot.intentIds,
+      },
+    });
   }
   const emptyAutoTriggerSkipMessage = buildEmptyAutoTriggerSkipMessage({
     triggerSource,
@@ -650,9 +646,17 @@ export async function generateWorkbenchRebalanceCycle(
     bootstrap.assetUniverse,
     systemRow.config.strategy.risk.correlationCapPct,
   );
+  const proposalPlan = buildProposalPlan({
+    policyDecision,
+    proposals: mergedProposals,
+    systemConfig: systemRow.config,
+  });
 
   // ── Step G: 创建 Cycle ────────────────────────────────────────────
   const cycleNotes = [
+    `Policy(${policyDecision.action}): score ${policyDecision.score.toFixed(1)} / threshold ${policyDecision.threshold.toFixed(1)} · ${policyDecision.noTradeBandState}`,
+    policyDecision.blockers.length > 0 ? `策略阻断: ${policyDecision.blockers.join("；").slice(0, 240)}` : null,
+    policyDecision.reasons.length > 0 ? `策略理由: ${policyDecision.reasons.join("；").slice(0, 240)}` : null,
     `Agent(${agentResult.agentStatus}): ${agentResult.proposals.length} 个提案`,
     marketContext ? `市场环境: ${marketRegimeLabelZh(marketContext.regime)} / 风险分 ${marketContext.riskOffScorePct.toFixed(1)}` : null,
     agentResult.llmSummary ? `Agent摘要: ${agentResult.llmSummary.slice(0, 120)}` : null,
@@ -688,6 +692,11 @@ export async function generateWorkbenchRebalanceCycle(
     notes: cycleNotes || null,
     marketContext,
     agentDecisionSnapshot,
+    policyDecisionId: policyDecision.decisionId,
+    intentIds: policySnapshot.intentIds,
+    signalIds: policySnapshot.signalIds,
+    policySnapshot,
+    proposalPlanId: proposalPlan.planId,
   });
 
   await appendTriggerEventSafe({
@@ -700,6 +709,12 @@ export async function generateWorkbenchRebalanceCycle(
       tlhProposalCount: tlhProposals.length,
       riskOverallStatus: riskCheck.overallStatus,
       agentStatus: agentResult.agentStatus,
+      policyDecisionId: policyDecision.decisionId,
+      policyAction: policyDecision.action,
+      policyScore: policyDecision.score,
+      noTradeBandState: policyDecision.noTradeBandState,
+      proposalPlanId: proposalPlan.planId,
+      proposalPlanCostBase: proposalPlan.estimatedCostBase,
       ruleBasedMarketRegime: marketContext?.regime || null,
       cashIdleWarning: cashClassification.cashIdleWarning,
     },

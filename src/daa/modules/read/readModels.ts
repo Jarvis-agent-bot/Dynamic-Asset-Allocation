@@ -19,6 +19,7 @@ export type WorkbenchReadModel = {
   signals: WorkbenchSignal[];
   allocationSummary: WorkbenchAllocationSummary;
   equityDelta: EquityDelta;
+  policySummary?: WorkbenchPolicySummary | null;
   ledgerMeta: DaaCurrentLedgerMeta;
   notificationStatus: NotificationStatusSummary;
   loadedAt: string;
@@ -46,6 +47,18 @@ export type EquityDelta = {
   dayChangePct: number | null;
   weekChange: number | null;
   weekChangePct: number | null;
+};
+
+export type WorkbenchPolicySummary = {
+  cycleId: string;
+  decisionId: string;
+  action: string;
+  score: number;
+  threshold: number;
+  noTradeBandState: string;
+  blockers: string[];
+  reasons: string[];
+  createdAt: string;
 };
 
 export type WorkbenchAllocationSummary = {

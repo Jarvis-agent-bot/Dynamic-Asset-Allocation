@@ -7,6 +7,7 @@ import type {
   DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaStoreRebalanceCycleStatus } from "@/src/daa/store/storeTypes";
+import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 
 export type WorkbenchPriceStatus = "fresh" | "stale" | "missing" | "unsupported";
 
@@ -198,6 +199,11 @@ export type RebalanceCycle = {
   cancelReason: string | null;
   notes: string | null;
   marketContext?: DaaMarketContext | null;
+  policyDecisionId?: string | null;
+  intentIds?: string[];
+  signalIds?: string[];
+  policySnapshot?: PolicyDecisionSnapshot | null;
+  proposalPlanId?: string | null;
   agentDecisionSnapshot?: {
     status: string;
     marketRegime: string;

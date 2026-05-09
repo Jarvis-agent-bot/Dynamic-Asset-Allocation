@@ -509,6 +509,11 @@ function mapStoreCycleToView(cycle: DaaStoreRebalanceCycle | null): RebalanceCyc
         cancelReason: cycle.cancelReason,
         notes: cycle.notes,
         marketContext: cycle.marketContext || null,
+        policyDecisionId: cycle.policyDecisionId ?? null,
+        intentIds: cycle.intentIds ?? [],
+        signalIds: cycle.signalIds ?? [],
+        policySnapshot: cycle.policySnapshot ?? null,
+        proposalPlanId: cycle.proposalPlanId ?? null,
         agentDecisionSnapshot: cycle.agentDecisionSnapshot ? {
             status: String((cycle.agentDecisionSnapshot as Record<string, unknown>).status ?? ""),
             marketRegime: String((cycle.agentDecisionSnapshot as Record<string, unknown>).marketRegime ?? ""),

@@ -461,6 +461,33 @@ function normalizeRebalanceTriggerSource(value: unknown): DaaStoreRebalanceTrigg
   return "manual";
 }
 
+function normalizePolicyEvaluationSource(value: unknown): NonNullable<DaaStoreRebalanceCycle["policySnapshot"]>["decision"]["source"] {
+  const text = normalizeText(value, "manual_review").toLowerCase();
+  if (text === "scheduled_review") return "scheduled_review";
+  if (text === "drift_monitor") return "drift_monitor";
+  if (text === "agent_event") return "agent_event";
+  if (text === "risk_event") return "risk_event";
+  if (text === "cash_event") return "cash_event";
+  return "manual_review";
+}
+
+function normalizePolicyDecisionAction(value: unknown): NonNullable<DaaStoreRebalanceCycle["policySnapshot"]>["decision"]["action"] {
+  const text = normalizeText(value, "observe").toLowerCase();
+  if (text === "ignore") return "ignore";
+  if (text === "propose") return "propose";
+  if (text === "require_review") return "require_review";
+  if (text === "authorize_auto_execute") return "authorize_auto_execute";
+  return "observe";
+}
+
+function normalizeNoTradeBandState(value: unknown): NonNullable<DaaStoreRebalanceCycle["policySnapshot"]>["decision"]["noTradeBandState"] {
+  const text = normalizeText(value, "inside").toLowerCase();
+  if (text === "entered_outer") return "entered_outer";
+  if (text === "cooling") return "cooling";
+  if (text === "exited_inner") return "exited_inner";
+  return "inside";
+}
+
 function normalizeRiskRule(value: unknown): DaaStoreRiskRule {
   const text = normalizeText(value).toLowerCase();
   if (text === "max_order_pct") return "max_order_pct";
@@ -666,6 +693,38 @@ function normalizeCycleProposals(value: unknown): DaaStoreRebalanceCycle["propos
   return out;
 }
 
+function normalizePolicySnapshot(value: unknown): DaaStoreRebalanceCycle["policySnapshot"] {
+  if (!isRecord(value) || !isRecord(value.decision)) return null;
+  const decisionRaw = value.decision;
+  const decisionId = normalizeText(decisionRaw.decisionId);
+  if (!decisionId) return null;
+  const costBenefit = isRecord(decisionRaw.costBenefit) ? decisionRaw.costBenefit : {};
+  return {
+    decision: {
+      decisionId,
+      source: normalizePolicyEvaluationSource(decisionRaw.source),
+      triggerSource: normalizeRebalanceTriggerSource(decisionRaw.triggerSource),
+      action: normalizePolicyDecisionAction(decisionRaw.action),
+      score: clampNumber(toFiniteNumber(decisionRaw.score, 0), 0, 100),
+      threshold: clampNumber(toFiniteNumber(decisionRaw.threshold, 0), 0, 100),
+      reasons: normalizeStringArray(decisionRaw.reasons),
+      blockers: normalizeStringArray(decisionRaw.blockers),
+      noTradeBandState: normalizeNoTradeBandState(decisionRaw.noTradeBandState),
+      costBenefit: {
+        expectedRiskImprovement: Math.max(0, toFiniteNumber(costBenefit.expectedRiskImprovement, 0)),
+        expectedTrackingImprovement: Math.max(0, toFiniteNumber(costBenefit.expectedTrackingImprovement, 0)),
+        estimatedCostBase: Math.max(0, toFiniteNumber(costBenefit.estimatedCostBase, 0)),
+        turnoverPenalty: Math.max(0, toFiniteNumber(costBenefit.turnoverPenalty, 0)),
+        uncertaintyPenalty: Math.max(0, toFiniteNumber(costBenefit.uncertaintyPenalty, 0)),
+      },
+      audit: isRecord(decisionRaw.audit) ? decisionRaw.audit : {},
+      createdAt: toIsoString(decisionRaw.createdAt, new Date().toISOString()),
+    },
+    intentIds: normalizeStringArray(value.intentIds),
+    signalIds: normalizeStringArray(value.signalIds),
+  };
+}
+
 function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCycle {
   const executionSummaryRaw = row.execution_summary_json == null ? null : parseJsonb<Record<string, unknown>>(row.execution_summary_json, {});
   const executionSummary = executionSummaryRaw
@@ -706,6 +765,11 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
       const snap = mcRaw?.__agentDecisionSnapshot;
       return snap && typeof snap === "object" && !Array.isArray(snap) ? (snap as Record<string, unknown>) : null;
     })(),
+    policyDecisionId: row.policy_decision_id == null ? null : normalizeText(row.policy_decision_id) || null,
+    intentIds: normalizeStringArray(parseJsonb<unknown[]>(row.intent_ids_json, [])),
+    signalIds: normalizeStringArray(parseJsonb<unknown[]>(row.signal_ids_json, [])),
+    policySnapshot: normalizePolicySnapshot(parseJsonb<Record<string, unknown>>(row.policy_snapshot_json, {})),
+    proposalPlanId: row.proposal_plan_id == null ? null : normalizeText(row.proposal_plan_id) || null,
     createdAt: toIsoString(row.created_at),
   };
 }
@@ -878,6 +942,11 @@ const REBALANCE_CYCLE_SELECT_COLUMNS_ = [
   "cancel_reason",
   "notes",
   "market_context_json",
+  "policy_decision_id",
+  "intent_ids_json",
+  "signal_ids_json",
+  "policy_snapshot_json",
+  "proposal_plan_id",
   "created_at",
 ].join(", ");
 
@@ -925,6 +994,11 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
     const riskCheck = normalizePreTradeRiskCheck(input.riskCheck);
     const notes = input.notes == null ? null : normalizeText(input.notes) || null;
     const marketContext = input.marketContext == null ? null : normalizeMarketContextJson(input.marketContext);
+    const policyDecisionId = input.policyDecisionId == null ? null : normalizeText(input.policyDecisionId) || null;
+    const intentIds = normalizeStringArray(input.intentIds ?? []);
+    const signalIds = normalizeStringArray(input.signalIds ?? []);
+    const policySnapshot = normalizePolicySnapshot(input.policySnapshot);
+    const proposalPlanId = input.proposalPlanId == null ? null : normalizeText(input.proposalPlanId) || null;
 
     // Embed agentDecisionSnapshot inside market_context_json to avoid schema change
     const marketContextWithSnapshot = {
@@ -935,9 +1009,10 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
     const inserted = await query(
       `INSERT INTO daa_rebalance_cycles (
          owner_account_id, cycle_id, status, trigger_source, trigger_reason, snapshot_at, equity_snapshot,
-         drift_snapshot_json, proposals_json, risk_check_json, execution_started_at, notes, market_context_json, created_at
+         drift_snapshot_json, proposals_json, risk_check_json, execution_started_at, notes, market_context_json,
+         policy_decision_id, intent_ids_json, signal_ids_json, policy_snapshot_json, proposal_plan_id, created_at
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12,$13::jsonb,NOW()
+         $1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12,$13::jsonb,$14,$15::jsonb,$16::jsonb,$17::jsonb,$18,NOW()
        )
        ON CONFLICT (cycle_id) DO UPDATE
        SET
@@ -952,7 +1027,12 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
          risk_check_json = EXCLUDED.risk_check_json,
          execution_started_at = EXCLUDED.execution_started_at,
          notes = EXCLUDED.notes,
-         market_context_json = EXCLUDED.market_context_json
+         market_context_json = EXCLUDED.market_context_json,
+         policy_decision_id = EXCLUDED.policy_decision_id,
+         intent_ids_json = EXCLUDED.intent_ids_json,
+         signal_ids_json = EXCLUDED.signal_ids_json,
+         policy_snapshot_json = EXCLUDED.policy_snapshot_json,
+         proposal_plan_id = EXCLUDED.proposal_plan_id
        RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_}`,
       [
         ownerAccountId,
@@ -968,6 +1048,11 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
         executionStartedAt,
         notes,
         JSON.stringify(marketContextWithSnapshot),
+        policyDecisionId,
+        JSON.stringify(intentIds),
+        JSON.stringify(signalIds),
+        JSON.stringify(policySnapshot ?? {}),
+        proposalPlanId,
       ],
     );
     return mapRebalanceCycleRow(inserted.rows[0] as Record<string, unknown>);
@@ -1028,6 +1113,21 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
       const nextMarketContext = input.marketContext === undefined
         ? current.marketContext
         : (input.marketContext == null ? null : normalizeMarketContextJson(input.marketContext));
+      const nextPolicyDecisionId = input.policyDecisionId === undefined
+        ? (current.policyDecisionId ?? null)
+        : (input.policyDecisionId == null ? null : normalizeText(input.policyDecisionId) || null);
+      const nextIntentIds = input.intentIds === undefined
+        ? current.intentIds
+        : normalizeStringArray(input.intentIds);
+      const nextSignalIds = input.signalIds === undefined
+        ? current.signalIds
+        : normalizeStringArray(input.signalIds);
+      const nextPolicySnapshot = input.policySnapshot === undefined
+        ? (current.policySnapshot ?? null)
+        : normalizePolicySnapshot(input.policySnapshot);
+      const nextProposalPlanId = input.proposalPlanId === undefined
+        ? (current.proposalPlanId ?? null)
+        : (input.proposalPlanId == null ? null : normalizeText(input.proposalPlanId) || null);
 
       const updatedRes = await query(
         `UPDATE daa_rebalance_cycles
@@ -1043,8 +1143,13 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
            cancelled_at = $10,
            cancel_reason = $11,
            notes = $12,
-           market_context_json = $13::jsonb
-         WHERE owner_account_id = $14 AND cycle_id = $1
+           market_context_json = $13::jsonb,
+           policy_decision_id = $14,
+           intent_ids_json = $15::jsonb,
+           signal_ids_json = $16::jsonb,
+           policy_snapshot_json = $17::jsonb,
+           proposal_plan_id = $18
+         WHERE owner_account_id = $19 AND cycle_id = $1
          RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_}`,
         [
           cycleId,
@@ -1060,6 +1165,11 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
           nextCancelReason,
           nextNotes,
           nextMarketContext == null ? JSON.stringify({}) : JSON.stringify(nextMarketContext),
+          nextPolicyDecisionId,
+          JSON.stringify(nextIntentIds),
+          JSON.stringify(nextSignalIds),
+          JSON.stringify(nextPolicySnapshot ?? {}),
+          nextProposalPlanId,
           ownerAccountId,
         ],
       );

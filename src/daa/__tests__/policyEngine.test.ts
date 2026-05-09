@@ -1,0 +1,150 @@
+import { describe, expect, it } from "vitest";
+
+import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
+import { evaluatePortfolioPolicy } from "@/src/daa/modules/policy-engine/policyEngine";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
+import { evaluateNoTradeBand } from "@/src/daa/modules/policy-engine/noTradeBand";
+import type { InvestmentIntent } from "@/src/daa/modules/intents/intentTypes";
+import type { PortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateTypes";
+import type { DriftSignal } from "@/src/daa/modules/signals/signalTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+
+function portfolioState(overrides: Partial<PortfolioState> = {}): PortfolioState {
+  return {
+    asOf: "2026-05-09T00:00:00.000Z",
+    accountId: "default",
+    baseCurrency: "USD",
+    navBase: 10_000,
+    cashBase: 1_000,
+    positions: [],
+    exposures: {
+      holdingCount: 1,
+      maxWeightPct: 45,
+      maxAbsDriftPct: 10,
+      investedValueBase: 9_000,
+    },
+    dataHealth: {
+      status: "ok",
+      staleAssetKeys: [],
+      missingAssetKeys: [],
+      fxMissingAssetKeys: [],
+      message: null,
+    },
+    ...overrides,
+  };
+}
+
+function driftSignal(absDriftPct: number): DriftSignal {
+  return {
+    signalId: `drift:US::QQQ:${absDriftPct}`,
+    type: "drift",
+    source: "test",
+    severity: absDriftPct >= 5 ? "warn" : "info",
+    asOf: "2026-05-09T00:00:00.000Z",
+    evidence: [],
+    assetKey: "US::QQQ",
+    symbol: "QQQ",
+    actualWeightPct: 40 + absDriftPct,
+    targetWeightPct: 40,
+    driftPct: absDriftPct,
+    absDriftPct,
+    volatilityAdjustedDrift: absDriftPct / 5,
+    enteredOuterBand: absDriftPct >= 5,
+    exitedInnerBand: absDriftPct <= 2,
+  };
+}
+
+function driftIntent(): InvestmentIntent {
+  return {
+    intentId: "intent:drift:test",
+    source: "drift",
+    action: "hold",
+    assetKeys: ["US::QQQ"],
+    thesis: "drift entered outer band",
+    confidencePct: 70,
+    expiresAt: null,
+    evidenceRefs: ["drift:US::QQQ"],
+  };
+}
+
+function proposal(): RebalanceProposal {
+  return {
+    assetKey: "US::QQQ",
+    symbol: "QQQ",
+    currency: "USD",
+    fxRateToBase: 1,
+    side: "SELL",
+    suggestedQty: 1,
+    suggestedNotional: 100,
+    price: 100,
+    reason: "reduce drift",
+    selected: true,
+    hfContribution: null,
+    proposalType: "drift",
+  };
+}
+
+describe("policy-engine", () => {
+  it("把 legacy 再平衡参数归一化为 policy 语义", () => {
+    const config = normalizeSystemConfig({
+      rebalanceStrategy: {
+        calendar: { enabled: true, frequency: "weekly", dayOfMonth: 5 },
+        drift: { enabled: true, thresholdPct: 0.07, checkFrequency: "weekly" },
+        cooldownHours: 12,
+        analysisTimeUtc: "10:00",
+        timezone: "Asia/Shanghai",
+      },
+    });
+    const policy = resolvePolicyConfig(config);
+
+    expect(policy.drift.outerBandPct).toBe(0.07);
+    expect(policy.review.frequency).toBe("weekly");
+    expect(policy.review.scheduledTimeUtc).toBe("10:00");
+    expect(policy.throttle.proposalDedupeWindowHours).toBe(168);
+    expect(policy.throttle.autoExecutionCooldownHours).toBe(12);
+  });
+
+  it("no-trade band 在内圈、外圈和冷静期之间给出稳定状态", () => {
+    const policy = resolvePolicyConfig(normalizeSystemConfig({}));
+
+    expect(evaluateNoTradeBand({ driftSignals: [driftSignal(1.5)], policy }).state).toBe("inside");
+    expect(evaluateNoTradeBand({ driftSignals: [driftSignal(6)], policy }).state).toBe("entered_outer");
+    expect(evaluateNoTradeBand({ driftSignals: [driftSignal(6)], policy, hasRecentProposal: true }).state).toBe("cooling");
+  });
+
+  it("自动 drift 未进入行动外圈时只观察，不生成建议", () => {
+    const policy = resolvePolicyConfig(normalizeSystemConfig({}));
+    const decision = evaluatePortfolioPolicy({
+      portfolioState: portfolioState(),
+      policy,
+      signals: [driftSignal(3)],
+      intents: [],
+      proposals: [],
+      triggerSource: "drift",
+      manual: false,
+    });
+
+    expect(decision.action).toBe("observe");
+    expect(decision.blockers.join(" ")).toContain("尚未进入行动外圈");
+  });
+
+  it("自动执行冷静期内可以生成建议，但不会授权自动执行", () => {
+    const policy = resolvePolicyConfig(normalizeSystemConfig({}));
+    const decision = evaluatePortfolioPolicy({
+      portfolioState: portfolioState(),
+      policy,
+      signals: [driftSignal(10)],
+      intents: [driftIntent()],
+      proposals: [proposal()],
+      triggerSource: "drift",
+      manual: false,
+      latestAutoComparableCycle: {
+        cycleId: "recent-cycle",
+        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+
+    expect(decision.action).toBe("propose");
+    expect(decision.reasons.join(" ")).toContain("自动执行冷静期");
+  });
+});

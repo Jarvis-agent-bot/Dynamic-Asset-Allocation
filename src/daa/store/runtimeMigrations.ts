@@ -1000,6 +1000,18 @@ const MIGRATIONS_: Migration[] = [
       }
     },
   },
+  {
+    id: "20260509_policy_decision_cycle_snapshot",
+    async apply(query) {
+      if (!(await tableExists(query, "daa_rebalance_cycles"))) return;
+      await query("ALTER TABLE daa_rebalance_cycles ADD COLUMN IF NOT EXISTS policy_decision_id TEXT");
+      await query("ALTER TABLE daa_rebalance_cycles ADD COLUMN IF NOT EXISTS intent_ids_json JSONB NOT NULL DEFAULT '[]'::jsonb");
+      await query("ALTER TABLE daa_rebalance_cycles ADD COLUMN IF NOT EXISTS signal_ids_json JSONB NOT NULL DEFAULT '[]'::jsonb");
+      await query("ALTER TABLE daa_rebalance_cycles ADD COLUMN IF NOT EXISTS policy_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb");
+      await query("ALTER TABLE daa_rebalance_cycles ADD COLUMN IF NOT EXISTS proposal_plan_id TEXT");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_owner_policy_decision ON daa_rebalance_cycles(owner_account_id, policy_decision_id)");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

@@ -179,7 +179,7 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
 
           const generated = await generateWorkbenchRebalanceCycle({
             triggerSource: "calendar",
-            triggerReason: "定期再平衡触发",
+            triggerReason: "定期组合复盘",
             manual: false,
           });
 

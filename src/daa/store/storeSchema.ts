@@ -469,6 +469,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             cancel_reason TEXT,
             notes TEXT,
             market_context_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            policy_decision_id TEXT,
+            intent_ids_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            signal_ids_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            policy_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            proposal_plan_id TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
@@ -659,6 +664,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         ).catch(() => undefined);
         await ensureTableColumn(query as any, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
         await ensureTableColumn(query as any, "daa_rebalance_cycles", "execution_started_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query as any, "daa_rebalance_cycles", "policy_decision_id", "TEXT");
+        await ensureTableColumn(query as any, "daa_rebalance_cycles", "intent_ids_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
+        await ensureTableColumn(query as any, "daa_rebalance_cycles", "signal_ids_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
+        await ensureTableColumn(query as any, "daa_rebalance_cycles", "policy_snapshot_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+        await ensureTableColumn(query as any, "daa_rebalance_cycles", "proposal_plan_id", "TEXT");
         await query(
           "UPDATE daa_rebalance_cycles SET execution_started_at = NOW() WHERE status = 'executing' AND executed_at IS NULL AND execution_started_at IS NULL",
         );

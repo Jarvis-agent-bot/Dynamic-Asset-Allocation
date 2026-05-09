@@ -10,6 +10,7 @@ import type {
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { ProposalDecisionContext, ProposalType } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 
 export type DaaStorePosition = {
   id: string;
@@ -453,6 +454,11 @@ export type DaaStoreRebalanceCycle = {
   notes: string | null;
   marketContext?: DaaMarketContext | null;
   agentDecisionSnapshot?: Record<string, unknown> | null;
+  policyDecisionId?: string | null;
+  intentIds: string[];
+  signalIds: string[];
+  policySnapshot?: PolicyDecisionSnapshot | null;
+  proposalPlanId?: string | null;
   createdAt: string;
 };
 
@@ -535,6 +541,11 @@ export type DaaStoreCreateRebalanceCycleInput = {
   notes?: string | null;
   marketContext?: DaaMarketContext | null;
   agentDecisionSnapshot?: Record<string, unknown> | null;
+  policyDecisionId?: string | null;
+  intentIds?: string[];
+  signalIds?: string[];
+  policySnapshot?: PolicyDecisionSnapshot | null;
+  proposalPlanId?: string | null;
 };
 
 export type DaaStorePatchRebalanceCycleInput = {
@@ -551,6 +562,11 @@ export type DaaStorePatchRebalanceCycleInput = {
   cancelReason?: string | null;
   notes?: string | null;
   marketContext?: DaaMarketContext | null;
+  policyDecisionId?: string | null;
+  intentIds?: string[];
+  signalIds?: string[];
+  policySnapshot?: PolicyDecisionSnapshot | null;
+  proposalPlanId?: string | null;
 };
 
 export type DaaStoreHumanIngestState = {

@@ -13,6 +13,10 @@ import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
+import { buildPortfolioStateFromBootstrap } from "@/src/daa/modules/portfolio-state/portfolioStateService";
+import { collectPortfolioSignals } from "@/src/daa/modules/signals/signalCollector";
+import type { DriftSignal } from "@/src/daa/modules/signals/signalTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -20,6 +24,12 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
 
 export const runtime = "nodejs";
+
+function cronAssetKey(asset: { assetKey?: string | null; market?: string | null; symbol?: string | null }): string {
+  const symbol = String(asset.symbol || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
+  const market = String(asset.market || "US").trim().toUpperCase() || "US";
+  return String(asset.assetKey || `${market}::${symbol}`).trim().toUpperCase();
+}
 
 export async function POST(req: Request) {
   return withApiHandler(async () => {
@@ -56,23 +66,41 @@ async function runDriftCheckJob(req: Request, idempotencyKey: string | null): Pr
 async function runDriftCheck() {
     const system = await getDaaSystemConfig();
     const strategy = system.config.rebalanceStrategy;
+    const policy = resolvePolicyConfig(system.config);
 
-    if (!strategy.drift.enabled) {
+    if (!policy.drift.enabled) {
       return {
         skipped: true,
-        reason: "drift trigger disabled",
+        reason: "drift policy disabled",
         at: new Date().toISOString(),
       };
     }
 
     // Always run bootstrap to detect drift (independent of autoGenerateEnabled)
     const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false, autoRiskCycle: true });
+    const portfolioState = buildPortfolioStateFromBootstrap(bootstrap);
+    const signals = collectPortfolioSignals({
+      portfolioState,
+      systemConfig: system.config,
+      policy,
+      marketContext: bootstrap.marketContext,
+    });
 
-    // Detect drift: find assets exceeding the configured threshold.
-    const driftThreshold = strategy.drift.thresholdPct;
-    const driftedAssets = bootstrap.assetUniverse.filter((a) => {
-      if (a.holdingQty <= 0 || a.gapPct == null) return false;
-      return Math.abs(a.gapPct) >= driftThreshold * 100;
+    // Detect drift as a signal. It no longer直接等于交易触发，只表示进入 no-trade band 外圈。
+    const driftThreshold = policy.drift.outerBandPct;
+    const driftSignals = signals.filter(
+      (signal): signal is DriftSignal => signal.type === "drift" && signal.enteredOuterBand,
+    );
+    const assetByKey = new Map(bootstrap.assetUniverse.map((asset) => [cronAssetKey(asset), asset]));
+    const driftedAssets = driftSignals.map((signal) => {
+      const asset = assetByKey.get(signal.assetKey.toUpperCase());
+      return {
+        assetKey: signal.assetKey,
+        symbol: signal.symbol,
+        gapPct: signal.driftPct,
+        actualWeightPct: asset?.actualWeightPct ?? signal.actualWeightPct,
+        targetWeightPct: asset?.targetWeightPct ?? signal.targetWeightPct,
+      };
     });
     const hasDrift = driftedAssets.length > 0;
 
@@ -135,6 +163,11 @@ async function runDriftCheck() {
           if (newlyCreatedCycle) {
             msgParts.push(`建议数: ${newlyCreatedCycle.proposals.length}`);
             msgParts.push(`风控: ${newlyCreatedCycle.riskCheck.overallStatus}`);
+            if (newlyCreatedCycle.policySnapshot) {
+              msgParts.push(`策略: ${newlyCreatedCycle.policySnapshot.decision.action} / score ${newlyCreatedCycle.policySnapshot.decision.score.toFixed(1)} / ${newlyCreatedCycle.policySnapshot.decision.noTradeBandState}`);
+            }
+          } else if (generated?.message) {
+            msgParts.push(`策略观察: ${generated.message}`);
           }
           const driftMsg = msgParts.join("\n");
 
@@ -151,6 +184,8 @@ async function runDriftCheck() {
                 newCycleCreated: newlyCreatedCycle != null,
                 referenceCycleId: referenceCycle?.cycleId || null,
                 generationMessage: generated?.message ?? null,
+                policyOuterBandPct: policy.drift.outerBandPct,
+                signalCount: signals.length,
               },
             }));
           }
@@ -166,6 +201,8 @@ async function runDriftCheck() {
                 newCycleCreated: newlyCreatedCycle != null,
                 referenceCycleId: referenceCycle?.cycleId || null,
                 generationMessage: generated?.message ?? null,
+                policyOuterBandPct: policy.drift.outerBandPct,
+                signalCount: signals.length,
               },
             }));
           }

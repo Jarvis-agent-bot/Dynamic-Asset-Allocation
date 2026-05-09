@@ -18,10 +18,11 @@ export function SettingsStrategySection(props: {
   const { config, setConfig } = props;
   const calendarFrequency = config.rebalanceStrategy.calendar.frequency;
   const usesCalendarDueDay = calendarFrequency !== "every_3_days" && calendarFrequency !== "weekly";
+  const policy = config.policy;
 
   return (
     <>
-      <SectionCard title="再平衡策略">
+      <SectionCard title="复盘调度">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
             checked={config.rebalanceStrategy.calendar.enabled}
@@ -39,7 +40,7 @@ export function SettingsStrategySection(props: {
               )
             }
           >
-            启用定期再平衡
+            启用定期组合复盘
           </CheckboxRow>
 
           <div>
@@ -74,7 +75,7 @@ export function SettingsStrategySection(props: {
 
           {usesCalendarDueDay ? (
             <div>
-              <FieldLabel>执行日（1-28）</FieldLabel>
+              <FieldLabel>复盘日（1-28）</FieldLabel>
               <NumberInput
                 value={config.rebalanceStrategy.calendar.dayOfMonth}
                 min={1}
@@ -115,11 +116,11 @@ export function SettingsStrategySection(props: {
               )
             }
           >
-            启用偏移量再平衡
+            启用偏移监控
           </CheckboxRow>
 
           <div>
-            <FieldLabel>偏移阈值 (%)</FieldLabel>
+            <FieldLabel>兼容偏移阈值 (%)</FieldLabel>
             <NumberInput
               value={config.rebalanceStrategy.drift.thresholdPct * 100}
               min={1}
@@ -171,7 +172,7 @@ export function SettingsStrategySection(props: {
           </div>
 
           <div>
-            <FieldLabel>冷静期（小时）</FieldLabel>
+            <FieldLabel>兼容冷静期（小时）</FieldLabel>
             <NumberInput
               value={config.rebalanceStrategy.cooldownHours}
               min={1}
@@ -193,7 +194,7 @@ export function SettingsStrategySection(props: {
           </div>
 
           <div>
-            <FieldLabel>自动分析时间（UTC）</FieldLabel>
+            <FieldLabel>自动复盘时间（UTC）</FieldLabel>
             <FormInput
               value={config.rebalanceStrategy.analysisTimeUtc}
               onChange={(e) =>
@@ -328,6 +329,188 @@ export function SettingsStrategySection(props: {
             </div>
           )}
 
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Policy Engine">
+        <div style={settingsGridCols2Style}>
+          <CheckboxRow
+            checked={policy.enabled}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev ? { ...prev, policy: { ...prev.policy, enabled: value } } : prev,
+              )
+            }
+          >
+            启用策略引擎
+          </CheckboxRow>
+
+          <CheckboxRow
+            checked={policy.shadowMode}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev ? { ...prev, policy: { ...prev.policy, shadowMode: value } } : prev,
+              )
+            }
+          >
+            影子模式
+          </CheckboxRow>
+
+          <div>
+            <FieldLabel>行动外圈 (%)</FieldLabel>
+            <NumberInput
+              value={policy.drift.outerBandPct * 100}
+              min={0.5}
+              max={50}
+              step={0.5}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          drift: {
+                            ...prev.policy.drift,
+                            outerBandPct: Math.max(0.005, Math.min(0.5, value / 100)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>回归内圈 (%)</FieldLabel>
+            <NumberInput
+              value={policy.drift.innerBandPct * 100}
+              min={0.1}
+              max={30}
+              step={0.5}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          drift: {
+                            ...prev.policy.drift,
+                            innerBandPct: Math.max(0.001, Math.min(0.3, value / 100)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>建议去重窗口（小时）</FieldLabel>
+            <NumberInput
+              value={policy.throttle.proposalDedupeWindowHours}
+              min={1}
+              max={720}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          throttle: {
+                            ...prev.policy.throttle,
+                            proposalDedupeWindowHours: Math.max(1, Math.trunc(value || 1)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>自动执行冷静期（小时）</FieldLabel>
+            <NumberInput
+              value={policy.throttle.autoExecutionCooldownHours}
+              min={1}
+              max={720}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          throttle: {
+                            ...prev.policy.throttle,
+                            autoExecutionCooldownHours: Math.max(1, Math.trunc(value || 1)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>生成建议行动分</FieldLabel>
+            <NumberInput
+              value={policy.actionScore.proposalThreshold}
+              min={0}
+              max={100}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          actionScore: {
+                            ...prev.policy.actionScore,
+                            proposalThreshold: Math.max(0, Math.min(100, value || 0)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>自动执行行动分</FieldLabel>
+            <NumberInput
+              value={policy.actionScore.autoExecuteThreshold}
+              min={0}
+              max={100}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          actionScore: {
+                            ...prev.policy.actionScore,
+                            autoExecuteThreshold: Math.max(0, Math.min(100, value || 0)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
         </div>
       </SectionCard>
 

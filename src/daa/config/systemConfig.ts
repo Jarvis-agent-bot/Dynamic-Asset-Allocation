@@ -5,6 +5,7 @@ import {
   type CurrencyCode,
 } from "@/src/daa/config/currency";
 import { MARKET_INDICATOR_CONFIG_KEYS_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
+import type { DaaPolicyConfig, PolicyReviewFrequency } from "@/src/daa/modules/policy-engine/policyTypes";
 
 type DaaFundKind = "equity" | "qdii" | "balanced";
 
@@ -98,6 +99,13 @@ export type DaaSystemConfig = {
     /** 单次自动执行最大占 NAV 百分比（默认 10%） */
     autoExecuteMaxSinglePct?: number;
   };
+  /**
+   * AI Native 策略引擎配置。
+   *
+   * rebalanceStrategy 仍作为兼容层保留；真正的自动建议入口会先归一化到 policy，
+   * 再由 signals -> intents -> policy decision 决定是否行动。
+   */
+  policy: DaaPolicyConfig;
   dataSources: {
     hfFund: {
       enabled: boolean;
@@ -214,6 +222,37 @@ const DEFAULT_HF_FUNDS_: DaaHfFundTrack[] = [
   { fundCode: "000874", label: "广发全球精选股票QDII", kind: "qdii", enabled: true },
 ];
 
+const DEFAULT_POLICY_CONFIG_: DaaPolicyConfig = {
+  enabled: true,
+  shadowMode: false,
+  drift: {
+    enabled: true,
+    mode: "static_band",
+    outerBandPct: 0.05,
+    innerBandPct: 0.02,
+    minNotionalBase: 200,
+    volatilityLookbackDays: 60,
+  },
+  review: {
+    enabled: true,
+    frequency: "monthly",
+    dayOfMonth: 1,
+    scheduledTimeUtc: "00:20",
+    timezone: "Asia/Shanghai",
+  },
+  throttle: {
+    proposalDedupeWindowHours: 24,
+    autoExecutionCooldownHours: 72,
+    allowRiskReductionOverride: true,
+    allowSevereRiskOverride: true,
+    minScoreToBreakCooldown: 85,
+  },
+  actionScore: {
+    proposalThreshold: 25,
+    autoExecuteThreshold: 70,
+  },
+};
+
 export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
   strategy: {
     account: {
@@ -259,6 +298,7 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     autoExecuteEnabled: true,
     autoExecuteMaxSinglePct: 10,
   },
+  policy: clone(DEFAULT_POLICY_CONFIG_),
   dataSources: {
     hfFund: {
       enabled: true,
@@ -536,6 +576,104 @@ function normalizeAnalysisTimeUtc(value: unknown, fallback: string): string {
   return `${matched[1]}:${matched[2]}`;
 }
 
+function normalizePolicyReviewFrequency(
+  value: unknown,
+  fallback: PolicyReviewFrequency,
+): PolicyReviewFrequency {
+  return normalizeCalendarFrequency(value, fallback);
+}
+
+function numberWithFallback(value: unknown, fallback: number): number {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function legacyProposalDedupeHours(
+  checkFrequency: DaaSystemConfig["rebalanceStrategy"]["drift"]["checkFrequency"],
+): number {
+  return checkFrequency === "weekly" ? 168 : 24;
+}
+
+function normalizePolicyConfig(
+  input: unknown,
+  legacy: DaaSystemConfig["rebalanceStrategy"],
+  constraints: DaaSystemConfig["strategy"]["constraints"],
+  fallback: DaaPolicyConfig,
+): DaaPolicyConfig {
+  const source = isRecord(input) ? input : {};
+  const drift = isRecord(source.drift) ? source.drift : {};
+  const review = isRecord(source.review) ? source.review : {};
+  const throttle = isRecord(source.throttle) ? source.throttle : {};
+  const actionScore = isRecord(source.actionScore) ? source.actionScore : {};
+
+  const outerFallback = numberWithFallback(legacy.drift.thresholdPct, fallback.drift.outerBandPct);
+  const rawOuterBandPct = numberWithFallback(drift.outerBandPct, outerFallback);
+  const outerBandPct = clamp(rawOuterBandPct, 0.005, 0.5);
+  const rawInnerBandPct = numberWithFallback(drift.innerBandPct, fallback.drift.innerBandPct);
+  const innerBandPct = clamp(rawInnerBandPct, 0.001, Math.max(0.001, outerBandPct - 0.001));
+  const legacyDedupeHours = legacyProposalDedupeHours(legacy.drift.checkFrequency);
+
+  return {
+    enabled: toBool(source.enabled, fallback.enabled),
+    shadowMode: toBool(source.shadowMode, fallback.shadowMode),
+    drift: {
+      enabled: toBool(drift.enabled, legacy.drift.enabled && fallback.drift.enabled),
+      mode: String(drift.mode || fallback.drift.mode).trim() === "volatility_adjusted"
+        ? "volatility_adjusted"
+        : "static_band",
+      outerBandPct,
+      innerBandPct,
+      minNotionalBase: Math.max(
+        0,
+        numberWithFallback(drift.minNotionalBase, constraints.minNotional || fallback.drift.minNotionalBase),
+      ),
+      volatilityLookbackDays: clamp(
+        Math.trunc(numberWithFallback(drift.volatilityLookbackDays, fallback.drift.volatilityLookbackDays)),
+        5,
+        365,
+      ),
+    },
+    review: {
+      enabled: toBool(review.enabled, legacy.calendar.enabled && fallback.review.enabled),
+      frequency: normalizePolicyReviewFrequency(review.frequency ?? legacy.calendar.frequency, fallback.review.frequency),
+      dayOfMonth: normalizeDayOfMonth(review.dayOfMonth ?? legacy.calendar.dayOfMonth, fallback.review.dayOfMonth),
+      scheduledTimeUtc: normalizeAnalysisTimeUtc(review.scheduledTimeUtc ?? legacy.analysisTimeUtc, fallback.review.scheduledTimeUtc),
+      timezone: String(review.timezone || legacy.timezone || fallback.review.timezone).trim() || fallback.review.timezone,
+    },
+    throttle: {
+      proposalDedupeWindowHours: clamp(
+        Math.trunc(numberWithFallback(throttle.proposalDedupeWindowHours, legacyDedupeHours)),
+        1,
+        24 * 30,
+      ),
+      autoExecutionCooldownHours: clamp(
+        Math.trunc(numberWithFallback(throttle.autoExecutionCooldownHours, legacy.cooldownHours || fallback.throttle.autoExecutionCooldownHours)),
+        1,
+        24 * 30,
+      ),
+      allowRiskReductionOverride: toBool(throttle.allowRiskReductionOverride, fallback.throttle.allowRiskReductionOverride),
+      allowSevereRiskOverride: toBool(throttle.allowSevereRiskOverride, fallback.throttle.allowSevereRiskOverride),
+      minScoreToBreakCooldown: clamp(
+        numberWithFallback(throttle.minScoreToBreakCooldown, fallback.throttle.minScoreToBreakCooldown),
+        0,
+        100,
+      ),
+    },
+    actionScore: {
+      proposalThreshold: clamp(
+        numberWithFallback(actionScore.proposalThreshold, fallback.actionScore.proposalThreshold),
+        0,
+        100,
+      ),
+      autoExecuteThreshold: clamp(
+        numberWithFallback(actionScore.autoExecuteThreshold, fallback.actionScore.autoExecuteThreshold),
+        0,
+        100,
+      ),
+    },
+  };
+}
+
 function normalizeStrategyExecutionTiming(value: unknown, fallback: DaaStrategyExecutionTiming = "t_plus_1_close"): DaaStrategyExecutionTiming {
   const text = String(value || "").trim().toLowerCase();
   if (text === "t_plus_1_close") return "t_plus_1_close";
@@ -594,6 +732,25 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
     fallback.rebalanceStrategy.analysisTimeUtc,
   );
 
+  const normalizedRebalanceStrategy: DaaSystemConfig["rebalanceStrategy"] = {
+    calendar: {
+      enabled: toBool(calendar.enabled, fallback.rebalanceStrategy.calendar.enabled),
+      frequency: normalizeCalendarFrequency(calendar.frequency, fallback.rebalanceStrategy.calendar.frequency),
+      dayOfMonth: normalizeDayOfMonth(calendar.dayOfMonth, fallback.rebalanceStrategy.calendar.dayOfMonth),
+    },
+    drift: {
+      enabled: toBool(drift.enabled, fallback.rebalanceStrategy.drift.enabled),
+      thresholdPct: clamp(Number(drift.thresholdPct) || fallback.rebalanceStrategy.drift.thresholdPct, 0.01, 0.5),
+      checkFrequency: normalizeCheckFrequency(drift.checkFrequency, fallback.rebalanceStrategy.drift.checkFrequency),
+    },
+    cooldownHours: Math.max(1, Math.trunc(Number(rebalanceStrategy.cooldownHours) || fallback.rebalanceStrategy.cooldownHours)),
+    analysisTimeUtc: normalizedAnalysisTimeUtc,
+    timezone: String(rebalanceStrategy.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
+    autoGenerateEnabled: toBool(rebalanceStrategy.autoGenerateEnabled, fallback.rebalanceStrategy.autoGenerateEnabled),
+    autoExecuteEnabled: toBool(rebalanceStrategy.autoExecuteEnabled, fallback.rebalanceStrategy.autoExecuteEnabled ?? false),
+    autoExecuteMaxSinglePct: clamp(Number(rebalanceStrategy.autoExecuteMaxSinglePct) || (fallback.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10), 1, 50),
+  };
+
   const normalized: DaaSystemConfig = {
     strategy: {
       account: {
@@ -629,24 +786,12 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         enforceOnExecution: toBool(risk.enforceOnExecution, fallback.strategy.risk.enforceOnExecution),
       },
     },
-    rebalanceStrategy: {
-      calendar: {
-        enabled: toBool(calendar.enabled, fallback.rebalanceStrategy.calendar.enabled),
-        frequency: normalizeCalendarFrequency(calendar.frequency, fallback.rebalanceStrategy.calendar.frequency),
-        dayOfMonth: normalizeDayOfMonth(calendar.dayOfMonth, fallback.rebalanceStrategy.calendar.dayOfMonth),
-      },
-      drift: {
-        enabled: toBool(drift.enabled, fallback.rebalanceStrategy.drift.enabled),
-        thresholdPct: clamp(Number(drift.thresholdPct) || fallback.rebalanceStrategy.drift.thresholdPct, 0.01, 0.5),
-        checkFrequency: normalizeCheckFrequency(drift.checkFrequency, fallback.rebalanceStrategy.drift.checkFrequency),
-      },
-      cooldownHours: Math.max(1, Math.trunc(Number(rebalanceStrategy.cooldownHours) || fallback.rebalanceStrategy.cooldownHours)),
-      analysisTimeUtc: normalizedAnalysisTimeUtc,
-      timezone: String(rebalanceStrategy.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
-      autoGenerateEnabled: toBool(rebalanceStrategy.autoGenerateEnabled, fallback.rebalanceStrategy.autoGenerateEnabled),
-      autoExecuteEnabled: toBool(rebalanceStrategy.autoExecuteEnabled, fallback.rebalanceStrategy.autoExecuteEnabled ?? false),
-      autoExecuteMaxSinglePct: clamp(Number(rebalanceStrategy.autoExecuteMaxSinglePct) || (fallback.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10), 1, 50),
-    },
+    rebalanceStrategy: normalizedRebalanceStrategy,
+    policy: normalizePolicyConfig(source.policy, normalizedRebalanceStrategy, {
+      maxPositionPct: clamp(Number(constraints.maxPositionPct) || fallback.strategy.constraints.maxPositionPct, 0.01, 1),
+      minNotional: toPositiveNumber(constraints.minNotional, fallback.strategy.constraints.minNotional),
+      maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav) || fallback.strategy.constraints.maxOrderPctOfNav, 0.01, 1),
+    }, fallback.policy),
     dataSources: {
       hfFund: {
         enabled: toBool(hfFund.enabled, fallback.dataSources.hfFund.enabled),

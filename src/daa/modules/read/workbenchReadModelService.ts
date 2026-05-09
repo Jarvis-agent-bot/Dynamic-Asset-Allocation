@@ -9,10 +9,12 @@ import {
 } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { nextCalendarDueDate } from "@/src/daa/modules/workbench/rebalanceCalendar";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import type {
   EquityDelta,
   WorkbenchAllocationSummary,
+  WorkbenchPolicySummary,
   WorkbenchReadModel,
   WorkbenchSignal,
 } from "./readModels";
@@ -75,9 +77,24 @@ function buildSignals(input: {
       id: "alert:next-calendar-cycle",
       level: "success",
       source: "alert",
-      text: `下次定期再平衡：${nextDueAt.slice(0, 10)}`,
+      text: `下次定期组合复盘：${nextDueAt.slice(0, 10)}`,
       actionHref: "/daa/dashboard/rebalance",
       createdAt,
+    });
+  }
+
+  const policyDecision = input.bootstrap.latestCycle?.policySnapshot?.decision ?? null;
+  if (policyDecision) {
+    const blocker = policyDecision.blockers[0] ?? null;
+    push({
+      id: `system:policy:${policyDecision.decisionId}`,
+      level: blocker ? "warn" : "info",
+      source: "system",
+      text: blocker
+        ? `策略观察：${blocker}`
+        : `策略决策：${policyDecision.action}，行动分 ${policyDecision.score.toFixed(1)}`,
+      actionHref: "/daa/dashboard/rebalance",
+      createdAt: policyDecision.createdAt,
     });
   }
 
@@ -208,6 +225,24 @@ function buildSignals(input: {
   });
 }
 
+function buildPolicySummary(input: {
+  latestCycle: RebalanceCycle | null;
+}): WorkbenchPolicySummary | null {
+  const decision = input.latestCycle?.policySnapshot?.decision ?? null;
+  if (!decision || !input.latestCycle) return null;
+  return {
+    cycleId: input.latestCycle.cycleId,
+    decisionId: decision.decisionId,
+    action: decision.action,
+    score: decision.score,
+    threshold: decision.threshold,
+    noTradeBandState: decision.noTradeBandState,
+    blockers: decision.blockers,
+    reasons: decision.reasons,
+    createdAt: decision.createdAt,
+  };
+}
+
 function buildAllocationSummary(input: {
   bootstrap: WorkbenchReadModel["bootstrap"];
 }): WorkbenchAllocationSummary {
@@ -330,6 +365,7 @@ export async function buildWorkbenchReadModel(input: {
       currentEquity: nextBootstrap.account.totalEquity ?? 0,
       snapshots: filteredSnapshots,
     }),
+    policySummary: buildPolicySummary({ latestCycle: filteredLatestCycle }),
     ledgerMeta,
     notificationStatus,
     loadedAt: new Date().toISOString(),
