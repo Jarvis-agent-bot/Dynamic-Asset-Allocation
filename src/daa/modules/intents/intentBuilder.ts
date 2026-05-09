@@ -39,10 +39,10 @@ export function buildInvestmentIntents(input: {
     });
   }
 
-  if (input.triggerSource === "calendar") {
+  if (input.triggerSource === "scheduled_review") {
     out.push({
-      intentId: `intent:calendar_review:${now}`,
-      source: "calendar_review",
+      intentId: `intent:scheduled_review:${now}`,
+      source: "scheduled_review",
       action: "review_only",
       assetKeys: [],
       thesis: "定期组合复盘窗口到达，重新评估是否需要行动。",

@@ -21,10 +21,10 @@ const CHART_COLORS = {
 
 export function DriftBarChart(props: {
   rows: DriftRow[];
-  thresholdPct?: number;
+  driftThresholdPct?: number;
   maxItems?: number;
 }) {
-  const { thresholdPct = 5, maxItems = 15 } = props;
+  const { driftThresholdPct = 5, maxItems = 15 } = props;
 
   const chartData = useMemo(() => {
     return props.rows
@@ -74,8 +74,8 @@ export function DriftBarChart(props: {
             cursor={{ fill: "rgba(255,255,255,0.04)" }}
             formatter={(value: number | undefined) => [`${(value ?? 0) > 0 ? "+" : ""}${(value ?? 0).toFixed(2)}%`, "偏移"]}
           />
-          <ReferenceLine x={thresholdPct} stroke="hsla(45,93%,55%,0.4)" strokeDasharray="4 4" label={{ value: `+${thresholdPct}%`, fill: "hsl(45 93% 55%)", fontSize: 10, position: "top" }} />
-          <ReferenceLine x={-thresholdPct} stroke="hsla(45,93%,55%,0.4)" strokeDasharray="4 4" label={{ value: `-${thresholdPct}%`, fill: "hsl(45 93% 55%)", fontSize: 10, position: "top" }} />
+          <ReferenceLine x={driftThresholdPct} stroke="hsla(45,93%,55%,0.4)" strokeDasharray="4 4" label={{ value: `+${driftThresholdPct}%`, fill: "hsl(45 93% 55%)", fontSize: 10, position: "top" }} />
+          <ReferenceLine x={-driftThresholdPct} stroke="hsla(45,93%,55%,0.4)" strokeDasharray="4 4" label={{ value: `-${driftThresholdPct}%`, fill: "hsl(45 93% 55%)", fontSize: 10, position: "top" }} />
           <ReferenceLine x={0} stroke="hsla(215,16%,57%,0.3)" />
           <Bar dataKey="drift" radius={[0, 4, 4, 0]} barSize={16}>
             {chartData.map((entry, i) => (

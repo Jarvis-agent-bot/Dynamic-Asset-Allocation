@@ -500,7 +500,7 @@ function normalizePairs(input: unknown): string[] {
   return [...out];
 }
 
-function normalizeCalendarFrequency(
+function normalizeReviewFrequency(
   value: unknown,
   fallback: PolicyReviewFrequency,
 ): PolicyReviewFrequency {
@@ -520,7 +520,7 @@ function normalizeDayOfMonth(value: unknown, fallback: number): number {
   return Math.max(1, Math.min(28, Math.trunc(day)));
 }
 
-function normalizeAnalysisTimeUtc(value: unknown, fallback: string): string {
+function normalizeScheduledTimeUtc(value: unknown, fallback: string): string {
   const text = String(value || "").trim();
   if (!text) return fallback;
   const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(text);
@@ -532,7 +532,7 @@ function normalizePolicyReviewFrequency(
   value: unknown,
   fallback: PolicyReviewFrequency,
 ): PolicyReviewFrequency {
-  return normalizeCalendarFrequency(value, fallback);
+  return normalizeReviewFrequency(value, fallback);
 }
 
 function numberWithFallback(value: unknown, fallback: number): number {
@@ -581,7 +581,7 @@ function normalizePolicyConfig(
       enabled: toBool(review.enabled, fallback.review.enabled),
       frequency: normalizePolicyReviewFrequency(review.frequency, fallback.review.frequency),
       dayOfMonth: normalizeDayOfMonth(review.dayOfMonth, fallback.review.dayOfMonth),
-      scheduledTimeUtc: normalizeAnalysisTimeUtc(review.scheduledTimeUtc, fallback.review.scheduledTimeUtc),
+      scheduledTimeUtc: normalizeScheduledTimeUtc(review.scheduledTimeUtc, fallback.review.scheduledTimeUtc),
       timezone: String(review.timezone || fallback.review.timezone).trim() || fallback.review.timezone,
     },
     throttle: {

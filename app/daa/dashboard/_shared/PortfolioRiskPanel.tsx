@@ -109,12 +109,12 @@ function computeMaxDrawdown(
 function driftViolations(
   cycle: RebalanceCycle | null,
   holdings: Array<{ gapPct: number | null; watchEnabled: boolean; targetWeightPct: number }>,
-  thresholdPct = 3,
+  driftThresholdPct = 3,
 ): { count: number; status: string } {
-  // 优先使用 cycle snapshot，fallback 到实时持仓数据
+  // 优先使用 cycle snapshot；没有周期快照时读取当前持仓偏移。
   if (cycle?.driftSnapshot?.length) {
     const violations = cycle.driftSnapshot.filter(
-      (d) => Math.abs(d.driftPct) > thresholdPct,
+      (d) => Math.abs(d.driftPct) > driftThresholdPct,
     );
     return {
       count: violations.length,
@@ -123,7 +123,7 @@ function driftViolations(
   }
   // 无周期时用实时 assetRows 计算
   const violations = holdings.filter(
-    (h) => h.watchEnabled && h.targetWeightPct > 0 && h.gapPct != null && Math.abs(h.gapPct) > thresholdPct,
+    (h) => h.watchEnabled && h.targetWeightPct > 0 && h.gapPct != null && Math.abs(h.gapPct) > driftThresholdPct,
   );
   return {
     count: violations.length,

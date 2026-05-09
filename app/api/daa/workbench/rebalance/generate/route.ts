@@ -11,9 +11,9 @@ type Body = {
   targetWeightOverrides?: unknown;
 };
 
-function toTriggerSource(value: unknown): "calendar" | "drift" | "manual" | "risk" | undefined {
+function toTriggerSource(value: unknown): "scheduled_review" | "drift" | "manual" | "risk" | undefined {
   const text = String(value || "").trim().toLowerCase();
-  if (text === "calendar") return "calendar";
+  if (text === "scheduled_review") return "scheduled_review";
   if (text === "drift") return "drift";
   if (text === "manual") return "manual";
   if (text === "risk") return "risk";

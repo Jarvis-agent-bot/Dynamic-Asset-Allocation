@@ -318,15 +318,16 @@ LLM 基于持仓 + 论点 + 意外 + 缺口输出：
 | 目标权重计划 | 仅接受已知 `assetKey`，置信度需达到执行阈值 |
 | 单仓目标权重 | 按 `strategy.constraints.maxPositionPct` 截断 |
 | 周期生成 | 0 条可执行提案时跳过创建 cycle |
-| 自动执行 | 统一经过 `AutomationAuthority`、`autoExecuteMaxSinglePct`、执行前风控和本地执行网关 |
+| 自动执行 | 统一经过 `AutomationAuthority`、`policy.execution.maxSingleOrderPctOfNav`、执行前风控和本地执行网关 |
 
 目标权重计划只作用于本次 cycle，不写入 `systemConfig.strategy.targetWeights`，避免把一次性事件判断永久固化为配置。
 
 Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权限矩阵：
 
 - `brain.mode=autopilot`
-- `rebalanceStrategy.autoGenerateEnabled=true`
-- `rebalanceStrategy.autoExecuteEnabled=true`
+- `policy.enabled=true`
+- `policy.execution.autoGenerateEnabled=true`
+- `policy.execution.autoExecuteEnabled=true`
 - 本地执行网关为 `local`
 - cycle 与 proposal 存在
 - 风控与单笔 NAV 上限通过

@@ -102,6 +102,20 @@ describe("policy-engine", () => {
     expect(policy.throttle.autoExecutionCooldownHours).toBe(12);
   });
 
+  it("保留显式 0 值，不再被默认值覆盖", () => {
+    const config = normalizeSystemConfig({
+      policy: {
+        drift: { minNotionalBase: 0 },
+        actionScore: { proposalThreshold: 0, autoExecuteThreshold: 0 },
+      },
+    });
+    const policy = resolvePolicyConfig(config);
+
+    expect(policy.drift.minNotionalBase).toBe(0);
+    expect(policy.actionScore.proposalThreshold).toBe(0);
+    expect(policy.actionScore.autoExecuteThreshold).toBe(0);
+  });
+
   it("no-trade band 在内圈、外圈和冷静期之间给出稳定状态", () => {
     const policy = resolvePolicyConfig(normalizeSystemConfig({}));
 

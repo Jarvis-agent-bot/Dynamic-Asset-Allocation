@@ -1,7 +1,7 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
-export type CalendarFrequency = "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
+export type ReviewFrequency = "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
 
 export function toIsoByMs(ms: number): string {
   return new Date(ms).toISOString();
@@ -14,7 +14,7 @@ export function normalizeTimeZoneOrUtc(value: unknown): string {
     new Intl.DateTimeFormat("en-US", { timeZone: text }).format(new Date());
     return text;
   } catch (err) {
-    logSwallowed("rebalanceCalendar.resolveTimezone", err);
+    logSwallowed("reviewSchedule.resolveTimezone", err);
     return "UTC";
   }
 }
@@ -52,7 +52,7 @@ export function getZonedYmd(date: Date, timeZone: string): {
       return { year, month, day };
     }
   } catch (err) {
-    logSwallowed("rebalanceCalendar.parseConfig", err);
+    logSwallowed("reviewSchedule.parseConfig", err);
   }
   return {
     year: date.getUTCFullYear(),
@@ -61,18 +61,18 @@ export function getZonedYmd(date: Date, timeZone: string): {
   };
 }
 
-export function isCalendarMonthDue(month: number, frequency: CalendarFrequency): boolean {
-  // 高频周期不依赖月份判断，实际间隔由 nextCalendarDueDate 控制。
+export function isReviewMonthDue(month: number, frequency: ReviewFrequency): boolean {
+  // 高频周期不依赖月份判断，实际间隔由 nextReviewDueDate 控制。
   if (frequency === "every_3_days" || frequency === "weekly" || frequency === "monthly") return true;
   if (frequency === "quarterly") return month === 1 || month === 4 || month === 7 || month === 10;
   if (frequency === "semi_annual") return month === 1 || month === 7;
   return month === 1;
 }
 
-export function buildCalendarPeriodKey(input: {
+export function buildReviewPeriodKey(input: {
   date: Date;
   timeZone: string;
-  frequency: CalendarFrequency;
+  frequency: ReviewFrequency;
 }): string {
   const { year, month, day } = getZonedYmd(input.date, input.timeZone);
   if (input.frequency === "every_3_days") {
@@ -93,8 +93,8 @@ export function buildCalendarPeriodKey(input: {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
-export function nextCalendarDueDate(input: {
-  frequency: CalendarFrequency;
+export function nextReviewDueDate(input: {
+  frequency: ReviewFrequency;
   dayOfMonth: number;
   nowMs?: number;
 }): string {

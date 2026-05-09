@@ -11,7 +11,7 @@ export function cycleStatusLabel(status: RebalanceCycle["status"]): string {
 }
 
 export function triggerSourceLabel(source: RebalanceCycle["triggerSource"]): string {
-  if (source === "calendar") return "定期触发";
+  if (source === "scheduled_review") return "定期复盘";
   if (source === "drift") return "偏移触发";
   if (source === "risk") return "止盈止损触发";
   if (source === "cash_idle") return "现金闲置触发";

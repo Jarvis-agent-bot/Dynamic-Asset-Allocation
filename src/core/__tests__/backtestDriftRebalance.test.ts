@@ -22,7 +22,7 @@ describe("backtestDriftRebalance", () => {
       targetWeights: { AAA: 0.5, BBB: 0.5 },
       initialEquity: 100,
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0.01 },
+      trigger: { driftThresholdPct: 0.01 },
     });
 
     expect(res.dailyReturns).toEqual([0, 0]);
@@ -54,7 +54,7 @@ describe("backtestDriftRebalance", () => {
       targetWeights: { AAA: 0.5, BBB: 0.5 },
       initialEquity: 100,
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0.1, minTradeNotional: 0 },
+      trigger: { driftThresholdPct: 0.1, minOrderNotional: 0 },
     });
 
     expect(res.metrics.totalReturn).toBeCloseTo(0.5, 8);
@@ -91,7 +91,7 @@ describe("backtestDriftRebalance", () => {
       targetWeights: { AAA: 0.5, BBB: 0.5 },
       initialEquity: 100,
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0.1, minTradeNotional: 0 },
+      trigger: { driftThresholdPct: 0.1, minOrderNotional: 0 },
       execution: { timing: "t_plus_1_close" },
     });
 
@@ -114,7 +114,7 @@ describe("backtestDriftRebalance", () => {
       targetWeights: { AAA: 1 },
       initialEquity: 100,
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0.2, minTradeNotional: 0 },
+      trigger: { driftThresholdPct: 0.2, minOrderNotional: 0 },
       execution: {
         feeRateBps: 100,
         slippageBps: 100,
@@ -137,7 +137,7 @@ describe("backtestDriftRebalance", () => {
       targetWeights: { AAA: 1 },
       initialEquity: 100,
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0.2, minTradeNotional: 0 },
+      trigger: { driftThresholdPct: 0.2, minOrderNotional: 0 },
       execution: {
         feeRateBps: 100,
         slippageBps: 0,
@@ -171,7 +171,7 @@ describe("backtestDriftRebalance", () => {
       initialHoldings: { AAA: 1 },
       initialCash: 0,
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0, minTradeNotional: 0, cooldownSeconds: 0 },
+      trigger: { driftThresholdPct: 0, minOrderNotional: 0, rebalanceCooldownSeconds: 0 },
       execution: { timing: "t_plus_1_close" },
     });
 
@@ -206,7 +206,7 @@ describe("backtestDriftRebalance", () => {
       },
       initialEquity: 100,
       constraints: { maxOrderPctOfNav: 1, minNotional: 0 },
-      policy: { thresholdPct: 0, minTradeNotional: 0 },
+      trigger: { driftThresholdPct: 0, minOrderNotional: 0 },
       execution: { timing: "t_plus_1_close" },
     });
 

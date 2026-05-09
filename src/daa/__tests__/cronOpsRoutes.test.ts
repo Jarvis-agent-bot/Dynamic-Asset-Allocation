@@ -254,7 +254,7 @@ beforeEach(() => {
     cycle: {
       cycleId: "cycle-exec",
       status: "completed",
-      triggerSource: "calendar",
+      triggerSource: "scheduled_review",
       triggerReason: "test",
       snapshotAt: "2026-03-01T00:00:00.000Z",
       equitySnapshot: 1000,

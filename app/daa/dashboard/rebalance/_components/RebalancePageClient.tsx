@@ -291,7 +291,7 @@ export default function RebalancePageClient() {
                 </div>
                 <DriftBarChart
                   rows={wbModel.tableProps.rows}
-                  thresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
+                  driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
                   maxItems={8}
                 />
               </div>

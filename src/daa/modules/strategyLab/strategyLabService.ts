@@ -271,10 +271,10 @@ export async function runStrategyLabBacktest(
     seriesBySymbol,
     targetWeights,
     initialEquity: params.initialCapital || 10000,
-    policy: {
-      thresholdPct: 0.05,
-      minTradeNotional: 50,
-      cooldownSeconds: rebalanceCooldownSeconds(params.rebalanceFrequency || "monthly"),
+    trigger: {
+      driftThresholdPct: 0.05,
+      minOrderNotional: 50,
+      rebalanceCooldownSeconds: rebalanceCooldownSeconds(params.rebalanceFrequency || "monthly"),
     },
     execution: {
       timing: "t_plus_1_close",

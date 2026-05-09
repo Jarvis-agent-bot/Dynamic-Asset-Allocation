@@ -8,7 +8,7 @@ import {
   buildWorkbenchBootstrapBundle,
 } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
-import { nextCalendarDueDate } from "@/src/daa/modules/workbench/rebalanceCalendar";
+import { nextReviewDueDate } from "@/src/daa/modules/workbench/reviewSchedule";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import type {
@@ -69,12 +69,12 @@ function buildSignals(input: {
   }
 
   if (input.bootstrap.policy.review.enabled) {
-    const nextDueAt = nextCalendarDueDate({
+    const nextDueAt = nextReviewDueDate({
       frequency: input.bootstrap.policy.review.frequency,
       dayOfMonth: input.bootstrap.policy.review.dayOfMonth,
     });
     push({
-      id: "alert:next-calendar-cycle",
+      id: "alert:next-scheduled-review",
       level: "success",
       source: "alert",
       text: `下次定期组合复盘：${nextDueAt.slice(0, 10)}`,

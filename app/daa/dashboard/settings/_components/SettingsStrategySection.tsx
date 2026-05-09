@@ -17,8 +17,8 @@ export function SettingsStrategySection(props: {
 }) {
   const { config, setConfig } = props;
   const policy = config.policy;
-  const calendarFrequency = policy.review.frequency;
-  const usesCalendarDueDay = calendarFrequency !== "every_3_days" && calendarFrequency !== "weekly";
+  const reviewFrequency = policy.review.frequency;
+  const usesReviewDueDay = reviewFrequency !== "every_3_days" && reviewFrequency !== "weekly";
 
   return (
     <>
@@ -95,7 +95,7 @@ export function SettingsStrategySection(props: {
             </FormSelect>
           </div>
 
-          {usesCalendarDueDay ? (
+          {usesReviewDueDay ? (
             <div>
               <FieldLabel>复盘日（1-28）</FieldLabel>
               <NumberInput

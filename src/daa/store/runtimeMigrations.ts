@@ -1012,6 +1012,19 @@ const MIGRATIONS_: Migration[] = [
       await query("CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_owner_policy_decision ON daa_rebalance_cycles(owner_account_id, policy_decision_id)");
     },
   },
+  {
+    id: "20260509_scheduled_review_trigger_source",
+    async apply(query) {
+      for (const tableName of [
+        "daa_rebalance_cycles",
+        "daa_trigger_events",
+        "daa_rebalance_decisions",
+      ]) {
+        if (!(await tableExists(query, tableName))) continue;
+        await query(`UPDATE ${tableName} SET trigger_source = 'scheduled_review' WHERE trigger_source = 'calendar'`);
+      }
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

@@ -112,15 +112,15 @@ export async function buildDailyReportText(bootstrap: WorkbenchBootstrap): Promi
     .sort((a, b) => Math.abs(b.gapPct!) - Math.abs(a.gapPct!));
 
   if (withGap.length > 0) {
-    const thresholdPct = bootstrap.policy.drift.outerBandPct * 100;
+    const driftThresholdPct = bootstrap.policy.drift.outerBandPct * 100;
     lines.push("⚖️ <b>偏移监控</b>");
 
     for (const a of withGap.slice(0, 5)) {
       const gap = a.gapPct!;
-      const alert = Math.abs(gap) >= thresholdPct ? " ⚠️" : "";
+      const alert = Math.abs(gap) >= driftThresholdPct ? " ⚠️" : "";
       lines.push(`  ${h(a.symbol)}: ${gap >= 0 ? "+" : ""}${fmtNum(gap)}%${alert}`);
     }
-    lines.push(`  <i>阈值: ${fmtNum(thresholdPct)}%</i>`);
+    lines.push(`  <i>阈值: ${fmtNum(driftThresholdPct)}%</i>`);
     lines.push("");
   }
 
@@ -156,7 +156,7 @@ export async function buildDailyReportText(bootstrap: WorkbenchBootstrap): Promi
     const nextDay = bootstrap.policy.review.dayOfMonth;
     const freq = bootstrap.policy.review.frequency;
     if (freq === "every_3_days" || freq === "weekly") {
-      reminders.push(`定期组合复盘: 每${freq === "every_3_days" ? "3天" : "周"}自动触发`);
+      reminders.push(`定期组合复盘: 每${freq === "every_3_days" ? "3天" : "周"}自动复盘`);
     } else {
       const nextDate = computeNextRebalanceDate(now, nextDay);
       reminders.push(`下次定期组合复盘: ${nextDate}`);

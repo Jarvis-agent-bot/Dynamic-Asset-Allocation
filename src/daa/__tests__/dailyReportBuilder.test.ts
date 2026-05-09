@@ -99,10 +99,10 @@ describe("buildDailyReportText", () => {
     expect(text).not.toContain("偏移监控");
   });
 
-  it("includes rebalance reminder when calendar is enabled", async () => {
+  it("includes review reminder when scheduled review is enabled", async () => {
     const text = await buildDailyReportText(makeBootstrap());
 
-    // every_3_days 频率显示"自动触发"而非"下次日期"
+    // every_3_days 频率显示"自动复盘"而非"下次日期"
     expect(text).toContain("提醒");
   });
 });

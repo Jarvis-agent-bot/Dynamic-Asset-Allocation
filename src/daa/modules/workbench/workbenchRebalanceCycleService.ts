@@ -54,13 +54,13 @@ import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
 import { appendTriggerEventSafe } from "./triggerEvent";
 import {
-  buildCalendarPeriodKey,
+  buildReviewPeriodKey,
   getZonedYmd,
-  isCalendarMonthDue,
   isPastUtcTime,
+  isReviewMonthDue,
   normalizeTimeZoneOrUtc,
   toIsoByMs,
-} from "./rebalanceCalendar";
+} from "./reviewSchedule";
 import { assertCycleExecutable, assertCycleMutable } from "./cycleGuards";
 import { calcHoldingCostPerUnit } from "./executionCost";
 import {
@@ -307,7 +307,7 @@ export async function generateWorkbenchRebalanceCycle(
     };
   };
 
-  if (!manual && triggerSource === "calendar") {
+  if (!manual && triggerSource === "scheduled_review") {
     if (!policy.review.enabled) {
       return skipWithLatest("定期组合复盘未启用，跳过自动生成。");
     }
@@ -322,7 +322,7 @@ export async function generateWorkbenchRebalanceCycle(
 
     // every_3_days 和 weekly 不依赖 dayOfMonth，由 periodKey 去重控制实际间隔
     const isHighFrequency = policy.review.frequency === "every_3_days" || policy.review.frequency === "weekly";
-    if (!isHighFrequency && (today.day !== dueDay || !isCalendarMonthDue(today.month, policy.review.frequency))) {
+    if (!isHighFrequency && (today.day !== dueDay || !isReviewMonthDue(today.month, policy.review.frequency))) {
       return skipWithLatest(
         `当前不在定期组合复盘窗口（${timeZone} 每${policy.review.frequency === "monthly"
           ? "月"
@@ -332,16 +332,16 @@ export async function generateWorkbenchRebalanceCycle(
       );
     }
 
-    const currentPeriodKey = buildCalendarPeriodKey({
+    const currentPeriodKey = buildReviewPeriodKey({
       date: now,
       timeZone,
       frequency: policy.review.frequency,
     });
     const duplicated = recentCycles.some((row) => {
-      if (row.triggerSource !== "calendar") return false;
+      if (row.triggerSource !== "scheduled_review") return false;
       const ms = Date.parse(row.createdAt || row.snapshotAt);
       if (!Number.isFinite(ms)) return false;
-      const rowPeriodKey = buildCalendarPeriodKey({
+      const rowPeriodKey = buildReviewPeriodKey({
         date: new Date(ms),
         timeZone,
         frequency: policy.review.frequency,
@@ -426,7 +426,7 @@ export async function generateWorkbenchRebalanceCycle(
   });
 
   // ── 手动触发 + 无 proposals → 组合健康，返回洞察快照 ─────────────
-  // 自动触发场景下（calendar/drift/cash_idle）不返回 healthy，因为空 proposals
+  // 自动触发场景下（scheduled_review/drift/cash_idle）不返回 healthy，因为空 proposals
   // 意味着已被上面的阈值守卫拦截或通过其他逻辑处理。
   if (draft.proposals.length === 0 && manual) {
     const hasTargetAssets = bootstrap.assetUniverse.some((row) => row.watchEnabled && row.targetWeightPct > 0);

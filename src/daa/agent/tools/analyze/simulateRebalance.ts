@@ -65,7 +65,7 @@ registerTool(
         prices,
         targetWeights,
         constraints: { maxPositionPct: 0.30 },
-        policy: { thresholdPct: driftThresholdPct / 100 },
+        trigger: { driftThresholdPct: driftThresholdPct / 100 },
       });
 
       const orderCount = result.orders?.length ?? 0;

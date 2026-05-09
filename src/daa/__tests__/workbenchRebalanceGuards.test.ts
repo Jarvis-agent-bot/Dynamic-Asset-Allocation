@@ -378,7 +378,7 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
     });
 
     await createDaaRebalanceCycle({
-      triggerSource: "calendar",
+      triggerSource: "scheduled_review",
       triggerReason: "recent auto cycle",
       equitySnapshot: 4800,
       driftSnapshot: [],

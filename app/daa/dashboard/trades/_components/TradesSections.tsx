@@ -38,7 +38,7 @@ function orderStatusTone(s: string): "cyan" | "amber" | "green" | "indigo" | "sl
 }
 
 function triggerSourceLabel(s: string): string {
-  return { calendar: "定期", drift: "偏移", risk: "风险", cash_idle: "现金闲置" }[s] || "手动";
+  return { scheduled_review: "定期复盘", drift: "偏移", risk: "风险", cash_idle: "现金闲置" }[s] || "手动";
 }
 
 /* ------------------------------------------------------------------ */

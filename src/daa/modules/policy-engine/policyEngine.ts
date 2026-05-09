@@ -10,7 +10,7 @@ import type { DaaPolicyConfig, PolicyDecision, PolicyEvaluationSource } from "./
 
 function sourceFromTrigger(triggerSource: RebalanceTriggerSource, manual: boolean): PolicyEvaluationSource {
   if (manual) return "manual_review";
-  if (triggerSource === "calendar") return "scheduled_review";
+  if (triggerSource === "scheduled_review") return "scheduled_review";
   if (triggerSource === "drift") return "drift_monitor";
   if (triggerSource === "agent_trigger") return "agent_event";
   if (triggerSource === "risk") return "risk_event";
@@ -57,7 +57,7 @@ export function evaluatePortfolioPolicy(input: {
     reasons.push("人工请求生成建议，跳过自动触发 no-trade band。");
   } else if (hasRiskReductionIntent) {
     reasons.push("存在降风险意图，允许进入提案阶段。");
-  } else if (input.triggerSource === "calendar") {
+  } else if (input.triggerSource === "scheduled_review") {
     reasons.push("定期复盘只在 action score 达标时生成调仓提案。");
   } else if (input.triggerSource === "agent_trigger") {
     reasons.push("Agent 投资意图进入策略评估。");

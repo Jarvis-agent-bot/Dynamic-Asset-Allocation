@@ -543,7 +543,7 @@ function buildCycle(input: {
   status?: 'generated' | 'reviewing' | 'executing' | 'completed' | 'cancelled';
   proposals: Array<Record<string, any>>;
   riskCheck?: Record<string, any>;
-  triggerSource?: 'manual' | 'drift' | 'risk' | 'calendar' | 'cash_idle';
+  triggerSource?: 'manual' | 'drift' | 'risk' | 'scheduled_review' | 'cash_idle';
   triggerReason?: string;
   executionSummary?: Record<string, any> | null;
   executedOrders?: string[];

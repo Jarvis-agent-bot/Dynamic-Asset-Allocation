@@ -4,7 +4,7 @@ import { computeMetrics } from "./metrics";
 import {
   rebalanceCore,
   type RebalanceCoreConstraints,
-  type RebalanceTriggerPolicy,
+  type RebalanceTriggerConfig,
   type SuggestedOrder,
   type RebalanceTriggerDecision,
 } from "./rebalanceCore";
@@ -29,8 +29,8 @@ export type DriftRebalanceBacktestRequest = {
   /** Rebalance constraints. */
   constraints?: RebalanceCoreConstraints;
 
-  /** Trigger policy. lastRebalanceAt/now are managed by the simulator. */
-  policy?: Omit<RebalanceTriggerPolicy, "lastRebalanceAt" | "now">;
+  /** Rebalance trigger config. lastRebalanceAt/now are managed by the simulator. */
+  trigger?: Omit<RebalanceTriggerConfig, "lastRebalanceAt" | "now">;
 
   /** When starting from cash-only, buy into day-0 target weights. Default: true. */
   bootstrapToTarget?: boolean;
@@ -439,7 +439,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
 
   const { dates } = assertAlignedSeries(req.seriesBySymbol);
 
-  const policy = req.policy || {};
+  const trigger = req.trigger || {};
   const bootstrapToTarget = req.bootstrapToTarget !== false;
   const includeEventStates = req.includeEventStates === true;
   const includeTimeline = req.includeTimeline !== false;
@@ -484,10 +484,10 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
         prices: prices0,
         targetWeights: initialTargetWeights,
         constraints: bootstrapConstraints,
-        policy: {
-          thresholdPct: 0,
-          minTradeNotional: 0,
-          cooldownSeconds: 0,
+        trigger: {
+          driftThresholdPct: 0,
+          minOrderNotional: 0,
+          rebalanceCooldownSeconds: 0,
         },
       });
 
@@ -622,10 +622,10 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       prices,
       targetWeights,
       constraints: runtimeConstraints,
-      policy: {
-        thresholdPct: policy.thresholdPct,
-        minTradeNotional: policy.minTradeNotional,
-        cooldownSeconds: policy.cooldownSeconds,
+      trigger: {
+        driftThresholdPct: trigger.driftThresholdPct,
+        minOrderNotional: trigger.minOrderNotional,
+        rebalanceCooldownSeconds: trigger.rebalanceCooldownSeconds,
         lastRebalanceAt,
         now,
       },

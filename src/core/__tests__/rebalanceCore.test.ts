@@ -83,14 +83,14 @@ describe("rebalanceCore", () => {
     expect(res.warnings.join("\n")).toMatch(/missing price for holding AAA/i);
   });
 
-  it("does not trigger when max drift is below thresholdPct", () => {
+  it("does not trigger when max drift is below driftThresholdPct", () => {
     const res = rebalanceCore({
       account: { cash: 0 },
       holdings: { AAA: 50, BBB: 50 },
       prices: { AAA: 1, BBB: 1 },
       targetWeights: { AAA: 0.51, BBB: 0.49 },
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0.02 },
+      trigger: { driftThresholdPct: 0.02 },
     });
 
     expect(res.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["SELL:BBB:1", "BUY:AAA:1"]);
@@ -98,33 +98,33 @@ describe("rebalanceCore", () => {
     expect(res.trigger.reasons.join("\n")).toMatch(/threshold:/);
   });
 
-  it("uses minTradeNotional to filter out tiny drift trades", () => {
+  it("uses minOrderNotional to filter out tiny drift trades", () => {
     const res = rebalanceCore({
       account: { cash: 0 },
       holdings: { AAA: 50, BBB: 50 },
       prices: { AAA: 1, BBB: 1 },
       targetWeights: { AAA: 0.51, BBB: 0.49 },
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0, minTradeNotional: 5 },
+      trigger: { driftThresholdPct: 0, minOrderNotional: 5 },
     });
 
     expect(res.orders).toEqual([]);
     expect(res.trigger.shouldRebalance).toBe(false);
-    expect(res.trigger.reasons.join("\n")).toMatch(/minTradeNotional:/);
+    expect(res.trigger.reasons.join("\n")).toMatch(/minOrderNotional:/);
     expect(res.warnings.join("\n")).toMatch(/blocks all trades/i);
   });
 
-  it("respects cooldownSeconds when lastRebalanceAt is recent", () => {
+  it("respects rebalanceCooldownSeconds when lastRebalanceAt is recent", () => {
     const res = rebalanceCore({
       account: { cash: 0 },
       holdings: { AAA: 100 },
       prices: { AAA: 1, BBB: 1 },
       targetWeights: { AAA: 0, BBB: 1 },
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: {
-        thresholdPct: 0,
-        minTradeNotional: 0,
-        cooldownSeconds: 3600,
+      trigger: {
+        driftThresholdPct: 0,
+        minOrderNotional: 0,
+        rebalanceCooldownSeconds: 3600,
         lastRebalanceAt: "2026-02-12T00:00:00.000Z",
         now: "2026-02-12T00:10:00.000Z",
       },
@@ -142,7 +142,7 @@ describe("rebalanceCore", () => {
       prices: { AAA: 1, BBB: 1 },
       targetWeights: { AAA: 0.5, BBB: 0.4 }, // 10% implicit cash buffer
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0, minTradeNotional: 150, cashSweepToTarget: true },
+      trigger: { driftThresholdPct: 0, minOrderNotional: 150, cashSweepToTarget: true },
     });
 
     // Without the sweep pass, lot rounding leaves cashEnd=250; sweep should invest the extra 150.
@@ -158,10 +158,10 @@ describe("rebalanceCore", () => {
       prices: { AAA: 10, BBB: 10 },
       targetWeights: { AAA: 0, BBB: 1 },
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      policy: { thresholdPct: 0, minTradeNotional: 100 },
+      trigger: { driftThresholdPct: 0, minOrderNotional: 100 },
     });
 
-    // 27*10=270; with minTradeNotional=100 (lot step), we can only sell/buy 200 and skip the 70 remainder.
+    // 27*10=270; with minOrderNotional=100 (lot step), we can only sell/buy 200 and skip the 70 remainder.
     expect(res.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["SELL:AAA:200", "BUY:BBB:200"]);
     expect(res.warnings.join("\n")).toMatch(/min order size:/i);
     expect(res.warnings.join("\n")).toMatch(/SELL AAA/i);

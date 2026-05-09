@@ -76,7 +76,7 @@ export type AssetUniverseView = {
   hfSignal: HfSignalSummary | null;
 };
 
-export type RebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger" | "watchlist_entry";
+export type RebalanceTriggerSource = "scheduled_review" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger" | "watchlist_entry";
 
 type RebalanceCycleStatus = DaaStoreRebalanceCycleStatus;
 

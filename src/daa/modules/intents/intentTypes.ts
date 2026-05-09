@@ -1,6 +1,6 @@
 export type InvestmentIntentSource =
   | "drift"
-  | "calendar_review"
+  | "scheduled_review"
   | "agent_thesis"
   | "risk_reduction"
   | "cash_deploy"
@@ -16,4 +16,3 @@ export type InvestmentIntent = {
   expiresAt: string | null;
   evidenceRefs: string[];
 };
-

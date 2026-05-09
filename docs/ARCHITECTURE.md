@@ -119,8 +119,8 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 | 阶段 | 实现 |
 |------|------|
-| 漂移检测 | 按资产目标权重对比当前权重，阈值可配置（`rebalanceStrategy.drift.thresholdPct`，默认 5%） |
-| 日历触发 | monthly / quarterly / semi-annual / annual 周期触发 |
+| 漂移检测 | 按资产目标权重对比当前权重，行动外圈由 `policy.drift.outerBandPct` 控制（默认 5%） |
+| 定期复盘 | monthly / quarterly / semi-annual / annual 只表示组合复盘节奏，不直接等同交易理由 |
 | Agent 触发 | Agent LLM 建议主动调仓；Autopilot 下由定时循环、新闻刷新或实时重大事件主动触发 |
 | 信号融合 | 四维信号加权合成 conviction → buy/sell/hold 建议 |
 | 订单生成 | `src/core/rebalanceCore.ts` 纯算法：最小化交易次数，满足权重约束 |
@@ -133,10 +133,10 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 所有自动执行统一经过 `src/daa/automation/automationAuthority.ts`：
 
 1. `brain.mode` 必须允许对应动作。
-2. `autoGenerateEnabled` / `autoExecuteEnabled` 必须同时开启。
+2. `policy.enabled`、`policy.execution.autoGenerateEnabled`、`policy.execution.autoExecuteEnabled` 必须同时开启。
 3. 执行网关必须是本地模拟网关。
 4. 必须存在可执行 cycle 与 proposal。
-5. 之后继续经过单笔 NAV 上限、执行前风控、trade ticket 执行校验。
+5. 之后继续经过 `policy.execution.maxSingleOrderPctOfNav`、执行前风控、trade ticket 执行校验。
 
 因此，Autopilot 可以自动执行，但只能在本地模拟账户内执行，不能绕过 Authority 直接从 LLM 输出下单。
 

@@ -21,14 +21,14 @@ export type RebalanceCoreConstraints = {
   assetBlacklist?: string[];
 };
 
-export type RebalanceTriggerPolicy = {
+export type RebalanceTriggerConfig = {
   // Minimum max-per-symbol drift (|desired-current| / equity) required to trigger a rebalance.
-  thresholdPct?: number;
+  driftThresholdPct?: number;
   // Minimum per-order notional. If larger than constraints.minNotional, it overrides it.
-  minTradeNotional?: number;
+  minOrderNotional?: number;
   // Cooldown window after a prior rebalance; during cooldown, shouldRebalance=false.
-  cooldownSeconds?: number;
-  // ISO timestamp for last rebalance; used only when cooldownSeconds > 0.
+  rebalanceCooldownSeconds?: number;
+  // ISO timestamp for last rebalance; used only when rebalanceCooldownSeconds > 0.
   lastRebalanceAt?: string;
   // Optional ISO timestamp to make the decision deterministic in tests/UI.
   now?: string;
@@ -45,9 +45,9 @@ export type RebalanceTriggerDecision = {
   reasons: string[];
   stats: {
     equity: number;
-    thresholdPct: number;
-    minTradeNotional: number;
-    cooldownSeconds: number;
+    driftThresholdPct: number;
+    minOrderNotional: number;
+    rebalanceCooldownSeconds: number;
     maxAbsDriftPct: number;
     maxAbsDriftSymbol: string | null;
     orderCount: number;
@@ -85,8 +85,8 @@ export type SuggestedOrder = {
 type RebalanceCoreRequest = {
   account?: RebalanceCoreAccount;
   constraints?: RebalanceCoreConstraints;
-  // Policy layer to decide whether the computed orders should actually trigger a rebalance.
-  policy?: RebalanceTriggerPolicy;
+  // Trigger config decides whether the computed orders should become a rebalance event.
+  trigger?: RebalanceTriggerConfig;
   // Accept either an array or a map for convenience in copy/paste JSON.
   holdings: RebalanceCoreHolding[] | Record<string, number>;
   prices: RebalanceCorePrice[] | Record<string, number>;
@@ -381,14 +381,14 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     assetBlacklist,
   };
 
-  const policy: RebalanceTriggerPolicy = req?.policy && typeof req.policy === "object" && !Array.isArray(req.policy) ? req.policy : {};
-  const thresholdPct = clamp01(toFinite(policy.thresholdPct, 0));
-  const minTradeNotional = Math.max(0, toFinite(policy.minTradeNotional, 0));
-  const cooldownSeconds = Math.max(0, toFinite(policy.cooldownSeconds, 0));
-  const lastRebalanceAt = typeof policy.lastRebalanceAt === "string" ? policy.lastRebalanceAt : "";
-  const now = typeof policy.now === "string" ? policy.now : "";
+  const triggerConfig: RebalanceTriggerConfig = req?.trigger && typeof req.trigger === "object" && !Array.isArray(req.trigger) ? req.trigger : {};
+  const driftThresholdPct = clamp01(toFinite(triggerConfig.driftThresholdPct, 0));
+  const minOrderNotional = Math.max(0, toFinite(triggerConfig.minOrderNotional, 0));
+  const rebalanceCooldownSeconds = Math.max(0, toFinite(triggerConfig.rebalanceCooldownSeconds, 0));
+  const lastRebalanceAt = typeof triggerConfig.lastRebalanceAt === "string" ? triggerConfig.lastRebalanceAt : "";
+  const now = typeof triggerConfig.now === "string" ? triggerConfig.now : "";
 
-  const effectiveMinNotional = Math.max(constraints.minNotional, minTradeNotional);
+  const effectiveMinNotional = Math.max(constraints.minNotional, minOrderNotional);
 
   const holdings = normalizeHoldings(req.holdings, warnings, notes, blacklist);
   const prices = normalizePrices(req.prices, warnings, notes, blacklist);
@@ -441,9 +441,9 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
         reasons: ["equity: non-positive"],
         stats: {
           equity: 0,
-          thresholdPct,
-          minTradeNotional: effectiveMinNotional,
-          cooldownSeconds,
+          driftThresholdPct,
+          minOrderNotional: effectiveMinNotional,
+          rebalanceCooldownSeconds,
           maxAbsDriftPct: 0,
           maxAbsDriftSymbol: null,
           orderCount: 0,
@@ -492,7 +492,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   };
   let roundedAny = false;
 
-  // Exchange min-order-size behavior (v0): when we apply lot rounding (minTradeNotional as a lot step),
+  // Exchange min-order-size behavior (v0): when we apply lot rounding (minOrderNotional as a lot step),
   // we can end up skipping a remainder that is smaller than the minimum. Capture those so the UI can
   // surface clear warnings instead of silently drifting.
   const minOrderRemainders: Array<{
@@ -557,7 +557,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
     const remainderHint =
       Number.isFinite(skippedNotional) && skippedNotional > 1e-9
-        ? `; skippedRemainder≈${skippedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)})`
+        ? `; skippedRemainder≈${skippedNotional.toFixed(2)} (<minOrderNotional=${minN.toFixed(2)})`
         : "";
 
     orders.push({
@@ -619,7 +619,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
     const remainderHint =
       Number.isFinite(skippedNotional) && skippedNotional > 1e-9
-        ? `; skippedRemainder≈${skippedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)})`
+        ? `; skippedRemainder≈${skippedNotional.toFixed(2)} (<minOrderNotional=${minN.toFixed(2)})`
         : "";
 
     orders.push({
@@ -646,7 +646,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
       for (const x of top) {
         warnings.push(
-          `warning: min order size: ${x.side} ${x.symbol} rounded ${x.rawNotional.toFixed(2)} -> ${x.roundedNotional.toFixed(2)}; skipped ${x.skippedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)})`
+          `warning: min order size: ${x.side} ${x.symbol} rounded ${x.rawNotional.toFixed(2)} -> ${x.roundedNotional.toFixed(2)}; skipped ${x.skippedNotional.toFixed(2)} (<minOrderNotional=${minN.toFixed(2)})`
         );
       }
 
@@ -656,7 +656,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     }
 
     if (minOrderSuppressed.length) {
-      notes.push(`min order size: suppressed ${minOrderSuppressed.length} candidate order(s) that could not meet minTradeNotional=${minN.toFixed(2)}`);
+      notes.push(`min order size: suppressed ${minOrderSuppressed.length} candidate order(s) that could not meet minOrderNotional=${minN.toFixed(2)}`);
 
       const top = [...minOrderSuppressed]
         .filter((x) => Number.isFinite(x.desiredNotional) && x.desiredNotional > 0)
@@ -665,7 +665,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
       for (const x of top) {
         warnings.push(
-          `warning: min order size: suppressed ${x.side} ${x.symbol}; desired≈${x.desiredNotional.toFixed(2)}, capped≈${x.cappedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)}; reason=${x.reason})`
+          `warning: min order size: suppressed ${x.side} ${x.symbol}; desired≈${x.desiredNotional.toFixed(2)}, capped≈${x.cappedNotional.toFixed(2)} (<minOrderNotional=${minN.toFixed(2)}; reason=${x.reason})`
         );
       }
 
@@ -679,7 +679,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
   // Optional: if the caller wants to enforce a target cash buffer (implicit cash), emit extra
   // BUY orders (in lot-size steps) to reduce excess cash.
-  const cashSweepToTarget = !!(policy as any).cashSweepToTarget;
+  const cashSweepToTarget = !!triggerConfig.cashSweepToTarget;
   if (cashSweepToTarget) {
     const desiredCashAbs = equity * Math.max(0, 1 - tw.finalSum);
     const step = lotStep > 0 ? lotStep : minN;
@@ -782,7 +782,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     notes.push(`target weights sum to ${(tw.finalSum * 100).toFixed(2)}%; remaining ${(100 - tw.finalSum * 100).toFixed(2)}% is implicit cash`);
   }
 
-  // Trigger policy (v0): decide whether we should actually rebalance based on
+  // Trigger config: decide whether we should actually rebalance based on
   // drift threshold, minimum trade size, and a cooldown window.
   let maxAbsDriftPct = 0;
   let maxAbsDriftSymbol: string | null = null;
@@ -797,61 +797,61 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
   const reasons: string[] = [];
 
-  const driftOk = thresholdPct <= 0 || maxAbsDriftPct >= thresholdPct;
+  const driftOk = driftThresholdPct <= 0 || maxAbsDriftPct >= driftThresholdPct;
   if (!driftOk) {
     reasons.push(
-      `threshold: maxAbsDriftPct ${(maxAbsDriftPct * 100).toFixed(2)}% < thresholdPct ${(thresholdPct * 100).toFixed(2)}%`
+      `threshold: maxAbsDriftPct ${(maxAbsDriftPct * 100).toFixed(2)}% < driftThresholdPct ${(driftThresholdPct * 100).toFixed(2)}%`
     );
   }
 
   const eligibleOrders = orders.filter((o) => Number.isFinite(o.notional) && o.notional >= minN);
   const eligibleNotionalSum = eligibleOrders.reduce((acc, o) => acc + o.notional, 0);
-  if (!eligibleOrders.length) reasons.push(`minTradeNotional: no orders >= ${minN}`);
+  if (!eligibleOrders.length) reasons.push(`minOrderNotional: no orders >= ${minN}`);
 
   // UX hint: if the drift threshold is met but the engine produces no eligible orders,
-  // it's usually because minTradeNotional/lot sizing (or caps/cash) suppresses them.
+  // it's usually because minOrderNotional/lot sizing (or caps/cash) suppresses them.
   if (!eligibleOrders.length && Number.isFinite(minN) && minN > 0 && maxAbsDriftSymbol) {
     const maxAbsDeltaNotional = Math.abs(toFinite(deltas[maxAbsDriftSymbol], 0));
 
     // If even the largest delta is smaller than the min trade size, nothing can be emitted.
     if (Number.isFinite(maxAbsDeltaNotional) && maxAbsDeltaNotional > 0 && maxAbsDeltaNotional < minN) {
       warnings.push(
-        `warning: minTradeNotional=${minN.toFixed(2)} blocks all trades; maxAbsDeltaNotional=${maxAbsDeltaNotional.toFixed(2)} (symbol=${maxAbsDriftSymbol}). Consider lowering minTradeNotional or increasing equity/adjusting targets.`
+        `warning: minOrderNotional=${minN.toFixed(2)} blocks all trades; maxAbsDeltaNotional=${maxAbsDeltaNotional.toFixed(2)} (symbol=${maxAbsDriftSymbol}). Consider lowering minOrderNotional or increasing equity/adjusting targets.`
       );
     } else {
       // Otherwise, highlight common blockers.
       if (buyCandidates.length && cashAfterSells < minN) {
         warnings.push(
-          `warning: insufficient cash for minTradeNotional=${minN.toFixed(2)}; cashAvail=${cashAfterSells.toFixed(2)}. Consider lowering minTradeNotional or selling overweight assets first.`
+          `warning: insufficient cash for minOrderNotional=${minN.toFixed(2)}; cashAvail=${cashAfterSells.toFixed(2)}. Consider lowering minOrderNotional or selling overweight assets first.`
         );
       }
       if (buyCandidates.length && Number.isFinite(constraints.maxIn) && constraints.maxIn < minN) {
         warnings.push(
-          `warning: constraints.maxIn=${constraints.maxIn.toFixed(2)} < minTradeNotional=${minN.toFixed(2)}; BUY orders may be suppressed. Consider raising maxIn or lowering minTradeNotional.`
+          `warning: constraints.maxIn=${constraints.maxIn.toFixed(2)} < minOrderNotional=${minN.toFixed(2)}; BUY orders may be suppressed. Consider raising maxIn or lowering minOrderNotional.`
         );
       }
       if (sellCandidates.length && Number.isFinite(constraints.maxOut) && constraints.maxOut < minN) {
         warnings.push(
-          `warning: constraints.maxOut=${constraints.maxOut.toFixed(2)} < minTradeNotional=${minN.toFixed(2)}; SELL orders may be suppressed. Consider raising maxOut or lowering minTradeNotional.`
+          `warning: constraints.maxOut=${constraints.maxOut.toFixed(2)} < minOrderNotional=${minN.toFixed(2)}; SELL orders may be suppressed. Consider raising maxOut or lowering minOrderNotional.`
         );
       }
     }
   }
 
   let cooldownOk = true;
-  if (cooldownSeconds > 0) {
+  if (rebalanceCooldownSeconds > 0) {
     const nowMs = parseIsoMs(now || new Date().toISOString());
     const lastMs = parseIsoMs(lastRebalanceAt);
 
     if (Number.isFinite(nowMs) && Number.isFinite(lastMs)) {
       const elapsed = (nowMs - lastMs) / 1000;
-      if (elapsed < cooldownSeconds) {
+      if (elapsed < rebalanceCooldownSeconds) {
         cooldownOk = false;
-        const remain = cooldownSeconds - Math.max(0, elapsed);
+        const remain = rebalanceCooldownSeconds - Math.max(0, elapsed);
         reasons.push(`cooldown: last rebalance ${elapsed.toFixed(0)}s ago; wait ${remain.toFixed(0)}s`);
       }
     } else {
-      reasons.push(`cooldown: configured (${cooldownSeconds}s) but missing/invalid timestamps; ignored`);
+      reasons.push(`cooldown: configured (${rebalanceCooldownSeconds}s) but missing/invalid timestamps; ignored`);
     }
   }
 
@@ -863,9 +863,9 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     reasons,
     stats: {
       equity,
-      thresholdPct,
-      minTradeNotional: minN,
-      cooldownSeconds,
+      driftThresholdPct,
+      minOrderNotional: minN,
+      rebalanceCooldownSeconds,
       maxAbsDriftPct,
       maxAbsDriftSymbol,
       orderCount: orders.length,

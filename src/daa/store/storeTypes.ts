@@ -406,7 +406,7 @@ export type DaaStorePreTradeRiskCheck = {
 
 export type DaaStoreRebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
 
-export type DaaStoreRebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger" | "watchlist_entry";
+export type DaaStoreRebalanceTriggerSource = "scheduled_review" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger" | "watchlist_entry";
 
 export type DaaStoreRebalanceCycle = {
   cycleId: string;

@@ -39,7 +39,7 @@ export function buildEmptyAutoTriggerSkipMessage(input: {
   if (input.triggerSource === "agent_trigger") {
     return `Agent 主动调仓未生成可执行提案，跳过创建周期${summary}。`;
   }
-  if (input.triggerSource === "calendar") {
+  if (input.triggerSource === "scheduled_review") {
     return `定期组合复盘未生成可执行提案，跳过创建周期${summary}。`;
   }
   if (input.triggerSource === "drift") {

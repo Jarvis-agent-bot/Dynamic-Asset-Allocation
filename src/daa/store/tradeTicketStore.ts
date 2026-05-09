@@ -452,7 +452,7 @@ function normalizeRebalanceCycleStatus(value: unknown): DaaStoreRebalanceCycleSt
 
 function normalizeRebalanceTriggerSource(value: unknown): DaaStoreRebalanceTriggerSource {
   const text = normalizeText(value, "manual").toLowerCase();
-  if (text === "calendar") return "calendar";
+  if (text === "scheduled_review") return "scheduled_review";
   if (text === "drift") return "drift";
   if (text === "risk") return "risk";
   if (text === "cash_idle") return "cash_idle";
