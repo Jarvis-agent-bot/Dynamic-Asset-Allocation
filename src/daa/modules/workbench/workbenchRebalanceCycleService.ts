@@ -22,6 +22,7 @@ import {
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { resolveExecutionRoute, syncBrokerOrders } from "./executionVenue";
 import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
+import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 
 import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
 import { generateWatchlistEntryProposals } from "./watchlistEntryService";
@@ -45,25 +46,24 @@ import {
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
+import { appendTriggerEventSafe } from "./triggerEvent";
 import {
-  appendTriggerEventSafe,
-  assertCycleExecutable,
-  assertCycleMutable,
   buildCalendarPeriodKey,
-  buildCycleDraftFromBootstrap,
-  buildPreTradeRiskCheckFromBootstrap,
-  enrichRiskCheckWithCorrelation,
-  calcHoldingCostPerUnit,
   getZonedYmd,
   isCalendarMonthDue,
   isPastUtcTime,
-  mapStoreCycleToView,
-  normalizeText,
   normalizeTimeZoneOrUtc,
-  toCycleReportSnapshot,
-  toFinite,
   toIsoByMs,
-} from "./workbenchShared";
+} from "./rebalanceCalendar";
+import { assertCycleExecutable, assertCycleMutable } from "./cycleGuards";
+import { calcHoldingCostPerUnit } from "./executionCost";
+import {
+  buildCycleDraftFromBootstrap,
+  buildPreTradeRiskCheckFromBootstrap,
+  enrichRiskCheckWithCorrelation,
+  mapStoreCycleToView,
+  toCycleReportSnapshot,
+} from "./workbenchModeling";
 
 function isAutoCooldownGuardTrigger(input: {
   triggerSource: RebalanceTriggerSource;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildAssetUniverseView, buildWorkbenchBootstrap } from "@/src/daa/__tests__/testDataFactories";
-import { buildCycleDraftFromBootstrap } from "@/src/daa/modules/workbench/workbenchShared";
+import { buildCycleDraftFromBootstrap } from "@/src/daa/modules/workbench/workbenchModeling";
 
 describe("buildCycleDraftFromBootstrap", () => {
   it("默认不会为未持仓 watchlist 目标直接生成 BUY 提案", () => {

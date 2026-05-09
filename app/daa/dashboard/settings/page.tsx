@@ -19,7 +19,7 @@ import { SettingsStrategyTab } from "@/app/daa/dashboard/settings/_components/ta
 import { ApiClientError } from "@/src/daa/api/client";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
-import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/src/daa/modules/store/storeApi";
+import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
 
 function resolveSectionFromHash(hash: string): SettingsNavItemId | null {
   const id = hash.replace(/^#settings-/, "").trim();

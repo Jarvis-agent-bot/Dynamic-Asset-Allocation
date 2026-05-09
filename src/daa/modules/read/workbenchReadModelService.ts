@@ -8,7 +8,7 @@ import {
   buildWorkbenchBootstrapBundle,
 } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
-import { nextCalendarDueDate } from "@/src/daa/modules/workbench/workbenchShared";
+import { nextCalendarDueDate } from "@/src/daa/modules/workbench/rebalanceCalendar";
 
 import type {
   EquityDelta,

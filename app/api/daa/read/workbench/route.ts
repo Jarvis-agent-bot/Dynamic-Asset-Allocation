@@ -1,6 +1,6 @@
 import { withApiHandler } from "@/src/daa/api/routeHelpers";
 import { buildViewerReadRouteResponse, parseBooleanSearchParam } from "@/src/daa/modules/read/readRouteHelpers";
-import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 
 export const runtime = "nodejs";
 

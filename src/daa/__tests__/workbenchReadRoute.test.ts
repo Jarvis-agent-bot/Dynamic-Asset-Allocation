@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture } from "@/src/daa/__tests__/testDataFactories";
 import type { NotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import type { WorkbenchReadModel } from "@/src/daa/modules/read/readModels";
-import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
 
@@ -10,7 +10,7 @@ vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
 }));
 
-vi.mock("@/src/daa/modules/read/workbenchReadService", () => ({
+vi.mock("@/src/daa/modules/read/workbenchReadModelService", () => ({
   buildWorkbenchReadModel: vi.fn(),
 }));
 

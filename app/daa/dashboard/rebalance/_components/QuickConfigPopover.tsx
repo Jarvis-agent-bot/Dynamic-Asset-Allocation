@@ -8,7 +8,7 @@ import {
   DaaSurfaceActionButton,
   daaSurfaceFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { getSystemConfig, patchSystemConfig } from "@/src/daa/modules/store/storeApi";
+import { getSystemConfig, patchSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
 
 export function QuickConfigPopover(props: {
   driftThresholdPct?: number;

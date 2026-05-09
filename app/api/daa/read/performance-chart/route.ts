@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 
 export const runtime = "nodejs";
 

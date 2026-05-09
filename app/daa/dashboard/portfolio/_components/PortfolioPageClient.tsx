@@ -13,7 +13,7 @@ import {
   DaaSurfaceDialogShell,
   daaSurfaceFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { appendCashLedgerEntry } from "@/src/daa/modules/store/storeApi";
+import { appendCashLedgerEntry } from "@/src/daa/modules/store/dashboardStoreApiClient";
 import { cn } from "@/lib/utils";
 
 import { PortfolioStatus } from "@/app/daa/dashboard/_shared/PortfolioStatus";

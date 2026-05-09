@@ -16,7 +16,7 @@ import {
   type StoreNotificationDeliveryEntry,
   type StoreNotificationStatusSummary,
   type TelegramWebhookInfo,
-} from "@/src/daa/modules/store/storeApi";
+} from "@/src/daa/modules/store/dashboardStoreApiClient";
 
 import {
   CheckboxRow,

@@ -3,7 +3,7 @@ import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
-import { summarizeProposalExecutionCosts } from "@/src/daa/modules/workbench/workbenchShared";
+import { summarizeProposalExecutionCosts } from "@/src/daa/modules/workbench/executionCost";
 
 export const runtime = "nodejs";
 

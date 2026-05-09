@@ -1,5 +1,6 @@
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { toFinite, toPositive } from "@/src/daa/utils/normalize";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { getCurrentMarketContext } from "@/src/daa/modules/marketContext/marketIndicatorService";
@@ -34,7 +35,6 @@ import type {
 } from "./workbenchTypes";
 
 import {
-  appendTriggerEventSafe,
   buildHfSignalMap,
   buildPreTradeRiskCheck,
   buildRiskCycleDraft,
@@ -42,9 +42,8 @@ import {
   mapStoreCycleReportToView,
   mapStoreCycleToView,
   priceAgeSec,
-  toFinite,
-  toPositive,
-} from "./workbenchShared";
+} from "./workbenchModeling";
+import { appendTriggerEventSafe } from "./triggerEvent";
 
 const PRICE_SYNC_TIMEOUT_MS = 2600;
 const PRICE_SYNC_CONCURRENCY = 4;

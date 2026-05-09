@@ -3,6 +3,7 @@ import {
   getDaaRebalanceCycle,
   getDaaSystemConfig,
 } from "@/src/daa/store/daaStorePg";
+import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 import type {
   ExecuteRebalanceSummary,
   PreTradeRiskCheck,
@@ -11,16 +12,14 @@ import type {
 import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
+import { assertCycleExecutable } from "./cycleGuards";
+import { summarizeProposalExecutionCosts } from "./executionCost";
 import {
-  assertCycleExecutable,
   buildCycleDraftFromBootstrap,
   buildManualPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
-  normalizeText,
-  summarizeProposalExecutionCosts,
-  toFinite,
-} from "./workbenchShared";
+} from "./workbenchModeling";
 
 export async function runWorkbenchRiskCheck(input?: {
   cycleId?: string;

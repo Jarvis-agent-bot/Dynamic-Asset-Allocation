@@ -14,7 +14,7 @@ import {
   type StoreSecretStatus,
   type StoreSecretTestMode,
   type StoreSecretTestResult,
-} from "@/src/daa/modules/store/storeApi";
+} from "@/src/daa/modules/store/dashboardStoreApiClient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Group definitions

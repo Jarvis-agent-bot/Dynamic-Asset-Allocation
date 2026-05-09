@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { estimateProposalExecutionCost, summarizeProposalExecutionCosts } from "@/src/daa/modules/workbench/workbenchShared";
+import { estimateProposalExecutionCost, summarizeProposalExecutionCosts } from "@/src/daa/modules/workbench/executionCost";
 
 describe("workbench execution cost model", () => {
   it("BUY 会把滑点和手续费都计入现金流出", () => {

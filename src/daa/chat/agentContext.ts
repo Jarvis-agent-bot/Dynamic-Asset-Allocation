@@ -3,7 +3,7 @@ import { normalizeSystemConfig, type DaaSystemConfig } from "@/src/daa/config/sy
 import { resolveLlmConfig, type LlmRuntimeConfig, type LlmTaskType } from "@/src/daa/llm/llmClient";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
-import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { normalizeText } from "@/src/daa/utils/normalize";
 

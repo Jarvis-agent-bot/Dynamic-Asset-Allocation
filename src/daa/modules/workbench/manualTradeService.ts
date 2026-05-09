@@ -21,7 +21,7 @@ import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
-import { normalizeReasonTags, normalizeTradeSide } from "./workbenchShared";
+import { normalizeReasonTags, normalizeTradeSide } from "./tradeNormalization";
 
 export class ManualTradeServiceError extends Error {
   code: string;

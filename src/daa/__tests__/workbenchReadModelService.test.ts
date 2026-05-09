@@ -17,7 +17,7 @@ vi.mock("@/src/daa/notify/notificationStatus", () => ({
 
 import type { NotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
-import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 import { buildWorkbenchBootstrapBundle } from "@/src/daa/modules/workbench/workbenchReadService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
