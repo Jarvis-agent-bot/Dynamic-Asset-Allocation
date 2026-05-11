@@ -170,6 +170,9 @@ async function fetchFromYahoo(normalizedSymbol: string, start: string, timeoutMs
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalizedSymbol)}`);
   url.searchParams.set("interval", "1d");
   url.searchParams.set("period1", String(period1));
+  // Yahoo 在部分环境下省略 period2 会把 endDate 解析为 -1。
+  // 显式给出结束时间，避免历史缓存被清空后无法重新补齐指标日线。
+  url.searchParams.set("period2", String(Math.floor((Date.now() + 86_400_000) / 1000)));
 
   const res = await fetch(url.toString(), {
     headers: { "User-Agent": MARKET_DATA_USER_AGENT },

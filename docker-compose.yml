@@ -81,18 +81,20 @@ services:
     entrypoint: >
       sh -c "
         apk add --no-cache curl &&
-        echo '*/15 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/price-refresh' >> /etc/crontabs/root &&
-        echo '5 0 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/fx-refresh' >> /etc/crontabs/root &&
-        echo '*/30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/news-refresh' >> /etc/crontabs/root &&
-        echo '*/30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/market-indicators-refresh' >> /etc/crontabs/root &&
-        echo '20 0 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/cache-cleanup' >> /etc/crontabs/root &&
-        echo '0 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/daily-analysis' >> /etc/crontabs/root &&
-        echo '0 1,9 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/drift-check' >> /etc/crontabs/root &&
-        echo '0 8 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/hf-ingest' >> /etc/crontabs/root &&
-        echo '30 1 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/dividend-refresh' >> /etc/crontabs/root &&
-        echo '*/30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/health-check' >> /etc/crontabs/root &&
-        echo '0 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/cognitive-agent' >> /etc/crontabs/root &&
-        echo '40 3 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/entity-backfill' >> /etc/crontabs/root &&
+        cat > /etc/crontabs/root <<'CRON' &&
+        */15 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/price-refresh
+        5 0 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/fx-refresh
+        */30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/news-refresh
+        */30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/market-indicators-refresh
+        20 0 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/cache-cleanup
+        0 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/daily-analysis
+        0 1,9 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/drift-check
+        0 8 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/hf-ingest
+        30 1 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/dividend-refresh
+        10,40 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/health-check
+        0 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/cognitive-agent
+        40 3 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/entity-backfill
+        CRON
         crond -f -L /dev/stdout
       "
 
