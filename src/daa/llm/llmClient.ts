@@ -83,7 +83,7 @@ function resolveApiFormat(provider: string, endpoint: string): "chat" | "respons
 }
 
 /** 将 base_url 归一化为真正的请求地址。 */
-function resolveRequestEndpoint(provider: string, endpoint: string): string {
+export function resolveLlmRequestEndpoint(provider: string, endpoint: string): string {
   const normalizedEndpoint = normalizeText(endpoint);
   if (!normalizedEndpoint) return normalizedEndpoint;
   if (
@@ -127,7 +127,7 @@ export async function resolveLlmConfig(taskType: LlmTaskType = "analysis"): Prom
   };
   const providerKeyName = providerKeyMap[provider];
   const providerApiKey = providerKeyName ? await resolveSecret(providerKeyName as Parameters<typeof resolveSecret>[0]) : "";
-  const genericApiKey = await resolveSecret("llm_api_key");
+  const genericApiKey = providerApiKey ? "" : await resolveSecret("llm_api_key");
   const apiKey = providerApiKey || genericApiKey;
   const secretEndpoint = await resolveSecret("llm_endpoint");
   const secretModel = await resolveSecret("llm_model");
@@ -251,7 +251,7 @@ export async function callLlm(
   const effectiveModel = opts?.modelOverride || config.model;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
-  const requestEndpoint = resolveRequestEndpoint(config.provider, config.endpoint);
+  const requestEndpoint = resolveLlmRequestEndpoint(config.provider, config.endpoint);
   const format = resolveApiFormat(config.provider, requestEndpoint);
 
   try {

@@ -1,7 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { resolveSecret } from "@/src/daa/config/secretsManager";
-import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { resolveLlmConfig, resolveLlmRequestEndpoint } from "@/src/daa/llm/llmClient";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
 export const runtime = "nodejs";
@@ -79,25 +78,21 @@ export async function GET(req: Request) {
     const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const system = await getDaaSystemConfig();
-    const models = system.config.dataSources.llmModels.filter((item) => item.enabled !== false);
-    const selected = models.find((item) => item.taskType === "analysis") || models[0] || null;
-    const provider = normalizeText(selected?.provider || "deepseek").toLowerCase();
-
-    // Use secretsManager for env > DB resolution
-    const apiKey = await resolveSecret("llm_api_key");
-    const endpoint = normalizeText(await resolveSecret("llm_endpoint"), normalizeText(selected?.endpoint, "https://api.deepseek.com/v1/chat/completions"));
-    const secretModel = await resolveSecret("llm_model");
-    const model = normalizeText(secretModel, normalizeText(selected?.model, "deepseek-chat"));
-    const health = await probeLlmEndpoint({ endpoint, apiKey, model });
+    const config = await resolveLlmConfig("analysis");
+    const requestEndpoint = resolveLlmRequestEndpoint(config.provider, config.endpoint);
+    const health = await probeLlmEndpoint({
+      endpoint: requestEndpoint,
+      apiKey: config.apiKey,
+      model: config.model,
+    });
 
     return ok({
-      provider,
-      endpointConfigured: Boolean(endpoint),
-      apiKeyConfigured: Boolean(apiKey),
-      modelConfigured: Boolean(secretModel || selected?.model),
-      endpointHint: endpoint ? `${endpoint.slice(0, 64)}${endpoint.length > 64 ? "..." : ""}` : "",
-      model,
+      provider: config.provider,
+      endpointConfigured: Boolean(config.endpoint),
+      apiKeyConfigured: Boolean(config.apiKey),
+      modelConfigured: Boolean(config.model),
+      endpointHint: requestEndpoint ? `${requestEndpoint.slice(0, 64)}${requestEndpoint.length > 64 ? "..." : ""}` : "",
+      model: config.model,
       reachable: health.reachable,
       healthCode: health.healthCode,
       healthMessage: health.healthMessage,

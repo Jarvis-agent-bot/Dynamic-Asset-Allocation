@@ -27,16 +27,14 @@ const GROUP_META: Record<string, { label: string; order: number }> = {
   cron: { label: "定时任务", order: 3 },
   fred: { label: "FRED 宏观数据", order: 4 },
   twitter_data: { label: "Twitter 数据", order: 5 },
-  finnhub: { label: "Finnhub 新闻", order: 6 },
-  embedding: { label: "Embedding 向量", order: 7 },
+  embedding: { label: "Embedding 向量", order: 6 },
 };
 
-const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "fred_api_key", "finnhub_api_key", "embedding_api_key"]);
+const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "fred_api_key", "embedding_api_key"]);
 const DELIVERABLE_KEYS = new Set(["telegram_bot_token", "feishu_webhook_url"]);
 
 /** 凭证注册/获取链接 */
 const SECRET_URLS: Record<string, { label: string; url: string }> = {
-  finnhub_api_key: { label: "Finnhub 注册", url: "https://finnhub.io/register" },
   fred_api_key: { label: "FRED 申请", url: "https://fred.stlouisfed.org/docs/api/api_key.html" },
   llm_api_key: { label: "DeepSeek 控制台", url: "https://platform.deepseek.com/api_keys" },
   twitterdata_token: { label: "TwitterData", url: "https://pro.twitterdata.com" },
