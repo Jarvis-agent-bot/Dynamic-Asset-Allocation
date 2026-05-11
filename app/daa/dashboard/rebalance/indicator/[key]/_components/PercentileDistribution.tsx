@@ -1,6 +1,7 @@
 "use client";
 
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from "recharts";
+import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 const COLORS = {
   bar: "hsla(199,89%,60%,0.4)",
@@ -11,6 +12,12 @@ const COLORS = {
 };
 
 type Bin = { min: number; max: number; count: number };
+
+function toTooltipNumber(value: ValueType | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
 
 export function PercentileDistribution(props: {
   bins: Bin[];
@@ -28,6 +35,7 @@ export function PercentileDistribution(props: {
     count: b.count,
     isHighlight: i === props.currentBin,
   }));
+  const tooltipFormatter: Formatter<ValueType, NameType> = (value) => [`${toTooltipNumber(value)} 天`, "频率"];
 
   return (
     <div className="space-y-2">
@@ -42,8 +50,7 @@ export function PercentileDistribution(props: {
             <YAxis hide />
             <Tooltip
               contentStyle={{ backgroundColor: COLORS.tooltipBg, border: "1px solid hsla(215,16%,57%,0.2)", borderRadius: 8, fontSize: 11, color: "#e2e8f0" }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={((v: number) => [`${v} 天`, "频率"]) as any}
+              formatter={tooltipFormatter}
               labelFormatter={(l) => `区间: ${l}${props.unit}`}
             />
             <Bar dataKey="count" radius={[2, 2, 0, 0]}>

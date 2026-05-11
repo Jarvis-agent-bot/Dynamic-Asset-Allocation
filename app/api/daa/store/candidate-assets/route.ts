@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { parseDaaCandidateAssetInputs } from "@/src/daa/api/storePayloadValidators";
 import { listDaaCandidateAssets, replaceDaaCandidateAssets } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
@@ -20,11 +21,10 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     const body = await readJsonBody<{ candidates?: unknown }>(req);
-    if (!Array.isArray(body?.candidates)) {
-      return fail("VALIDATION_FAILED", "candidates must be an array", { status: 400 });
-    }
+    const parsed = parseDaaCandidateAssetInputs(body?.candidates);
+    if (!parsed.ok) return fail("VALIDATION_FAILED", parsed.message, { status: 400 });
 
-    const candidates = await replaceDaaCandidateAssets(body.candidates as any[]);
+    const candidates = await replaceDaaCandidateAssets(parsed.value);
     return ok({ candidates });
   });
 }

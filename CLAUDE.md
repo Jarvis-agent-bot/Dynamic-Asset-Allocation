@@ -290,7 +290,7 @@ Agent 每个 cycle 在 surfaceNode 末尾调用 LLM 策略顾问，输出本轮 
 
 Schema managed via runtime migrations in `src/daa/store/runtimeMigrations.ts`.
 
-Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_positions`,
+Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_positions_v2`,
 `daa_target_allocations`, `daa_market_price_snapshots`, `daa_watchlist_entries`,
 `daa_strategy_lab_run_snapshots`, `daa_job_execution_logs`
 

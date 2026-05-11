@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DaaAuthAccount, DaaAuthSession } from "@/src/daa/auth/daaAuthStore";
+
+type DaaAuthContext = { token: string; account: DaaAuthAccount; session: DaaAuthSession } | null;
 
 const mocks = vi.hoisted(() => ({
   requireDaaAdminEditorAuth: vi.fn(async () => null),
-  getDaaAuthContextFromRequest: vi.fn(async () => null as any),
+  getDaaAuthContextFromRequest: vi.fn<() => Promise<DaaAuthContext>>(async () => null),
   createDaaAuthAccount: vi.fn(),
   deleteDaaAuthAccount: vi.fn(),
   listDaaAuthAccounts: vi.fn(),
@@ -29,7 +32,7 @@ vi.mock("@/src/daa/auth/daaAuthStore", () => ({
 import { GET, POST } from "@/app/api/daa/auth/accounts/route";
 import { DELETE, PATCH } from "@/app/api/daa/auth/accounts/[accountId]/route";
 
-const account = {
+const account: DaaAuthAccount = {
   accountId: "acct-1",
   username: "admin@example.com",
   roles: ["editor"],

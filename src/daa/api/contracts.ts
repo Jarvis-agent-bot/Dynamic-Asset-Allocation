@@ -32,7 +32,7 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
 export function isApiResponse(value: unknown): value is ApiResponse<unknown> {
   if (!value || typeof value !== "object") return false;
-  const raw = value as any;
+  const raw = value as Record<string, unknown>;
   if (raw.ok === true) return "data" in raw;
   if (raw.ok === false) return !!raw.error && typeof raw.error === "object";
   return false;

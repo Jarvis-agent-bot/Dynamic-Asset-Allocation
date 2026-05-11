@@ -6,10 +6,20 @@ type PgState = {
   schemaInit: Promise<void> | null;
 };
 
+export type DaaPgQueryResult<Row extends Record<string, unknown> = Record<string, unknown>> = {
+  rows: Row[];
+  rowCount: number | null;
+};
+
+export type DaaPgQueryFn = <Row extends Record<string, unknown> = Record<string, unknown>>(
+  sql: string,
+  params?: unknown[],
+) => Promise<DaaPgQueryResult<Row>>;
+
 const GLOBAL_KEY = "__daa_pg_state_v0__";
 
 function getState(): PgState {
-  const g: any = globalThis as any;
+  const g = globalThis as typeof globalThis & { [GLOBAL_KEY]?: PgState };
   if (!g[GLOBAL_KEY]) {
     g[GLOBAL_KEY] = { pool: null, schemaInit: null } satisfies PgState;
   }
@@ -50,11 +60,18 @@ export function daaPgPool(): Pool {
   return pool;
 }
 
-export async function withDaaPgClient<T>(fn: (client: { query: Pool["query"] }) => Promise<T>): Promise<T> {
+export async function withDaaPgClient<T>(fn: (client: { query: DaaPgQueryFn }) => Promise<T>): Promise<T> {
   const pool = daaPgPool();
   const client = await pool.connect();
+  const query: DaaPgQueryFn = async <Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, params?: unknown[]) => {
+    const result = await client.query<Row>(sql, params);
+    return {
+      rows: result.rows,
+      rowCount: result.rowCount,
+    };
+  };
   try {
-    return await fn({ query: client.query.bind(client) });
+    return await fn({ query });
   } finally {
     client.release();
   }

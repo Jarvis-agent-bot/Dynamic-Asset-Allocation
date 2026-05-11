@@ -31,6 +31,10 @@ type FxFetchResult = {
   responseHeadersJson: Record<string, string>;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeCcy(value: unknown, fallback = "USD"): string {
   const ccy = String(value || "").trim().toUpperCase();
   if (!ccy) return fallback;
@@ -192,7 +196,8 @@ async function fetchYfinanceFxRate(baseCcy: string, quoteCcy: string): Promise<F
     };
   }
 
-  const chartError = (payloadJson as any)?.chart?.error;
+  const chart = payloadJson && isRecord(payloadJson.chart) ? payloadJson.chart : {};
+  const chartError = isRecord(chart.error) ? chart.error : null;
   if (chartError) {
     return {
       ok: false,
@@ -206,9 +211,14 @@ async function fetchYfinanceFxRate(baseCcy: string, quoteCcy: string): Promise<F
     };
   }
 
-  const result = (payloadJson as any)?.chart?.result?.[0];
-  const metaPrice = Number(result?.meta?.regularMarketPrice);
-  const closes = Array.isArray(result?.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : [];
+  const resultRows = Array.isArray(chart.result) ? chart.result : [];
+  const result = isRecord(resultRows[0]) ? resultRows[0] : {};
+  const meta = isRecord(result.meta) ? result.meta : {};
+  const indicators = isRecord(result.indicators) ? result.indicators : {};
+  const quoteRows = Array.isArray(indicators.quote) ? indicators.quote : [];
+  const firstQuote = isRecord(quoteRows[0]) ? quoteRows[0] : {};
+  const metaPrice = Number(meta.regularMarketPrice);
+  const closes = Array.isArray(firstQuote.close) ? firstQuote.close : [];
   const closePrice = pickLatestPositive(closes);
   const rate = metaPrice > 0 ? metaPrice : closePrice;
 
@@ -251,7 +261,7 @@ export async function POST(req: Request) {
       listDaaFxRates(),
     ]);
 
-    const strategyBase = normalizeCcy((system.config.strategy?.account as any)?.baseCurrency, "USD");
+    const strategyBase = normalizeCcy(system.config.strategy.account.baseCurrency, "USD");
     const fxFeed = system.config.dataSources.fxFeed;
     const rawRetentionDays = Math.max(7, Math.min(365, Math.trunc(system.config.dataSources.priceFeed.marketCache.rawRetentionDays || 90)));
     const fxPairs = mergeFxPairs(
@@ -384,4 +394,3 @@ export async function POST(req: Request) {
     return ok({ ...execution.result, jobId: execution.jobId });
   });
 }
-

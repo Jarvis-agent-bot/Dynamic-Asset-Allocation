@@ -9,6 +9,10 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function epochSecondsUtcStart(iso: string): number {
   const ms = Date.parse(`${iso}T00:00:00.000Z`);
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : NaN;
@@ -90,36 +94,41 @@ export async function GET(req: Request) {
         });
       }
 
-      let payload: any;
+      let payload: unknown;
       try {
-        payload = JSON.parse(text);
+        payload = JSON.parse(text) as unknown;
       } catch (err) {
         logSwallowed("priceSeriesRoute.parsePayload", err);
         payload = { raw: text };
       }
 
-      const err = payload?.chart?.error;
-      if (err) {
+      const payloadRoot = isRecord(payload) ? payload : {};
+      const chart = isRecord(payloadRoot.chart) ? payloadRoot.chart : {};
+      const chartError = isRecord(chart.error) ? chart.error : null;
+      if (chartError) {
         return fail("INTERNAL_ERROR", "yfinance chart error", {
           status: 502,
           details: {
-            code: err.code,
-            description: err.description,
+            code: chartError.code,
+            description: chartError.description,
           },
         });
       }
 
-      const result0 = payload?.chart?.result?.[0];
-      const ts: unknown[] = Array.isArray(result0?.timestamp) ? result0.timestamp : [];
-      const quote0 = result0?.indicators?.quote?.[0] ?? {};
-      const closes: unknown[] = Array.isArray(quote0?.close) ? quote0.close : [];
-      const opens: unknown[] = Array.isArray(quote0?.open) ? quote0.open : [];
-      const highs: unknown[] = Array.isArray(quote0?.high) ? quote0.high : [];
-      const lows: unknown[] = Array.isArray(quote0?.low) ? quote0.low : [];
-      const volumes: unknown[] = Array.isArray(quote0?.volume) ? quote0.volume : [];
-      const adjCloses: unknown[] = Array.isArray(result0?.indicators?.adjclose?.[0]?.adjclose)
-        ? result0.indicators.adjclose[0].adjclose
-        : [];
+      const resultRows = Array.isArray(chart.result) ? chart.result : [];
+      const result0 = isRecord(resultRows[0]) ? resultRows[0] : {};
+      const indicators = isRecord(result0.indicators) ? result0.indicators : {};
+      const quoteRows = Array.isArray(indicators.quote) ? indicators.quote : [];
+      const quote0 = isRecord(quoteRows[0]) ? quoteRows[0] : {};
+      const adjcloseRows = Array.isArray(indicators.adjclose) ? indicators.adjclose : [];
+      const adjclose0 = isRecord(adjcloseRows[0]) ? adjcloseRows[0] : {};
+      const ts: unknown[] = Array.isArray(result0.timestamp) ? result0.timestamp : [];
+      const closes: unknown[] = Array.isArray(quote0.close) ? quote0.close : [];
+      const opens: unknown[] = Array.isArray(quote0.open) ? quote0.open : [];
+      const highs: unknown[] = Array.isArray(quote0.high) ? quote0.high : [];
+      const lows: unknown[] = Array.isArray(quote0.low) ? quote0.low : [];
+      const volumes: unknown[] = Array.isArray(quote0.volume) ? quote0.volume : [];
+      const adjCloses: unknown[] = Array.isArray(adjclose0.adjclose) ? adjclose0.adjclose : [];
 
       const rows = ts.map((t, i) => {
         const d = new Date(Number(t) * 1000);

@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { parseDaaEquitySnapshotInput } from "@/src/daa/api/storePayloadValidators";
 import { appendDaaEquitySnapshot, listDaaEquitySnapshots } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
@@ -8,10 +9,6 @@ function toLimit(value: string | null): number {
   const parsed = Number(value || 200);
   if (!Number.isFinite(parsed)) return 200;
   return Math.max(1, Math.min(1000, Math.trunc(parsed)));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 export async function GET(req: Request) {
@@ -31,11 +28,10 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     const body = await readJsonBody<{ snapshot?: unknown }>(req);
-    if (!isRecord(body?.snapshot)) {
-      return fail("VALIDATION_FAILED", "snapshot must be an object", { status: 400 });
-    }
+    const parsed = parseDaaEquitySnapshotInput(body?.snapshot);
+    if (!parsed.ok) return fail("VALIDATION_FAILED", parsed.message, { status: 400 });
 
-    const snapshot = await appendDaaEquitySnapshot(body.snapshot as any);
+    const snapshot = await appendDaaEquitySnapshot(parsed.value);
     return ok({ snapshot });
   });
 }

@@ -1,8 +1,5 @@
 /**
  * observe/queryMarketRegime — 查询当前市场环境
- *
- * 迁移自 agentToolExecutors.ts createMarketRegimeExecutor
- * 改用 ToolExecutionContext 注入 market 数据，不再需要闭包
  */
 
 import { registerTool } from "@/src/daa/agent/tools/registry";

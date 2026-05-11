@@ -8,12 +8,16 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 export async function POST(req: Request) {
   if (!checkRateLimit("auth-login", req, { windowMs: 60_000, max: 8 })) {
     return fail("RATE_LIMITED", "请求过于频繁，请稍后重试", { status: 429 });
   }
 
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await req.json();
   } catch (err) {
@@ -21,10 +25,11 @@ export async function POST(req: Request) {
     body = null;
   }
 
-  const email = typeof body?.email === "string" ? body.email.trim() : "";
-  const username = (typeof body?.username === "string" ? body.username.trim() : "") || email;
-  const password = typeof body?.password === "string" ? body.password : "";
-  const returnTo = normalizeDaaReturnTo(body?.returnTo);
+  const payload = isRecord(body) ? body : {};
+  const email = typeof payload.email === "string" ? payload.email.trim() : "";
+  const username = (typeof payload.username === "string" ? payload.username.trim() : "") || email;
+  const password = typeof payload.password === "string" ? payload.password : "";
+  const returnTo = normalizeDaaReturnTo(payload.returnTo);
 
   if (!username || !password) {
     return fail("UNAUTHORIZED", "invalid_credentials", { status: 401 });

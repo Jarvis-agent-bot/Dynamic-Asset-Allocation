@@ -51,6 +51,14 @@ type FundamentalStats = {
   dividendYieldPct: number | null;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readRawMetric(row: Record<string, unknown>, key: string): unknown {
+  const value = row[key];
+  return isRecord(value) ? value.raw : undefined;
+}
 
 function std(values: number[]): number {
   if (values.length < 2) return 0;
@@ -106,20 +114,23 @@ async function fetchFundamentals(symbolRaw: string): Promise<FundamentalStats> {
       },
     });
     if (!response.ok) return { pe: null, pb: null, dividendYieldPct: null };
-    const payload = await response.json() as any;
-    const result = payload?.quoteSummary?.result?.[0] || {};
-    const summaryDetail = result.summaryDetail || {};
-    const defaultStats = result.defaultKeyStatistics || {};
-    const financialData = result.financialData || {};
+    const payload = await response.json() as unknown;
+    const payloadRoot = isRecord(payload) ? payload : {};
+    const quoteSummary = isRecord(payloadRoot.quoteSummary) ? payloadRoot.quoteSummary : {};
+    const resultRows = Array.isArray(quoteSummary.result) ? quoteSummary.result : [];
+    const result = isRecord(resultRows[0]) ? resultRows[0] : {};
+    const summaryDetail = isRecord(result.summaryDetail) ? result.summaryDetail : {};
+    const defaultStats = isRecord(result.defaultKeyStatistics) ? result.defaultKeyStatistics : {};
+    const financialData = isRecord(result.financialData) ? result.financialData : {};
 
     const pe = toFinite(
-      summaryDetail.trailingPE?.raw
-      ?? defaultStats.trailingPE?.raw
-      ?? financialData.forwardPE?.raw,
+      readRawMetric(summaryDetail, "trailingPE")
+      ?? readRawMetric(defaultStats, "trailingPE")
+      ?? readRawMetric(financialData, "forwardPE"),
       Number.NaN,
     );
-    const pb = toFinite(defaultStats.priceToBook?.raw, Number.NaN);
-    const dividendYieldRaw = toFinite(summaryDetail.dividendYield?.raw, Number.NaN);
+    const pb = toFinite(readRawMetric(defaultStats, "priceToBook"), Number.NaN);
+    const dividendYieldRaw = toFinite(readRawMetric(summaryDetail, "dividendYield"), Number.NaN);
 
     return {
       pe: Number.isFinite(pe) && pe > 0 ? pe : null,

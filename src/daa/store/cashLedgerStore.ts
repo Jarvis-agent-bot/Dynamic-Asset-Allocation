@@ -79,14 +79,14 @@ export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCas
 
 export async function getDaaLedgerStartTs(): Promise<string | null> {
   await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => getCurrentLedgerStartTsInTx(query as DaaTxQueryFn));
+  return withDaaPgClient(async ({ query }) => getCurrentLedgerStartTsInTx(query));
 }
 
 export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
   await ensureDaaStoreSchemaPg();
   const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    const ledgerStartTs = await getCurrentLedgerStartTsInTx(query as DaaTxQueryFn);
+    const ledgerStartTs = await getCurrentLedgerStartTsInTx(query);
     if (!ledgerStartTs) {
       return {
         ledgerStartTs: null,
@@ -173,7 +173,7 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
 
     await query("BEGIN");
     try {
-      const accountState = await getAccountStateForUpdateInTx(query as any);
+      const accountState = await getAccountStateForUpdateInTx(query);
       const currentCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
       const accountBaseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
       const entryCurrency = normalizeCcyCode(input.baseCurrency, accountBaseCurrency);
@@ -202,11 +202,11 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
       }
 
       const normalizedNextCash = Math.max(0, nextCash);
-      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTx(query as DaaTxQueryFn, {
+      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTx(query, {
         baseCurrency: accountBaseCurrency,
         cash: normalizedNextCash,
       });
-      const account = await syncStrategyAccountCashInTx(query as DaaTxQueryFn, normalizedNextCash, {
+      const account = await syncStrategyAccountCashInTx(query, normalizedNextCash, {
         totalEquity: valuation.totalEquity,
       });
       const ts = input.settlementTs ? toIsoString(input.settlementTs, new Date().toISOString()) : new Date().toISOString();

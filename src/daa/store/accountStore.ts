@@ -132,7 +132,7 @@ function mapSystemConfigRow(row: Record<string, unknown>): DaaStoreSystemConfigR
 }
 
 export async function ensureSystemConfigRowInTx(
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  query: DaaTxQueryFn,
 ): Promise<DaaStoreSystemConfigRow> {
   await query(`
     CREATE TABLE IF NOT EXISTS daa_system_config_v2 (
@@ -170,7 +170,7 @@ export async function ensureSystemConfigRowInTx(
 }
 
 export async function ensureAccountStateRowInTx(
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  query: DaaTxQueryFn,
 ): Promise<DaaStoreAccountState> {
   const accountId = getDaaAccountScopeId();
   await query(`
@@ -215,7 +215,7 @@ export async function ensureAccountStateRowInTx(
 }
 
 export async function getAccountStateForUpdateInTx(
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  query: DaaTxQueryFn,
 ): Promise<DaaStoreAccountState> {
   const accountId = getDaaAccountScopeId();
   await ensureAccountStateRowInTx(query);
@@ -230,7 +230,7 @@ export async function getAccountStateForUpdateInTx(
 }
 
 async function writeAccountStateInTx(
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  query: DaaTxQueryFn,
   nextRaw: {
     baseCurrency?: unknown;
     cash?: unknown;
@@ -285,7 +285,7 @@ async function writeAccountStateInTx(
 }
 
 async function getSystemConfigRowForUpdateInTx(
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  query: DaaTxQueryFn,
 ): Promise<DaaStoreSystemConfigRow> {
   await ensureSystemConfigRowInTx(query);
   const locked = await query(
@@ -298,7 +298,7 @@ async function getSystemConfigRowForUpdateInTx(
 }
 
 async function writeSystemConfigCasInTx(
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  query: DaaTxQueryFn,
   nextConfigRaw: unknown,
   expectedVersion: number,
 ): Promise<DaaStoreSystemConfigRow> {
@@ -315,7 +315,7 @@ async function writeSystemConfigCasInTx(
 }
 
 async function saveSystemConfigInTx(
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  query: DaaTxQueryFn,
   nextConfigRaw: unknown,
   baseVersion?: number,
 ): Promise<DaaStoreSystemConfigRow> {
@@ -337,12 +337,12 @@ export async function syncStrategyAccountCashInTx(
   frozenCash: number;
   totalEquity: number | null;
 }> {
-  const currentAccount = await getAccountStateForUpdateInTx(query as any);
+  const currentAccount = await getAccountStateForUpdateInTx(query);
   const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, currentAccount.cash));
   const previousInvestable = resolveInvestableCash(currentAccount.cash, currentAccount.frozenCash, currentAccount.investableCash);
   const delta = normalizedNextCash - currentAccount.cash;
   const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
-  const account = await writeAccountStateInTx(query as any, {
+  const account = await writeAccountStateInTx(query, {
     baseCurrency: currentAccount.baseCurrency,
     cash: normalizedNextCash,
     investableCash: nextInvestable,
@@ -358,15 +358,15 @@ export async function syncStrategyAccountCashInTx(
 export async function getDaaSystemConfig(): Promise<DaaStoreSystemConfigRow> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const row = await ensureSystemConfigRowInTx(query as any);
-    const account = await ensureAccountStateRowInTx(query as any);
+    const row = await ensureSystemConfigRowInTx(query);
+    const account = await ensureAccountStateRowInTx(query);
     return mergeSystemConfigRowWithAccountState(row, account);
   });
 }
 
 export async function getDaaAccountState(): Promise<DaaStoreAccountState> {
   await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => ensureAccountStateRowInTx(query as any));
+  return withDaaPgClient(async ({ query }) => ensureAccountStateRowInTx(query));
 }
 
 export async function replaceDaaAccountState(input: {
@@ -380,7 +380,7 @@ export async function replaceDaaAccountState(input: {
   return withDaaPgClient(async ({ query }) => {
     await query("BEGIN");
     try {
-      const account = await writeAccountStateInTx(query as any, input);
+      const account = await writeAccountStateInTx(query, input);
       await query("COMMIT");
       return account;
     } catch (error) {
@@ -403,8 +403,8 @@ export async function saveDaaSystemConfig(input: {
     await query("BEGIN");
     try {
       const { sanitizedConfig, runtimeAccount } = stripRuntimeAccountFromConfig(input.config);
-      const saved = await saveSystemConfigInTx(query as any, sanitizedConfig, input.baseVersion);
-      const account = await writeAccountStateInTx(query as any, runtimeAccount);
+      const saved = await saveSystemConfigInTx(query, sanitizedConfig, input.baseVersion);
+      const account = await writeAccountStateInTx(query, runtimeAccount);
       await query("COMMIT");
       return mergeSystemConfigRowWithAccountState(saved, account);
     } catch (error) {
@@ -426,13 +426,13 @@ export async function patchDaaSystemConfig(input: {
   return withDaaPgClient(async ({ query }) => {
     await query("BEGIN");
     try {
-      const current = await getSystemConfigRowForUpdateInTx(query as any);
-      const currentAccount = await getAccountStateForUpdateInTx(query as any);
+      const current = await getSystemConfigRowForUpdateInTx(query);
+      const currentAccount = await getAccountStateForUpdateInTx(query);
       const mergedCurrent = mergeSystemConfigRowWithAccountState(current, currentAccount);
       const nextConfig = applySystemConfigPatches(mergedCurrent.config, Array.isArray(input.patches) ? input.patches : []);
       const { sanitizedConfig, runtimeAccount } = stripRuntimeAccountFromConfig(nextConfig);
-      const saved = await saveSystemConfigInTx(query as any, sanitizedConfig, input.baseVersion ?? current.version);
-      const account = await writeAccountStateInTx(query as any, runtimeAccount);
+      const saved = await saveSystemConfigInTx(query, sanitizedConfig, input.baseVersion ?? current.version);
+      const account = await writeAccountStateInTx(query, runtimeAccount);
       await query("COMMIT");
       return mergeSystemConfigRowWithAccountState(saved, account);
     } catch (error) {

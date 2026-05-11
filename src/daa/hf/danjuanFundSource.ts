@@ -34,6 +34,10 @@ type DanjuanFundAssetPercentFetchResult = {
   raw: DanjuanFundFetchRaw | null;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 const DEFAULT_REGISTRY: DanjuanFundRegistryItem[] = [
   { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
   { fundCode: "100055", label: "富国全球科技互联网", kind: "qdii", enabled: true },
@@ -181,65 +185,56 @@ export async function fetchDanjuanFundAssetPercentWithRaw(params: {
     });
 
     const text = await response.text();
-    let payload: any = null;
+    let payload: unknown = null;
     try {
-      payload = JSON.parse(text);
+      payload = JSON.parse(text) as unknown;
     } catch (err) {
       logSwallowed("danjuanFundSource.parsePayload", err);
       payload = null;
     }
 
+    const payloadRoot = isRecord(payload) ? payload : {};
     const raw: DanjuanFundFetchRaw = {
       requestUrl: url.toString(),
       responseStatus: response.status,
       responseHeadersJson: extractHeaders(response.headers),
-      payloadJson: payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null,
+      payloadJson: isRecord(payload) ? payload : null,
       payloadText: text,
     };
 
     if (!response.ok) return { rows: [], raw };
 
-    const data = payload?.data;
-    const rows = Array.isArray(data?.stock_list) ? data.stock_list : [];
-    const sourceMark = normalizeReportDate(String(data?.source || data?.source_mark || reportDate));
-    const cashPercent = clampPct(data?.cash_percent);
-    const stockPercent = clampPct(data?.stock_percent);
+    const data = isRecord(payloadRoot.data) ? payloadRoot.data : {};
+    const rows = Array.isArray(data.stock_list) ? data.stock_list : [];
+    const sourceMark = normalizeReportDate(String(data.source || data.source_mark || reportDate));
+    const cashPercent = clampPct(data.cash_percent);
+    const stockPercent = clampPct(data.stock_percent);
+    const fundName = String(data.fund_name || "").trim() || `基金 ${fundCode}`;
+    const parsedRows: DanjuanHoldingRow[] = [];
+
+    for (const rowRaw of rows) {
+      const row = isRecord(rowRaw) ? rowRaw : {};
+      const symbolRaw = String(row.code || "").trim();
+      const symbol = toNormalizedSymbol(symbolRaw);
+      if (!symbol) continue;
+      const assetName = String(row.name || symbolRaw || symbol).trim();
+      parsedRows.push({
+        fundCode,
+        fundName,
+        reportDate: sourceMark || reportDate,
+        cashPercent,
+        stockPercent,
+        symbol,
+        symbolRaw,
+        assetName,
+        weightPct: clampPct(row.percent),
+        sourceRef: `https://danjuanfunds.com/rn/fund-detail/archive?id=103&code=${encodeURIComponent(fundCode)}`,
+        market: toMarketByCode(symbolRaw),
+      });
+    }
 
     return {
-      rows: rows
-        .map((row: any) => {
-          const symbolRaw = String(row?.code || "").trim();
-          const symbol = toNormalizedSymbol(symbolRaw);
-          if (!symbol) return null;
-          const assetName = String(row?.name || symbolRaw || symbol).trim();
-          return {
-            fundCode,
-            fundName: String(data?.fund_name || "").trim() || `基金 ${fundCode}`,
-            reportDate: sourceMark || reportDate,
-            cashPercent,
-            stockPercent,
-            symbol,
-            symbolRaw,
-            assetName,
-            weightPct: clampPct(row?.percent),
-            sourceRef: `https://danjuanfunds.com/rn/fund-detail/archive?id=103&code=${encodeURIComponent(fundCode)}`,
-            market: toMarketByCode(symbolRaw),
-          };
-        })
-        .filter(Boolean)
-        .map((row: any) => ({
-          fundCode: row.fundCode,
-          fundName: row.fundName,
-          reportDate: row.reportDate,
-          market: row.market,
-          cashPercent: row.cashPercent,
-          stockPercent: row.stockPercent,
-          symbol: row.symbol,
-          symbolRaw: row.symbolRaw,
-          assetName: row.assetName,
-          weightPct: row.weightPct,
-          sourceRef: row.sourceRef,
-        })),
+      rows: parsedRows,
       raw,
     };
   } catch (err) {

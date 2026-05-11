@@ -85,7 +85,7 @@ function normalizeStatus(raw: unknown): DaaAuthAccountStatus {
   return "active";
 }
 
-function parseJsonArrayOrEmpty(raw: unknown): any[] {
+function parseJsonArrayOrEmpty(raw: unknown): unknown[] {
   if (Array.isArray(raw)) return raw;
   if (typeof raw !== "string" || !raw.trim()) return [];
   try {
@@ -95,6 +95,19 @@ function parseJsonArrayOrEmpty(raw: unknown): any[] {
     logSwallowed("daaAuthStore.parseJsonArrayOrEmpty", err);
     return [];
   }
+}
+
+function readRowString(row: Record<string, unknown>, key: string): string {
+  return String(row[key] ?? "");
+}
+
+function readRowNullableString(row: Record<string, unknown>, key: string): string | null {
+  const value = row[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? "");
 }
 
 const SCRYPT_N = 16384;
@@ -176,9 +189,9 @@ async function ensureAuthSchemaIfPg(): Promise<void> {
   await ensureDaaAuthSchemaPg();
 }
 
-function rowToAuthAuditEvent(row: any): DaaAuthAuditEventListRow {
+function rowToAuthAuditEvent(row: Record<string, unknown>): DaaAuthAuditEventListRow {
   let payload: unknown = {};
-  if (row?.payload_json && typeof row.payload_json === "string") {
+  if (row.payload_json && typeof row.payload_json === "string") {
     try {
       payload = JSON.parse(row.payload_json);
     } catch (err) {
@@ -188,13 +201,48 @@ function rowToAuthAuditEvent(row: any): DaaAuthAuditEventListRow {
   }
 
   return {
-    eventId: String(row?.event_id ?? ""),
-    createdAt: String(row?.created_at ?? ""),
-    kind: String(row?.kind ?? ""),
-    actorUserId: String(row?.actor_user_id ?? ""),
-    accountId: typeof row?.account_id === "string" && row.account_id ? row.account_id : null,
-    sessionId: typeof row?.session_id === "string" && row.session_id ? row.session_id : null,
+    eventId: readRowString(row, "event_id"),
+    createdAt: readRowString(row, "created_at"),
+    kind: readRowString(row, "kind"),
+    actorUserId: readRowString(row, "actor_user_id"),
+    accountId: readRowNullableString(row, "account_id"),
+    sessionId: readRowNullableString(row, "session_id"),
     payload,
+  };
+}
+
+function rowToAccount(row: Record<string, unknown>): DaaAuthAccount {
+  return {
+    accountId: readRowString(row, "account_id"),
+    username: readRowString(row, "username"),
+    roles: uniqRoles(parseJsonArrayOrEmpty(row.roles_json)),
+    status: normalizeStatus(row.status),
+    createdAt: readRowString(row, "created_at"),
+    updatedAt: readRowString(row, "updated_at"),
+  };
+}
+
+function rowToJoinedAccount(row: Record<string, unknown>): DaaAuthAccount {
+  return {
+    accountId: readRowString(row, "account_id"),
+    username: readRowString(row, "username"),
+    roles: uniqRoles(parseJsonArrayOrEmpty(row.roles_json)),
+    status: normalizeStatus(row.status),
+    createdAt: readRowString(row, "a_created_at"),
+    updatedAt: readRowString(row, "a_updated_at"),
+  };
+}
+
+function rowToSession(row: Record<string, unknown>): DaaAuthSession {
+  return {
+    sessionId: readRowString(row, "session_id"),
+    accountId: readRowString(row, "account_id"),
+    createdAt: readRowString(row, "created_at"),
+    expiresAt: readRowString(row, "expires_at"),
+    revokedAt: readRowNullableString(row, "revoked_at"),
+    lastSeenAt: readRowNullableString(row, "last_seen_at"),
+    userAgent: readRowNullableString(row, "user_agent"),
+    ip: readRowNullableString(row, "ip"),
   };
 }
 
@@ -255,7 +303,7 @@ export async function listDaaAuthAuditEvents(args: {
 
   if (isDaaPgEnabled()) {
     const rows = await withDaaPgClient(async ({ query }) => {
-      const values: any[] = [];
+      const values: unknown[] = [];
       const where: string[] = [];
       let i = 1;
 
@@ -336,7 +384,7 @@ export async function createDaaAuthAccount(args: {
           [accountId, username, passwordHash, JSON.stringify(roles), "active", createdAt, updatedAt],
         );
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (isPgUniqueViolation(e)) throw new Error("unique constraint violation");
       throw e;
     }
@@ -388,8 +436,8 @@ export async function ensureDevDefaultDaaAuthAccount(): Promise<{ created: boole
       roles: ["editor"],
     });
     return { created: true, account };
-  } catch (e: any) {
-    const msg = String(e?.message || e || "").toLowerCase();
+  } catch (e: unknown) {
+    const msg = errorMessage(e).toLowerCase();
     if (msg.includes("accounts already exist") || msg.includes("bootstrap not allowed") || msg.includes("unique constraint")) {
       return { created: false, account: null };
     }
@@ -443,7 +491,7 @@ export async function bootstrapCreateFirstDaaAuthAccount(args: {
           throw e;
         }
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (isPgUniqueViolation(e)) throw new Error("unique constraint violation");
       throw e;
     }
@@ -470,15 +518,7 @@ export async function getDaaAuthAccountByUsername(usernameRaw: unknown): Promise
 
     if (!row) return null;
 
-    const roles = uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json));
-    return {
-      accountId: String((row as any).account_id ?? ""),
-      username: String((row as any).username ?? ""),
-      roles,
-      status: normalizeStatus((row as any).status),
-      createdAt: String((row as any).created_at ?? ""),
-      updatedAt: String((row as any).updated_at ?? ""),
-    };
+    return rowToAccount(row);
   }
 
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
@@ -504,19 +544,12 @@ export async function authenticateDaaAuthAccount(args: {
     });
 
     if (!row) return null;
-    if (!verifyPassword(password, (row as any).password_hash)) return null;
+    if (!verifyPassword(password, row.password_hash)) return null;
 
-    const status = normalizeStatus((row as any).status);
-    if (status !== "active") return null;
+    const account = rowToAccount(row);
+    if (account.status !== "active") return null;
 
-    return {
-      accountId: String((row as any).account_id ?? ""),
-      username: String((row as any).username ?? ""),
-      roles: uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json)),
-      status,
-      createdAt: String((row as any).created_at ?? ""),
-      updatedAt: String((row as any).updated_at ?? ""),
-    };
+    return account;
   }
 
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
@@ -600,37 +633,14 @@ export async function getDaaAuthAccountBySessionToken(args: {
       const row = (r.rows && r.rows[0]) || null;
       if (!row) return null;
 
-      const revokedAt = typeof (row as any).revoked_at === "string" && (row as any).revoked_at.trim() ? String((row as any).revoked_at) : null;
-      if (revokedAt) return null;
+      const session = rowToSession(row);
+      if (session.revokedAt) return null;
 
-      const expiresAt = String((row as any).expires_at ?? "");
-      if (!expiresAt) return null;
-      if (Date.parse(expiresAt) <= Date.parse(now)) return null;
+      if (!session.expiresAt) return null;
+      if (Date.parse(session.expiresAt) <= Date.parse(now)) return null;
 
-      const status = normalizeStatus((row as any).status);
-      if (status !== "active") return null;
-
-      const account: DaaAuthAccount = {
-        accountId: String((row as any).account_id ?? ""),
-        username: String((row as any).username ?? ""),
-        roles: uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json)),
-        status,
-        createdAt: String((row as any).a_created_at ?? ""),
-        updatedAt: String((row as any).a_updated_at ?? ""),
-      };
-
-      const session: DaaAuthSession = {
-        sessionId: String((row as any).session_id ?? ""),
-        accountId: String((row as any).account_id ?? ""),
-        createdAt: String((row as any).created_at ?? ""),
-        expiresAt,
-        revokedAt,
-        lastSeenAt:
-          typeof (row as any).last_seen_at === "string" && (row as any).last_seen_at.trim() ? String((row as any).last_seen_at) : null,
-        userAgent:
-          typeof (row as any).user_agent === "string" && (row as any).user_agent.trim() ? String((row as any).user_agent) : null,
-        ip: typeof (row as any).ip === "string" && (row as any).ip.trim() ? String((row as any).ip) : null,
-      };
+      const account = rowToJoinedAccount(row);
+      if (account.status !== "active") return null;
 
       if (touch) {
         await query("UPDATE daa_auth_sessions SET last_seen_at = $1 WHERE session_id = $2", [now, session.sessionId]);
@@ -669,21 +679,7 @@ export async function refreshDaaAuthSession(args: {
 
     if (!row) return null;
 
-    return {
-      sessionId: String((row as any).session_id ?? ""),
-      accountId: String((row as any).account_id ?? ""),
-      createdAt: String((row as any).created_at ?? ""),
-      expiresAt: String((row as any).expires_at ?? ""),
-      revokedAt:
-        typeof (row as any).revoked_at === "string" && (row as any).revoked_at.trim() ? String((row as any).revoked_at) : null,
-      lastSeenAt:
-        typeof (row as any).last_seen_at === "string" && (row as any).last_seen_at.trim()
-          ? String((row as any).last_seen_at)
-          : null,
-      userAgent:
-        typeof (row as any).user_agent === "string" && (row as any).user_agent.trim() ? String((row as any).user_agent) : null,
-      ip: typeof (row as any).ip === "string" && (row as any).ip.trim() ? String((row as any).ip) : null,
-    };
+    return rowToSession(row);
   }
 
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
@@ -707,18 +703,6 @@ export async function revokeDaaAuthSession(args: { sessionId: string; revokedAt?
   }
 
   return { ok: true };
-}
-
-function rowToAccount(row: any): DaaAuthAccount {
-  const roles = uniqRoles(parseJsonArrayOrEmpty(row?.roles_json));
-  return {
-    accountId: String(row?.account_id ?? ""),
-    username: String(row?.username ?? ""),
-    roles,
-    status: normalizeStatus(row?.status),
-    createdAt: String(row?.created_at ?? ""),
-    updatedAt: String(row?.updated_at ?? ""),
-  };
 }
 
 export async function listDaaAuthAccounts(): Promise<DaaAuthAccount[]> {
@@ -760,8 +744,9 @@ export async function updateDaaAuthAccount(args: {
       const row0 = (r0.rows && r0.rows[0]) || null;
       if (!row0) return null;
 
-      const nextRoles = args.roles === undefined ? uniqRoles(parseJsonArrayOrEmpty((row0 as any).roles_json)) : uniqRoles(args.roles);
-      const nextStatus = args.status === undefined ? normalizeStatus((row0 as any).status) : normalizeStatus(args.status);
+      const current = rowToAccount(row0);
+      const nextRoles = args.roles === undefined ? current.roles : uniqRoles(args.roles);
+      const nextStatus = args.status === undefined ? current.status : normalizeStatus(args.status);
 
       await query("UPDATE daa_auth_accounts SET roles_json = $1, status = $2, updated_at = $3 WHERE account_id = $4", [
         JSON.stringify(nextRoles),

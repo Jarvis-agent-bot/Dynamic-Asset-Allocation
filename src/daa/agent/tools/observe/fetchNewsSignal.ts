@@ -1,7 +1,5 @@
 /**
  * observe/fetchNewsSignal — 获取资产新闻信号
- *
- * 迁移自 agentToolExecutors.ts executeFetchNewsSignal
  */
 
 import { registerTool } from "@/src/daa/agent/tools/registry";

@@ -125,7 +125,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 | 信号融合 | 四维信号加权合成 conviction → buy/sell/hold 建议 |
 | 订单生成 | `src/core/rebalanceCore.ts` 纯算法：最小化交易次数，满足权重约束 |
 | 风控预检 | 市场 regime、单仓上限、流动性、手续费阈值 |
-| 模拟执行 | 无券商对接，直接写 `daa_portfolio_positions` + `daa_decision_log` |
+| 模拟执行 | 无券商对接，经 trade ticket / execution gateway 写入本地模拟账本与 `daa_positions_v2` |
 | 执行边界 | Autopilot 可在显式配置下自动执行本地模拟账本；真实券商链路未接入 |
 
 **自动化权限边界**：
@@ -172,7 +172,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 | 表 | 职责 |
 |----|------|
 | `daa_asset_master` | 元数据（symbol / market / currency / asset_class / region） |
-| `daa_portfolio_positions` | 当前持仓（qty / 平均成本 / 最后价） |
+| `daa_positions_v2` | 当前持仓（qty / 平均成本 / 成本基准） |
 | `daa_watchlist_entries` | 观察列表 + 自动建仓规则 + 价格提醒 |
 | `daa_target_allocations` | 目标权重 |
 | `daa_market_price_snapshots` | 最新市场价 |
@@ -217,10 +217,10 @@ daa_agent_strategies    — 从高准确率 run 提取的调查策略模板
 
 ```
 daa_asset_master           — 资产元数据
-daa_portfolio_positions    — 当前持仓
+daa_positions_v2           — 当前持仓
 daa_watchlist_entries      — 观察列表 + 自动建仓
 daa_target_allocations     — 目标权重
-daa_decision_log           — 再平衡决策与执行记录
+daa_trade_tickets          — 交易草稿、提交与执行状态
 ```
 
 ### 5.3 市场数据（5 张）

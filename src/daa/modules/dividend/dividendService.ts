@@ -41,6 +41,50 @@ type DividendSummary = {
   bySymbol: { symbol: string; totalBase: number; count: number }[];
 };
 
+type DividendHistoryRow = {
+  id: string;
+  symbol: string;
+  market: string;
+  ex_date: string;
+  pay_date: string | null;
+  amount: number | string;
+  currency: string;
+  source: string;
+  created_at: string;
+};
+
+type DividendIncomeRow = {
+  id: string;
+  symbol: string;
+  market: string;
+  ex_date: string;
+  holding_qty: number | string;
+  amount_per_share: number | string;
+  total_amount: number | string;
+  currency: string;
+  amount_in_base: number | string;
+  fx_rate: number | string;
+  status: DaaDividendIncome["status"];
+  cash_ledger_entry_id: string | null;
+  created_at: string;
+};
+
+type DividendStatusSummaryRow = {
+  status: DaaDividendIncome["status"];
+  total: number | string | null;
+  cnt: number | string;
+};
+
+type DividendBySymbolSummaryRow = {
+  symbol: string;
+  total: number | string | null;
+  cnt: number | string;
+};
+
+type DividendLastDateRow = {
+  last_date: string | null;
+};
+
 // ── Schema ─────────────────────────────────────────────────────────────
 
 let schemaInitPromise: Promise<void> | null = null;
@@ -141,7 +185,7 @@ export async function listDividendHistory(input: {
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const limit = Math.max(1, Math.min(500, input.limit || 100));
 
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<DividendHistoryRow>(
     `SELECT id, symbol, market, ex_date, pay_date, amount, currency, source, created_at
      FROM daa_dividend_history
      ${where}
@@ -150,7 +194,7 @@ export async function listDividendHistory(input: {
     params,
   );
 
-  return rows.map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
     symbol: row.symbol,
     market: row.market,
@@ -188,7 +232,7 @@ export async function processDividendIncome(input: {
   const fxRate = input.fxRate > 0 ? input.fxRate : 1;
   const amountInBase = totalAmount * fxRate;
 
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<DividendIncomeRow>(
     `INSERT INTO daa_dividend_income
        (id, symbol, market, ex_date, holding_qty, amount_per_share, total_amount, currency, amount_in_base, fx_rate, status)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
@@ -200,7 +244,7 @@ export async function processDividendIncome(input: {
 
   if (rows.length === 0) return null;
 
-  const row: any = rows[0];
+  const row = rows[0];
   return {
     id: row.id,
     symbol: row.symbol,
@@ -235,7 +279,7 @@ export async function creditPendingDividends(input: {
   await ensureDividendSchema();
   const pool = daaPgPool();
 
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<DividendIncomeRow>(
     `SELECT * FROM daa_dividend_income
      WHERE status = 'pending'
      ORDER BY ex_date ASC`,
@@ -279,7 +323,7 @@ export async function getDividendSummary(): Promise<DividendSummary> {
   await ensureDividendSchema();
   const pool = daaPgPool();
 
-  const { rows: statusRows } = await pool.query(
+  const { rows: statusRows } = await pool.query<DividendStatusSummaryRow>(
     `SELECT status, SUM(amount_in_base) as total, COUNT(*) as cnt
      FROM daa_dividend_income
      GROUP BY status`,
@@ -298,14 +342,14 @@ export async function getDividendSummary(): Promise<DividendSummary> {
     if (row.status === "reinvested") reinvestedDividendsBase = amount;
   }
 
-  const { rows: bySymbolRows } = await pool.query(
+  const { rows: bySymbolRows } = await pool.query<DividendBySymbolSummaryRow>(
     `SELECT symbol, SUM(amount_in_base) as total, COUNT(*) as cnt
      FROM daa_dividend_income
      GROUP BY symbol
      ORDER BY total DESC`,
   );
 
-  const { rows: lastRow } = await pool.query(
+  const { rows: lastRow } = await pool.query<DividendLastDateRow>(
     `SELECT MAX(ex_date) as last_date FROM daa_dividend_income`,
   );
 
@@ -315,7 +359,7 @@ export async function getDividendSummary(): Promise<DividendSummary> {
     creditedDividendsBase,
     reinvestedDividendsBase,
     lastDividendAt: lastRow[0]?.last_date || null,
-    bySymbol: bySymbolRows.map((row: any) => ({
+    bySymbol: bySymbolRows.map((row) => ({
       symbol: row.symbol,
       totalBase: Number(row.total),
       count: Number(row.cnt),

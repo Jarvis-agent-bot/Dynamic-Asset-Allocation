@@ -26,7 +26,7 @@ export async function resetTestDb(): Promise<void> {
 
   // Run schema migrations
   await withDaaPgClient(async ({ query }) => {
-    await runDaaStoreRuntimeMigrations(query as any);
+    await runDaaStoreRuntimeMigrations(query);
   });
 
   // Truncate all DAA tables
@@ -40,7 +40,7 @@ export async function resetTestDb(): Promise<void> {
       TRUNCATE TABLE IF EXISTS daa_rebalance_cycles CASCADE;
       TRUNCATE TABLE IF EXISTS daa_trade_tickets CASCADE;
       TRUNCATE TABLE IF EXISTS daa_cash_transactions CASCADE;
-      TRUNCATE TABLE IF EXISTS daa_portfolio_positions CASCADE; -- 未使用，migration 残留
+      TRUNCATE TABLE IF EXISTS daa_portfolio_positions CASCADE;
       TRUNCATE TABLE IF EXISTS daa_target_allocations CASCADE;
       TRUNCATE TABLE IF EXISTS daa_watchlist_entries CASCADE;
       TRUNCATE TABLE IF EXISTS daa_market_price_snapshots CASCADE;

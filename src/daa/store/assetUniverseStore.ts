@@ -9,6 +9,7 @@ import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import {
   inferMarketGroup, inferRegionByMarket,
   normalizeAssetClass, normalizeInstrumentType, normalizeRegion,
+  type AssetClass,
 } from "@/src/daa/modules/workbench/assetTaxonomy";
 import { withDaaPgClient, toIsoString, type DaaTxQueryFn } from "./storeShared";
 import type { DaaStoreAssetUniverseRow } from "./storeTypes";
@@ -141,8 +142,8 @@ export async function updateDaaAssetUniverseLastPrice(input: {
     if (!(lastPrice > 0)) throw new Error("lastPrice must be > 0");
     const priceUpdatedAt = toIsoString(input.priceUpdatedAt, new Date().toISOString());
 
-    await updateMarketPriceSnapshotInTx(query as DaaTxQueryFn, assetKey, lastPrice, priceUpdatedAt);
-    return selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, assetKey);
+    await updateMarketPriceSnapshotInTx(query, assetKey, lastPrice, priceUpdatedAt);
+    return selectAssetUniverseRowByKeyInTx(query, assetKey);
   });
 }
 
@@ -260,7 +261,7 @@ export async function upsertDaaAssetUniverseRow(input: {
     const lastPrice = Math.max(0, toFiniteNumber(input.lastPrice));
     const priceUpdatedAt = lastPrice > 0 ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null;
 
-    const txQuery = query as DaaTxQueryFn;
+    const txQuery = query;
     await upsertAssetMasterInTx(txQuery, {
       assetKey, symbol, market, currency, assetClass, region, exchange, instrumentType, marketGroup,
     });
@@ -301,7 +302,7 @@ export async function patchDaaAssetUniverseRow(input: {
     if (!parsed) throw new Error("assetKey is required");
     const assetKey = buildPositionKey(parsed.symbol, parsed.market);
 
-    const txQuery = query as DaaTxQueryFn;
+    const txQuery = query;
     await txQuery("BEGIN");
     try {
       const currentRes = await txQuery(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $2 LIMIT 1`, [ownerAccountId, assetKey]);
@@ -309,15 +310,18 @@ export async function patchDaaAssetUniverseRow(input: {
       const current = mapAssetUniverseRow(currentRes.rows[0] as Record<string, unknown>);
 
       const market = normalizeText(input.market, current.market).toUpperCase();
-      const assetClass = normalizeAssetClass(input.assetClass, current.assetClass as any);
+      const currentAssetClass = normalizeAssetClass(current.assetClass, "EQUITY");
+      const currentRegion = normalizeRegion(current.region, inferRegionByMarket(market));
+      const currentInstrumentType = normalizeInstrumentType(current.instrumentType, "STOCK");
+      const assetClass: AssetClass = normalizeAssetClass(input.assetClass, currentAssetClass);
       const next = {
         symbol: current.symbol,
         market,
         currency: normalizeCcyCode(input.currency, current.currency),
         assetClass,
-        region: normalizeRegion(input.region, current.region as any),
+        region: normalizeRegion(input.region, currentRegion),
         exchange: normalizeText(input.exchange, current.exchange),
-        instrumentType: normalizeInstrumentType(input.instrumentType, current.instrumentType as any),
+        instrumentType: normalizeInstrumentType(input.instrumentType, currentInstrumentType),
         marketGroup: normalizeText(input.marketGroup, current.marketGroup || inferMarketGroup({ market, assetClass })),
         watchEnabled: input.watchEnabled == null ? current.watchEnabled : Boolean(input.watchEnabled),
         targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFiniteNumber(input.targetWeightHint)),
@@ -359,7 +363,7 @@ export async function patchDaaAssetUniverseRow(input: {
       await txQuery("COMMIT");
       return row;
     } catch (err) {
-      await (query as DaaTxQueryFn)("ROLLBACK").catch(() => {});
+      await query("ROLLBACK").catch(() => {});
       throw err;
     }
   });

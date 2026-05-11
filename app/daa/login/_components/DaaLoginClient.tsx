@@ -22,12 +22,43 @@ type SessionModel =
   | { kind: "signedOut" }
   | { kind: "signedIn"; me: DaaAuthMePayload };
 
-function parseApiError(json: any, fallback: string): string {
-  const message = typeof json?.error?.message === "string" ? json.error.message.trim() : "";
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readNestedString(value: unknown, path: string[]): string {
+  let current: unknown = value;
+  for (const key of path) {
+    if (!isRecord(current)) return "";
+    current = current[key];
+  }
+  return typeof current === "string" ? current.trim() : "";
+}
+
+function parseJsonText(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (err) {
+    logSwallowed("DaaLoginClient.parseJson", err);
+    return null;
+  }
+}
+
+function isOkApiPayload(value: unknown): boolean {
+  return isRecord(value) && value.ok === true;
+}
+
+function readRedirectTo(value: unknown): string | undefined {
+  const redirectTo = readNestedString(value, ["data", "redirectTo"]);
+  return redirectTo || undefined;
+}
+
+function parseApiError(json: unknown, fallback: string): string {
+  const message = readNestedString(json, ["error", "message"]);
   if (message) return message;
-  const fallbackError = typeof json?.error === "string" ? json.error.trim() : "";
+  const fallbackError = readNestedString(json, ["error"]);
   if (fallbackError) return fallbackError;
-  const detail = typeof json?.error?.details?.message === "string" ? json.error.details.message.trim() : "";
+  const detail = readNestedString(json, ["error", "details", "message"]);
   if (detail) return detail;
   return fallback;
 }
@@ -110,10 +141,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         body: JSON.stringify({ username: trimmedEmail, password, returnTo: safeReturnTo }),
       });
       const text = await res.text().catch(() => "");
-      let json: any = null;
-      try { json = JSON.parse(text); } catch (err) { logSwallowed("DaaLoginClient.parseJson", err); json = null; }
-      if (!res.ok || !json?.ok) { setAuthError(mapLoginError(parseApiError(json, `HTTP ${res.status}`))); return; }
-      const redirectTo = normalizeDaaReturnTo(typeof json?.data?.redirectTo === "string" ? json.data.redirectTo : appendNoticeParam(safeReturnTo, "signed_in"));
+      const json = parseJsonText(text);
+      if (!res.ok || !isOkApiPayload(json)) { setAuthError(mapLoginError(parseApiError(json, `HTTP ${res.status}`))); return; }
+      const redirectTo = normalizeDaaReturnTo(readRedirectTo(json) ?? appendNoticeParam(safeReturnTo, "signed_in"));
       window.location.href = redirectTo;
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : String(e));
@@ -126,9 +156,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     try {
       const res = await fetch("/api/daa/auth/logout", { method: "POST", headers: { accept: "application/json" } });
       const text = await res.text();
-      let json: any = null;
-      try { json = JSON.parse(text); } catch (err) { logSwallowed("DaaLoginClient.parseJson", err); json = null; }
-      if (!res.ok || !json?.ok) throw new Error(parseApiError(json, `HTTP ${res.status}`));
+      const json = parseJsonText(text);
+      if (!res.ok || !isOkApiPayload(json)) throw new Error(parseApiError(json, `HTTP ${res.status}`));
       window.location.href = appendNoticeParam("/daa/login", "signed_out");
     } catch (e) {
       toast.error(`退出失败：${e instanceof Error ? e.message : String(e)}`);

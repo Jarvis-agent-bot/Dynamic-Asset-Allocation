@@ -1495,7 +1495,7 @@ export async function applyDaaBrokerOrderSync(input: {
       );
 
       if (orderId || current.brokerOrderId) {
-        await upsertBrokerOrderSnapshotInTx(query as DaaTxQueryFn, {
+        await upsertBrokerOrderSnapshotInTx(query, {
           ticketId: current.ticketId,
           brokerKind: input.order.broker,
           brokerAccountId: normalizeText(input.order.accountId) || current.brokerAccountId,
@@ -1508,8 +1508,8 @@ export async function applyDaaBrokerOrderSync(input: {
         });
       }
 
-      await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, [current.ticketId]);
-      const latestRows = await selectTradeTicketsByIdsInTx(query as DaaTxQueryFn, [current.ticketId], { orderByCreatedDesc: true });
+      await refreshTradeTicketAggregatesInTx(query, [current.ticketId]);
+      const latestRows = await selectTradeTicketsByIdsInTx(query, [current.ticketId], { orderByCreatedDesc: true });
       await query("COMMIT");
       return latestRows[0] ?? null;
     } catch (error) {
@@ -1576,7 +1576,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
 
     await query("BEGIN");
     try {
-      const accountState = await ensureAccountStateRowInTx(query as any);
+      const accountState = await ensureAccountStateRowInTx(query);
       const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
       const cash = Math.max(0, toFiniteNumber(accountState.cash, 0));
 
@@ -1696,7 +1696,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
         [sourceForBasket, ownerAccountId, basketId],
       );
       if (status !== "ready") {
-        await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, [ticketId]);
+        await refreshTradeTicketAggregatesInTx(query, [ticketId]);
       }
 
       const inserted = await query(
@@ -1755,7 +1755,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         positionsMap.set(buildPositionKey(pos.symbol, pos.market), pos);
       }
 
-      const accountState = await getAccountStateForUpdateInTx(query as any);
+      const accountState = await getAccountStateForUpdateInTx(query);
       const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
       let accountCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
       let accountInvestableCash = resolveInvestableCash(accountState.cash, accountState.frozenCash, accountState.investableCash);
@@ -1968,7 +1968,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
       for (const position of positionsMap.values()) {
         if (position.qty <= 0) continue;
         const assetKey = buildPositionKey(position.symbol, position.market);
-        await (query as DaaTxQueryFn)(
+        await query(
           `INSERT INTO daa_asset_master (asset_key, symbol, market, currency, created_at, updated_at)
            VALUES ($1,$2,$3,$4,NOW(),NOW())
            ON CONFLICT (asset_key) DO NOTHING`,
@@ -1976,7 +1976,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         );
       }
       await replacePositionsV2SnapshotInTx(
-        query as DaaTxQueryFn,
+        query,
         [...positionsMap.values()].map((position) => ({
           assetKey: buildPositionKey(position.symbol, position.market),
           symbol: position.symbol,
@@ -1991,11 +1991,11 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         })),
       );
 
-      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTx(query as DaaTxQueryFn, {
+      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTx(query, {
         baseCurrency,
         cash: accountCash,
       });
-      const account = await syncStrategyAccountCashInTx(query as DaaTxQueryFn, accountCash, {
+      const account = await syncStrategyAccountCashInTx(query, accountCash, {
         totalEquity: valuation.totalEquity,
       });
       const holdingsValue = valuation.holdingsValue;
@@ -2024,7 +2024,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ],
       );
 
-      await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, ticketIds);
+      await refreshTradeTicketAggregatesInTx(query, ticketIds);
 
       const latestTicketRows = await query(
         `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id IN (${placeholders}) ORDER BY created_at DESC`,

@@ -3,8 +3,10 @@
  */
 
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import type { DaaPgQueryFn, DaaPgQueryResult } from "@/src/daa/pg/daaPg";
 
 export { withDaaPgClient } from "@/src/daa/pg/daaPg";
+export type { DaaPgQueryFn, DaaPgQueryResult } from "@/src/daa/pg/daaPg";
 import { normalizeText, toFinite, normalizeUpper } from "@/src/daa/utils/normalize";
 export { normalizeText, toFinite, normalizeUpper };
 export { toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
@@ -13,10 +15,9 @@ export { toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 /*  Query function type used in transactions                          */
 /* ------------------------------------------------------------------ */
 
-type DaaQueryRowResult = { rows: Array<Record<string, unknown>> };
-export type DaaTxQueryFn = (sql: string, params?: unknown[]) => Promise<DaaQueryRowResult>;
-
-export type SchemaQueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
+export type DaaQueryRowResult<Row extends Record<string, unknown> = Record<string, unknown>> = DaaPgQueryResult<Row>;
+export type DaaTxQueryFn = DaaPgQueryFn;
+export type SchemaQueryFn = DaaPgQueryFn;
 
 /* ------------------------------------------------------------------ */
 /*  JSON / boolean / ISO helpers                                      */

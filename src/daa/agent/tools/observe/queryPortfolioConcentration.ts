@@ -1,7 +1,5 @@
 /**
  * observe/queryPortfolioConcentration — 查询组合集中度
- *
- * 迁移自 agentToolExecutors.ts createPortfolioConcentrationExecutor
  */
 
 import { registerTool } from "@/src/daa/agent/tools/registry";

@@ -303,7 +303,7 @@ describe('cron-remaining-routes-v1', () => {
         proposals: [{ assetKey: 'US::AAPL' }, { assetKey: 'US::BND' }],
         riskCheck: { overallStatus: 'warn' },
       },
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof generateWorkbenchRebalanceCycle>>);
 
     const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
     const json = await response.json();
@@ -354,7 +354,7 @@ describe('cron-remaining-routes-v1', () => {
         proposals: [{ assetKey: 'US::AAPL' }, { assetKey: 'US::BND' }],
         riskCheck: { overallStatus: 'warn' },
       },
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof generateWorkbenchRebalanceCycle>>);
 
     const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
     const json = await response.json();

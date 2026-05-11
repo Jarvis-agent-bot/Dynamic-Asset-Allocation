@@ -1,7 +1,5 @@
 /**
  * observe/fetchValuationSignal — 获取资产估值信号
- *
- * 迁移自 agentToolExecutors.ts executeFetchValuationSignal
  */
 
 import { registerTool } from "@/src/daa/agent/tools/registry";

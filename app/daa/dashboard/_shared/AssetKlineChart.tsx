@@ -141,12 +141,9 @@ export function AssetKlineChart({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const candleSeriesRef = useRef<ISeriesApi<any> | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const volumeSeriesRef = useRef<ISeriesApi<any> | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const maSeriesRefs = useRef<ISeriesApi<any>[]>([]);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const maSeriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const costLineRef = useRef<IPriceLine | null>(null);
 
@@ -264,7 +261,7 @@ export function AssetKlineChart({
     });
 
     // 添加 MA 均线
-    const maSeries: ISeriesApi<any>[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const maSeries: Array<ISeriesApi<"Line">> = [];
     for (const ma of DEFAULT_MA_CONFIGS) {
       const series = chart.addSeries(LineSeries, {
         color: ma.color,

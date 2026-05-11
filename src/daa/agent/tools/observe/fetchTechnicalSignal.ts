@@ -1,7 +1,5 @@
 /**
  * observe/fetchTechnicalSignal — 获取资产技术信号
- *
- * 迁移自 agentToolExecutors.ts executeFetchTechnicalSignal
  */
 
 import { registerTool } from "@/src/daa/agent/tools/registry";

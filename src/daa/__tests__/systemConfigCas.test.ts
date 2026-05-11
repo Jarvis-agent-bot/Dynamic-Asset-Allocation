@@ -230,12 +230,22 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     await withDaaPgClient(async ({ query }) => {
       const configRows = await query("SELECT config_json FROM daa_system_config_v2 WHERE id = 'default' LIMIT 1");
       const rawConfig = (configRows.rows[0] as Record<string, unknown>).config_json;
-      const persisted = typeof rawConfig === "string" ? JSON.parse(rawConfig) : rawConfig as Record<string, any>;
-      expect(persisted.strategy.account.cash).toBe(0);
-      expect(persisted.strategy.account.investableCash).toBe(0);
-      expect(persisted.strategy.account.frozenCash).toBe(0);
-      expect(persisted.strategy.account.totalEquity).toBe(null);
-      expect(persisted.policy.review.timezone).toBe("Etc/UTC");
+      const persisted = typeof rawConfig === "string" ? JSON.parse(rawConfig) as unknown : rawConfig;
+      expect(persisted).toMatchObject({
+        strategy: {
+          account: {
+            cash: 0,
+            investableCash: 0,
+            frozenCash: 0,
+            totalEquity: null,
+          },
+        },
+        policy: {
+          review: {
+            timezone: "Etc/UTC",
+          },
+        },
+      });
 
       const accountRows = await query(
         "SELECT base_currency, cash, investable_cash, frozen_cash, total_equity FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",

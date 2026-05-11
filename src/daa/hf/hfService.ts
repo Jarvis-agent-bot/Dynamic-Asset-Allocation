@@ -707,7 +707,7 @@ let runtimeHydrationPromise: Promise<void> | null = null;
 
 function sanitizeBatchFromStore(raw: unknown): DaaHumanSignalBatch | null {
   if (!raw || typeof raw !== "object") return null;
-  const value = raw as any;
+  const value = raw as Record<string, unknown>;
   if (!Array.isArray(value.signals)) return null;
   return {
     generatedAt: String(value.generatedAt || new Date().toISOString()),

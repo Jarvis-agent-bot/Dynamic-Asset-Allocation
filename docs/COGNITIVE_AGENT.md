@@ -81,7 +81,7 @@ Agent 的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
 - **Few-shot 示例**：每个 prompt 包含示例 JSON 输出
 - **Thesis 去重**：创建前 `findSimilarThesis(assetKeys, title)` 检查
 - **Uncertain 清理**：`observe` 节点每次 cycle 归档 `updatedAt > 7 days` 的 uncertain thesis（防止调查型 thesis 堆积）
-- **降级兼容**：所有 LLM 失败 `logSwallowed` + 使用默认/上次结果，不中断 cycle
+- **降级容错**：所有 LLM 失败 `logSwallowed` + 使用默认/上次结果，不中断 cycle
 
 ---
 

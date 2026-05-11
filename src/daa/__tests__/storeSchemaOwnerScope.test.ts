@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+type StoreSchemaTestGlobal = typeof globalThis & {
+  __daa_store_pg_state_v0__?: unknown;
+};
+
 describe("store schema owner scope bootstrap", () => {
   afterEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
-    delete (globalThis as any).__daa_store_pg_state_v0__;
+    delete (globalThis as StoreSchemaTestGlobal).__daa_store_pg_state_v0__;
   });
 
   it("旧表缺少 owner_account_id 时，会先补列再创建 owner 维度索引", async () => {
-    delete (globalThis as any).__daa_store_pg_state_v0__;
+    delete (globalThis as StoreSchemaTestGlobal).__daa_store_pg_state_v0__;
 
     let positionsHasOwner = false;
     const calls: string[] = [];
@@ -45,7 +49,7 @@ describe("store schema owner scope bootstrap", () => {
 
     vi.doMock("@/src/daa/pg/daaPg", () => ({
       daaPgPool: null,
-      withDaaPgClient: async (fn: any) => fn({ query }),
+      withDaaPgClient: async <T>(fn: (client: { query: typeof query }) => Promise<T>) => fn({ query }),
     }));
     vi.doMock("@/src/daa/store/accountStore", () => ({
       ensureSystemConfigRowInTx: vi.fn(async () => ({ id: "default", version: 1, config: {}, updatedAt: new Date().toISOString() })),

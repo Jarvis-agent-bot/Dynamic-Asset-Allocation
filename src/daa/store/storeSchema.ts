@@ -29,18 +29,13 @@ const STORE_GLOBAL_KEY_ = "__daa_store_pg_state_v0__";
 
 
 function getStoreState(): DaaStoreState {
-  const g = globalThis as any;
-  if (!g[STORE_GLOBAL_KEY_]) {
-    g[STORE_GLOBAL_KEY_] = { schemaInit: null, runtimeMigrationInit: null, marketCacheSchemaInit: null } satisfies DaaStoreState;
-  } else {
-    if (!("runtimeMigrationInit" in g[STORE_GLOBAL_KEY_])) {
-      g[STORE_GLOBAL_KEY_].runtimeMigrationInit = null;
-    }
-    if (!("marketCacheSchemaInit" in g[STORE_GLOBAL_KEY_])) {
-      g[STORE_GLOBAL_KEY_].marketCacheSchemaInit = null;
-    }
-  }
-  return g[STORE_GLOBAL_KEY_] as DaaStoreState;
+  const g = globalThis as typeof globalThis & { [STORE_GLOBAL_KEY_]?: Partial<DaaStoreState> };
+  const state = g[STORE_GLOBAL_KEY_] ?? {};
+  state.schemaInit ??= null;
+  state.runtimeMigrationInit ??= null;
+  state.marketCacheSchemaInit ??= null;
+  g[STORE_GLOBAL_KEY_] = state;
+  return state as DaaStoreState;
 }
 
 async function isStoreSchemaReady(): Promise<boolean> {
@@ -157,8 +152,8 @@ async function ensureDaaStoreRuntimeMigrationsApplied(): Promise<void> {
     st.runtimeMigrationInit = withDaaPgClient(async ({ query }) => {
       await query("BEGIN");
       try {
-        await ensureSystemConfigRowInTx(query as any);
-        await runDaaStoreRuntimeMigrations(query as any);
+        await ensureSystemConfigRowInTx(query);
+        await runDaaStoreRuntimeMigrations(query);
         await query("COMMIT");
       } catch (error) {
         try {
@@ -227,13 +222,13 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
       await query("BEGIN");
       try {
         const archivedLedgerV1 = ([
-          await archiveTable(query as any, "daa_account_state"),
-          await archiveTable(query as any, "daa_cash_ledger"),
-          await archiveTable(query as any, "daa_equity_snapshots"),
-          await archiveTable(query as any, "daa_positions"),
+          await archiveTable(query, "daa_account_state"),
+          await archiveTable(query, "daa_cash_ledger"),
+          await archiveTable(query, "daa_equity_snapshots"),
+          await archiveTable(query, "daa_positions"),
         ]).some(Boolean);
 
-        await ensureOwnerColumnsBeforeSchema(query as any);
+        await ensureOwnerColumnsBeforeSchema(query);
 
         await query(`
           CREATE TABLE IF NOT EXISTS daa_positions_v2 (
@@ -642,33 +637,33 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_fee NUMERIC NOT NULL DEFAULT 0");
         await query("ALTER TABLE daa_trade_journal ADD COLUMN IF NOT EXISTS execution_order_id TEXT");
         await query("DROP INDEX IF EXISTS idx_daa_trade_journal_execution_order_unique");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "basket_id", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "asset_key", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "cycle_id", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "pricing_mode", "TEXT NOT NULL DEFAULT 'manual'");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "price_source", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "price_snapshot_at", "TIMESTAMPTZ");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_kind", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_account_id", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_order_id", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_status", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "filled_qty", "NUMERIC");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "avg_fill_price", "NUMERIC");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "last_broker_sync_at", "TIMESTAMPTZ");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "last_applied_fill_qty", "NUMERIC NOT NULL DEFAULT 0");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_reject_reason", "TEXT");
-        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_raw_json", "JSONB");
+        await ensureTableColumn(query, "daa_trade_tickets", "basket_id", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "asset_key", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "cycle_id", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "pricing_mode", "TEXT NOT NULL DEFAULT 'manual'");
+        await ensureTableColumn(query, "daa_trade_tickets", "price_source", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "price_snapshot_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query, "daa_trade_tickets", "broker_kind", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "broker_account_id", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "broker_order_id", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "broker_status", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "filled_qty", "NUMERIC");
+        await ensureTableColumn(query, "daa_trade_tickets", "avg_fill_price", "NUMERIC");
+        await ensureTableColumn(query, "daa_trade_tickets", "last_broker_sync_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query, "daa_trade_tickets", "last_applied_fill_qty", "NUMERIC NOT NULL DEFAULT 0");
+        await ensureTableColumn(query, "daa_trade_tickets", "broker_reject_reason", "TEXT");
+        await ensureTableColumn(query, "daa_trade_tickets", "broker_raw_json", "JSONB");
         await query("ALTER TABLE daa_trade_tickets DROP CONSTRAINT IF EXISTS daa_trade_tickets_status_check");
         await query(
           "ALTER TABLE daa_trade_tickets ADD CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))",
         ).catch(() => undefined);
-        await ensureTableColumn(query as any, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
-        await ensureTableColumn(query as any, "daa_rebalance_cycles", "execution_started_at", "TIMESTAMPTZ");
-        await ensureTableColumn(query as any, "daa_rebalance_cycles", "policy_decision_id", "TEXT");
-        await ensureTableColumn(query as any, "daa_rebalance_cycles", "intent_ids_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
-        await ensureTableColumn(query as any, "daa_rebalance_cycles", "signal_ids_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
-        await ensureTableColumn(query as any, "daa_rebalance_cycles", "policy_snapshot_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
-        await ensureTableColumn(query as any, "daa_rebalance_cycles", "proposal_plan_id", "TEXT");
+        await ensureTableColumn(query, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+        await ensureTableColumn(query, "daa_rebalance_cycles", "execution_started_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query, "daa_rebalance_cycles", "policy_decision_id", "TEXT");
+        await ensureTableColumn(query, "daa_rebalance_cycles", "intent_ids_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
+        await ensureTableColumn(query, "daa_rebalance_cycles", "signal_ids_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
+        await ensureTableColumn(query, "daa_rebalance_cycles", "policy_snapshot_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+        await ensureTableColumn(query, "daa_rebalance_cycles", "proposal_plan_id", "TEXT");
         await query(
           "UPDATE daa_rebalance_cycles SET execution_started_at = NOW() WHERE status = 'executing' AND executed_at IS NULL AND execution_started_at IS NULL",
         );
@@ -756,14 +751,14 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           "INSERT INTO daa_fx_rates (id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at) VALUES ('USD/HKD', 'USD', 'HKD', 7.8, 'bootstrap', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
         );
 
-        await ensureSystemConfigRowInTx(query as any);
-        await runDaaStoreRuntimeMigrations(query as any);
+        await ensureSystemConfigRowInTx(query);
+        await runDaaStoreRuntimeMigrations(query);
         if (archivedLedgerV1) {
           await query("DELETE FROM daa_portfolio_ledger_events");
           await query("DELETE FROM daa_equity_snapshots_v2");
           await query("DELETE FROM daa_positions_v2");
           await query("DELETE FROM daa_account_state_v2");
-          const account = await ensureAccountStateRowInTx(query as any);
+          const account = await ensureAccountStateRowInTx(query);
           const resetTs = new Date().toISOString();
           await query(
             `INSERT INTO daa_portfolio_ledger_events (
@@ -811,7 +806,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             ],
           );
         } else {
-          await ensureAccountStateRowInTx(query as any);
+          await ensureAccountStateRowInTx(query);
         }
 
         await query("COMMIT");

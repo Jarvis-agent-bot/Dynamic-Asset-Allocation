@@ -17,6 +17,10 @@ type NormalizedPair = {
   pair: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeCcy(value: unknown, fallback = "USD"): string {
   const ccy = String(value || "").trim().toUpperCase();
   if (!ccy) return fallback;
@@ -115,22 +119,29 @@ async function fetchFxRateFromYfinance(baseCcy: string, quoteCcy: string): Promi
     throw new Error(`FX upstream error(${response.status}) for ${baseCcy}/${quoteCcy}`);
   }
 
-  let payload: any = null;
+  let payload: unknown = null;
   try {
-    payload = JSON.parse(raw);
+    payload = JSON.parse(raw) as unknown;
   } catch (err) {
     logSwallowed("fxSnapshotRoute.parsePayload", err);
     throw new Error(`FX upstream payload invalid for ${baseCcy}/${quoteCcy}`);
   }
 
-  const chartError = payload?.chart?.error;
+  const payloadRoot = isRecord(payload) ? payload : {};
+  const chart = isRecord(payloadRoot.chart) ? payloadRoot.chart : {};
+  const chartError = isRecord(chart.error) ? chart.error : null;
   if (chartError) {
-    throw new Error(`FX chart error for ${baseCcy}/${quoteCcy}: ${String(chartError?.description || chartError?.code || "unknown")}`);
+    throw new Error(`FX chart error for ${baseCcy}/${quoteCcy}: ${String(chartError.description || chartError.code || "unknown")}`);
   }
 
-  const result = payload?.chart?.result?.[0];
-  const metaPrice = Number(result?.meta?.regularMarketPrice);
-  const closes = Array.isArray(result?.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : [];
+  const resultRows = Array.isArray(chart.result) ? chart.result : [];
+  const result = isRecord(resultRows[0]) ? resultRows[0] : {};
+  const meta = isRecord(result.meta) ? result.meta : {};
+  const indicators = isRecord(result.indicators) ? result.indicators : {};
+  const quoteRows = Array.isArray(indicators.quote) ? indicators.quote : [];
+  const quote0 = isRecord(quoteRows[0]) ? quoteRows[0] : {};
+  const metaPrice = Number(meta.regularMarketPrice);
+  const closes = Array.isArray(quote0.close) ? quote0.close : [];
   const closePrice = pickLatestPositive(closes);
   const rate = metaPrice > 0 ? metaPrice : closePrice;
 

@@ -1,9 +1,36 @@
 import { checkRateLimit } from "@/src/daa/api/rateLimit";
 import { fail, ok } from "@/src/daa/api/routeHelpers";
-import { bootstrapCreateFirstDaaAuthAccount } from "@/src/daa/auth/daaAuthStore";
+import { bootstrapCreateFirstDaaAuthAccount, type DaaAuthRole } from "@/src/daa/auth/daaAuthStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
+
+const VALID_AUTH_ROLES_: ReadonlySet<string> = new Set(["viewer", "editor"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isDaaAuthRole(value: string): value is DaaAuthRole {
+  return VALID_AUTH_ROLES_.has(value);
+}
+
+function parseBootstrapRoles(value: unknown): DaaAuthRole[] {
+  if (!Array.isArray(value)) return ["editor"];
+  const roles: DaaAuthRole[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const role = item.trim().toLowerCase();
+    if (isDaaAuthRole(role) && !roles.includes(role)) {
+      roles.push(role);
+    }
+  }
+  return roles.length ? roles : ["editor"];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? "");
+}
 
 /**
  * Bootstrap endpoint: create the first local DAA admin account.
@@ -16,7 +43,7 @@ export async function POST(req: Request) {
     return fail("RATE_LIMITED", "请求过于频繁，请稍后重试", { status: 429 });
   }
 
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await req.json();
   } catch (err) {
@@ -24,10 +51,11 @@ export async function POST(req: Request) {
     body = null;
   }
 
-  const email = typeof body?.email === "string" ? body.email.trim() : "";
-  const username = (typeof body?.username === "string" ? body.username.trim() : "") || email;
-  const password = typeof body?.password === "string" ? body.password : "";
-  const roles = Array.isArray(body?.roles) ? body.roles : ["editor"];
+  const payload = isRecord(body) ? body : {};
+  const email = typeof payload.email === "string" ? payload.email.trim() : "";
+  const username = (typeof payload.username === "string" ? payload.username.trim() : "") || email;
+  const password = typeof payload.password === "string" ? payload.password : "";
+  const roles = parseBootstrapRoles(payload.roles);
 
   if (!username || !password) {
     return fail("VALIDATION_FAILED", "username and password are required", { status: 400 });
@@ -49,8 +77,8 @@ export async function POST(req: Request) {
       },
       bootstrapped: true,
     });
-  } catch (error: any) {
-    const message = String(error?.message || error || "");
+  } catch (error: unknown) {
+    const message = errorMessage(error);
     if (/accounts already exist|bootstrap not allowed|unique constraint/i.test(message)) {
       return fail("UNAUTHORIZED", "bootstrap 已完成，系统已存在账号，禁止再次调用此端点", { status: 403 });
     }

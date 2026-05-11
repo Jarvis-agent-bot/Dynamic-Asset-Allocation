@@ -171,7 +171,7 @@ export async function replaceDaaCandidateAssets(
   await ensureDaaStoreSchemaPg();
   const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    const txQuery = query as DaaTxQueryFn;
+    const txQuery = query;
     await txQuery("BEGIN");
     try {
       // 清除所有观察列表标记

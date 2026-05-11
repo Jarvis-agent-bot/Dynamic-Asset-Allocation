@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { cn } from "@/lib/utils";
 
 const COLORS = {
@@ -23,6 +24,12 @@ const TIME_RANGES = [
 ] as const;
 
 type RangeKey = (typeof TIME_RANGES)[number]["key"];
+
+function toTooltipNumber(value: ValueType | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
 
 export function IndicatorChart(props: {
   series: Array<{ date: string; value: number }>;
@@ -49,6 +56,8 @@ export function IndicatorChart(props: {
   if (data.length < 2) {
     return <div className="flex h-[300px] items-center justify-center text-sm text-[var(--muted)]">数据不足</div>;
   }
+
+  const tooltipFormatter: Formatter<ValueType, NameType> = (value) => [`${toTooltipNumber(value).toFixed(4)} ${props.unit}`, props.label];
 
   return (
     <div>
@@ -92,8 +101,7 @@ export function IndicatorChart(props: {
               contentStyle={{ backgroundColor: COLORS.tooltipBg, border: `1px solid ${COLORS.tooltipBorder}`, borderRadius: 10, color: "#e2e8f0" }}
               itemStyle={{ color: "#e2e8f0" }}
               labelStyle={{ color: "#94a3b8" }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={((v: number) => [`${v.toFixed(4)} ${props.unit}`, props.label]) as any}
+              formatter={tooltipFormatter}
               labelFormatter={(l) => `日期: ${l}`}
             />
             <Line type="monotone" dataKey="value" stroke={COLORS.primary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />

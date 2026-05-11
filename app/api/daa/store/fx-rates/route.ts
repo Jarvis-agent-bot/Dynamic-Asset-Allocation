@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { parseDaaFxRateInputs } from "@/src/daa/api/storePayloadValidators";
 import { listDaaFxRates, replaceDaaFxRates } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
@@ -20,11 +21,10 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     const body = await readJsonBody<{ rates?: unknown }>(req);
-    if (!Array.isArray(body?.rates)) {
-      return fail("VALIDATION_FAILED", "rates must be an array", { status: 400 });
-    }
+    const parsed = parseDaaFxRateInputs(body?.rates);
+    if (!parsed.ok) return fail("VALIDATION_FAILED", parsed.message, { status: 400 });
 
-    const rates = await replaceDaaFxRates(body.rates as any[]);
+    const rates = await replaceDaaFxRates(parsed.value);
     return ok({ rates });
   });
 }

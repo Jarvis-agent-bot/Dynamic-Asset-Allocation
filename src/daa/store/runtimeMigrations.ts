@@ -4,26 +4,31 @@ import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import { DEFAULT_DAA_ACCOUNT_SCOPE_ID } from "@/src/daa/account/accountScope";
 import { toFinite } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import type { DaaTxQueryFn } from "./storeShared";
 
-type QueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
+type QueryFn = DaaTxQueryFn;
 
 type Migration = {
   id: string;
   apply: (query: QueryFn) => Promise<void>;
 };
 
-function parseConfigJson(value: unknown): Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseConfigJson(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, any> : {};
+      return isRecord(parsed) ? parsed : {};
     } catch (err) {
       logSwallowed("runtimeMigrations.parseConfigJson", err);
       return {};
     }
   }
-  return typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
+  return isRecord(value) ? value : {};
 }
 
 function normalizeBaseCurrency(value: unknown, fallback = "USD"): string {
@@ -94,8 +99,8 @@ async function ensureAccountStateSeed(query: QueryFn): Promise<void> {
     "SELECT config_json FROM daa_system_config_v2 WHERE id = 'default' ORDER BY version DESC, updated_at DESC LIMIT 1",
   );
   const config = parseConfigJson(configRes.rows[0]?.config_json);
-  const strategy = config?.strategy && typeof config.strategy === "object" ? config.strategy : {};
-  const account = strategy?.account && typeof strategy.account === "object" ? strategy.account : {};
+  const strategy = isRecord(config.strategy) ? config.strategy : {};
+  const account = isRecord(strategy.account) ? strategy.account : {};
 
   const baseCurrency = normalizeBaseCurrency(account.baseCurrency, "USD");
   const cash = Math.max(0, toFinite(account.cash, 0));

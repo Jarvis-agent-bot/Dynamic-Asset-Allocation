@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { Loader2 } from "lucide-react";
 import { DaaSurfacePanel, DaaSurfaceMiniStat } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatPercent, formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
@@ -29,6 +30,12 @@ type WhatIfData = {
   totalSell: number;
   weightChanges: WeightChange[];
 };
+
+function toTooltipNumber(value: ValueType | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
 
 export function WhatIfPreview(props: {
   cycleId: string | null;
@@ -69,6 +76,8 @@ export function WhatIfPreview(props: {
     );
   }
 
+  const valueFormatter: Formatter<ValueType, NameType> = (value) => [formatCurrency(toTooltipNumber(value), data.baseCurrency), "市值"];
+
   const renderPie = (items: AllocationItem[], title: string) => (
     <div className="text-center">
       <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">{title}</div>
@@ -79,8 +88,7 @@ export function WhatIfPreview(props: {
           </Pie>
           <Tooltip
             contentStyle={{ backgroundColor: "hsl(222 47% 11%)", border: "1px solid hsla(215,16%,57%,0.2)", borderRadius: 8, fontSize: 11 }}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={((value: number) => [formatCurrency(value, data.baseCurrency), "市值"]) as any}
+            formatter={valueFormatter}
           />
         </PieChart>
       </ResponsiveContainer>

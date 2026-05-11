@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import {
   DaaSurfaceActionButton,
   DaaSurfacePanel,
@@ -29,6 +30,12 @@ type AssetRow = {
   targetWeightHint: number;
   watchEnabled: boolean;
 };
+
+function toTooltipNumber(value: ValueType | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
 
 export function TargetWeightSummary(props: {
   rows: AssetRow[];
@@ -77,6 +84,7 @@ export function TargetWeightSummary(props: {
       : progressTone === "amber"
         ? "hsl(45 93% 55%)"
         : "hsl(0 84% 60%)";
+  const tooltipFormatter: Formatter<ValueType, NameType> = (value) => [`${toTooltipNumber(value).toFixed(1)}%`, "权重"];
 
   return (
     <DaaSurfacePanel
@@ -175,8 +183,7 @@ export function TargetWeightSummary(props: {
                   borderRadius: 8,
                   fontSize: 12,
                 }}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                formatter={((value: number) => [`${value.toFixed(1)}%`, "权重"]) as any}
+                formatter={tooltipFormatter}
               />
             </PieChart>
           </ResponsiveContainer>

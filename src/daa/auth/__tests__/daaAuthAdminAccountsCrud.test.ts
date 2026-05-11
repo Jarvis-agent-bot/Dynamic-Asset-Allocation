@@ -13,7 +13,7 @@ import {
 
 describe.skipIf(!isTestDbAvailable())("daa/auth admin accounts CRUD v0", () => {
   it("lists accounts + supports updating roles/status + deleting", async () => {
-    resetTestDb();
+    await resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "a1@example.com", password: "pw-1", roles: ["editor"] });
     const a2 = await createDaaAuthAccount({ username: "a2@example.com", password: "pw-2", roles: ["viewer"] });
@@ -42,7 +42,7 @@ describe.skipIf(!isTestDbAvailable())("daa/auth admin accounts CRUD v0", () => {
   });
 
   it("supports resetting an account password without exposing the hash", async () => {
-    resetTestDb();
+    await resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "reset@example.com", password: "pw-old", roles: ["viewer"] });
     expect(await authenticateDaaAuthAccount({ username: "reset@example.com", password: "pw-old" })).not.toBe(null);
@@ -50,7 +50,7 @@ describe.skipIf(!isTestDbAvailable())("daa/auth admin accounts CRUD v0", () => {
     const reset = await resetDaaAuthAccountPassword({ accountId: a1.accountId, password: "pw-new" });
     expect(reset.ok).toBe(true);
     if (reset.ok) {
-      expect((reset.account as any).passwordHash).toBeUndefined();
+      expect("passwordHash" in reset.account).toBe(false);
     }
 
     expect(await authenticateDaaAuthAccount({ username: "reset@example.com", password: "pw-old" })).toBe(null);

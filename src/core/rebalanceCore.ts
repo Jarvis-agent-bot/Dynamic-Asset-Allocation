@@ -66,16 +66,10 @@ type RebalanceCorePrice = {
   price: number;
 };
 
-type RebalanceCoreTargetWeight = {
+export type RebalanceCoreTargetWeight = {
   id: string;
   label?: string;
   targetPct: number;
-};
-
-type RawRebalanceCoreTargetWeight = Partial<RebalanceCoreTargetWeight> & {
-  symbol?: unknown;
-  target_pct?: unknown;
-  weight?: unknown;
 };
 
 export type SuggestedOrder = {
@@ -93,7 +87,7 @@ type RebalanceCoreRequest = {
   constraints?: RebalanceCoreConstraints;
   // Trigger config decides whether the computed orders should become a rebalance event.
   trigger?: RebalanceTriggerConfig;
-  // Accept either an array or a map for convenience in copy/paste JSON.
+  // Accept either a typed array or an id -> targetPct map.
   holdings: RebalanceCoreHolding[] | Record<string, number>;
   prices: RebalanceCorePrice[] | Record<string, number>;
   targetWeights: RebalanceCoreTargetWeight[] | Record<string, number>;
@@ -274,9 +268,8 @@ function normalizeTargetWeights(
   const raw: { id: string; label: string; targetPct: number }[] = [];
 
   if (Array.isArray(targetWeights)) {
-    for (const w of targetWeights) {
-      const row = w as RawRebalanceCoreTargetWeight;
-      const id = String(row.id ?? row.symbol ?? "").trim();
+    for (const row of targetWeights) {
+      const id = String(row.id ?? "").trim();
       if (!id) continue;
 
       if (blacklist.has(normalizeSymbolKey(id))) {
@@ -285,8 +278,7 @@ function normalizeTargetWeights(
       }
 
       const label = String(row.label ?? id).trim() || id;
-      const targetPctRaw = row.targetPct ?? row.target_pct ?? row.weight;
-      const targetPctNum = toFinite(targetPctRaw, 0);
+      const targetPctNum = toFinite(row.targetPct, 0);
 
       if (!Number.isFinite(targetPctNum)) {
         warnings.push(`warning: targetPct for ${id} is non-finite; treated as 0`);

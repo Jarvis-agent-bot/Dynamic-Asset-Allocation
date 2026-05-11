@@ -1,7 +1,5 @@
 /**
  * observe/fetchHumanSignal — 获取人因信号（基金经理持仓）
- *
- * 迁移自 agentToolExecutors.ts executeFetchHumanSignal
  */
 
 import { registerTool } from "@/src/daa/agent/tools/registry";

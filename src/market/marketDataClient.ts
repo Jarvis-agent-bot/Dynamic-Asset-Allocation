@@ -37,27 +37,38 @@ async function readJsonBestEffort(text: string): Promise<unknown> {
   try {
     return JSON.parse(trimmed) as unknown;
   } catch (err) {
-  logSwallowed("marketDataClient.parseJson", err);
+    logSwallowed("marketDataClient.parseJson", err);
     return { _raw: trimmed };
   }
 }
 
-function toErrorMessage(payload: any, status: number): string {
-  const apiMessage = typeof payload?.error?.message === "string" ? payload.error.message.trim() : "";
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readNestedString(value: unknown, path: string[]): string {
+  let current: unknown = value;
+  for (const key of path) {
+    if (!isRecord(current)) return "";
+    current = current[key];
+  }
+  return typeof current === "string" ? current.trim() : "";
+}
+
+function toErrorMessage(payload: unknown, status: number): string {
+  const apiMessage = readNestedString(payload, ["error", "message"]);
   if (apiMessage) return apiMessage;
 
-  const apiDetailMessage = typeof payload?.error?.details?.message === "string"
-    ? payload.error.details.message.trim()
-    : "";
+  const apiDetailMessage = readNestedString(payload, ["error", "details", "message"]);
   if (apiDetailMessage) return apiDetailMessage;
 
-  const fallbackError = typeof payload?.error === "string" ? payload.error.trim() : "";
+  const fallbackError = readNestedString(payload, ["error"]);
   if (fallbackError) return fallbackError;
 
-  const fallbackMessage = typeof payload?.message === "string" ? payload.message.trim() : "";
+  const fallbackMessage = readNestedString(payload, ["message"]);
   if (fallbackMessage) return fallbackMessage;
 
-  const raw = typeof payload?._raw === "string" ? payload._raw.trim() : "";
+  const raw = readNestedString(payload, ["_raw"]);
   return raw || `http ${status}`;
 }
 

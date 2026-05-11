@@ -77,7 +77,7 @@ export function normalizeYfinanceHistoricalQuotes(
 
     const date = asIsoDate(row.date);
     if (!date) {
-      issues.push(`yfinance quote #${i + 1} has invalid date: ${String((row as any).date)}`);
+      issues.push(`yfinance quote #${i + 1} has invalid date: ${String(row.date)}`);
       continue;
     }
 

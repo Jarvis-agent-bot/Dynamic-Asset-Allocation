@@ -8,7 +8,8 @@ describe("runtime-migrations-v1", () => {
     const ledgerResetDate = new Date("2026-03-18T16:00:00.000Z");
     const applied = new Set<string>();
 
-    const query = async (sql: string, params: unknown[] = []) => {
+    const query = async <Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
+      const result = (() => {
       if (sql.includes("CREATE TABLE IF NOT EXISTS daa_schema_migrations_v1")) {
         return { rows: [], rowCount: 0 };
       }
@@ -49,6 +50,11 @@ describe("runtime-migrations-v1", () => {
         return { rows: [], rowCount: 1 };
       }
       return { rows: [], rowCount: 0 };
+      })();
+      return {
+        rows: result.rows as unknown as Row[],
+        rowCount: result.rowCount,
+      };
     };
 
     await runDaaStoreRuntimeMigrations(query);
