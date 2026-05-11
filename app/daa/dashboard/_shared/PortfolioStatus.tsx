@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { RefreshCcw } from "lucide-react";
 
 import { SkeletonChart } from "@/app/daa/dashboard/_components/SkeletonPatterns";
@@ -8,8 +9,16 @@ import {
   DaaSurfaceEmptyState,
   DaaSurfaceStatusPill,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { PerformanceChart } from "@/app/daa/dashboard/_shared/PerformanceChart";
+import type { PerformanceChartProps } from "@/app/daa/dashboard/_shared/PerformanceChart";
 import { cn } from "@/lib/utils";
+
+const LazyPerformanceChart = dynamic<PerformanceChartProps>(
+  () => import("@/app/daa/dashboard/_shared/PerformanceChart").then((mod) => mod.PerformanceChart),
+  {
+    ssr: false,
+    loading: () => <SkeletonChart />,
+  },
+);
 
 type PortfolioStatusProps = {
   baseCurrency: string;
@@ -66,7 +75,7 @@ export function PortfolioStatus(props: PortfolioStatusProps) {
       {!props.snapshots || props.snapshots.length === 0 ? (
         <SkeletonChart />
       ) : (
-        <PerformanceChart snapshots={props.snapshots} cashFlowEvents={props.cashFlowEvents} />
+        <LazyPerformanceChart snapshots={props.snapshots} cashFlowEvents={props.cashFlowEvents} />
       )}
     </div>
   );

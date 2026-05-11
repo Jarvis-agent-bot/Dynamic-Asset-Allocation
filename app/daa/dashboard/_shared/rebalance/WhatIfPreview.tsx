@@ -37,11 +37,13 @@ function toTooltipNumber(value: ValueType | undefined): number {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-export function WhatIfPreview(props: {
+export type WhatIfPreviewProps = {
   cycleId: string | null;
   selectedProposalKeys: string[];
   baseCurrency: string;
-}) {
+};
+
+export function WhatIfPreview(props: WhatIfPreviewProps) {
   const [data, setData] = useState<WhatIfData | null>(null);
   const [loading, setLoading] = useState(false);
 

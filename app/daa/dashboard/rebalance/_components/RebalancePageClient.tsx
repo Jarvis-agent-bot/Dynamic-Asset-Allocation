@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
@@ -13,8 +14,8 @@ import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DashboardNotificationBar } from "@/app/daa/dashboard/_shared/DashboardNotificationBar";
 import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
 import { RebalanceProposalList } from "@/app/daa/dashboard/_shared/rebalance/RebalanceProposalList";
-import { WhatIfPreview } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
-import { DriftBarChart } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
+import type { WhatIfPreviewProps } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
+import type { DriftBarChartProps } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
 import {
   cycleStatusLabel,
   cycleStatusTone,
@@ -30,6 +31,22 @@ import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndi
 import { QuickConfigPopover } from "./QuickConfigPopover";
 import { MarketContextCard } from "./MarketContextCard";
 import { ExecutionPanel } from "./ExecutionPanel";
+
+const LazyWhatIfPreview = dynamic<WhatIfPreviewProps>(
+  () => import("@/app/daa/dashboard/_shared/rebalance/WhatIfPreview").then((mod) => mod.WhatIfPreview),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
+
+const LazyDriftBarChart = dynamic<DriftBarChartProps>(
+  () => import("@/app/daa/dashboard/_shared/rebalance/DriftBarChart").then((mod) => mod.DriftBarChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-32 rounded-[14px] bg-[rgba(255,255,255,0.03)]" />,
+  },
+);
 
 function formatSnapshotTime(value: string | null | undefined) {
   if (!value) return "等待生成";
@@ -258,7 +275,7 @@ export default function RebalancePageClient() {
 
               {rp.selectedProposalCount > 0 && rp.currentCycle ? (
                 <SectionErrorBoundary sectionName="执行预览">
-                  <WhatIfPreview
+                  <LazyWhatIfPreview
                     cycleId={rp.currentCycle.cycleId}
                     selectedProposalKeys={rp.currentCycle.proposals
                       .filter((p) => p.selected)
@@ -289,7 +306,7 @@ export default function RebalancePageClient() {
                     {driftCount > 0 ? "需要关注" : "目标内"}
                   </DaaSurfaceStatusPill>
                 </div>
-                <DriftBarChart
+                <LazyDriftBarChart
                   rows={wbModel.tableProps.rows}
                   driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
                   maxItems={8}

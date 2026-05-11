@@ -19,11 +19,13 @@ const CHART_COLORS = {
   tooltipBorder: "hsla(215,16%,57%,0.2)",
 };
 
-export function DriftBarChart(props: {
+export type DriftBarChartProps = {
   rows: DriftRow[];
   driftThresholdPct?: number;
   maxItems?: number;
-}) {
+};
+
+export function DriftBarChart(props: DriftBarChartProps) {
   const { driftThresholdPct = 5, maxItems = 15 } = props;
 
   const chartData = useMemo(() => {

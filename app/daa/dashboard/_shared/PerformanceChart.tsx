@@ -196,7 +196,7 @@ function buildEquityCurve(snapshots: Snapshot[], days: number): EquityPoint[] {
     }));
 }
 
-export const PerformanceChart = React.memo(function PerformanceChart(props: {
+export type PerformanceChartProps = {
   snapshots: Snapshot[];
   cashFlowEvents?: CashFlowEvent[];
   benchmarkData?: BenchmarkPoint[];
@@ -204,7 +204,9 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
   className?: string;
   /** "equity" = 实际金额曲线（默认），"twr" = TWR 归一化收益率 */
   mode?: "equity" | "twr";
-}) {
+};
+
+export const PerformanceChart = React.memo(function PerformanceChart(props: PerformanceChartProps) {
   const { snapshots, benchmarkLabel = "SPY", className, mode = "equity" } = props;
   const [range, setRange] = useState<RangeKey>("ALL");
   const [serverData, setServerData] = useState<{

@@ -33,16 +33,18 @@ type AssetRow = {
   watchEnabled: boolean;
 };
 
+export type TargetWeightSummaryProps = {
+  rows: AssetRow[];
+  onTemplateApplied?: () => void | Promise<void>;
+};
+
 function toTooltipNumber(value: ValueType | undefined): number {
   const raw = Array.isArray(value) ? value[0] : value;
   const numeric = Number(raw);
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-export function TargetWeightSummary(props: {
-  rows: AssetRow[];
-  onTemplateApplied?: () => void | Promise<void>;
-}) {
+export function TargetWeightSummary(props: TargetWeightSummaryProps) {
   const [templateOpen, setTemplateOpen] = useState(false);
 
   const basketRows = useMemo(

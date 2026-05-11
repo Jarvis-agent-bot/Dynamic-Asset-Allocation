@@ -1,10 +1,11 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import type { DashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
+import type { TargetWeightSummaryProps } from "@/app/daa/dashboard/portfolio/_components/TargetWeightSummary";
 import { cn } from "@/lib/utils";
 
-import { TargetWeightSummary } from "@/app/daa/dashboard/portfolio/_components/TargetWeightSummary";
 import { PortfolioHoldingsList } from "@/app/daa/dashboard/portfolio/_components/PortfolioHoldingsList";
 import { WatchlistItemList } from "@/app/daa/dashboard/portfolio/_components/WatchlistItemList";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
@@ -16,11 +17,24 @@ import {
 import { WatchlistSearchBar } from "@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar";
 import { RiskOverview } from "./RiskOverview";
 
+const LazyTargetWeightSummary = dynamic<TargetWeightSummaryProps>(
+  () => import("@/app/daa/dashboard/portfolio/_components/TargetWeightSummary").then((mod) => mod.TargetWeightSummary),
+  {
+    ssr: false,
+    loading: () => (
+      <DaaSurfacePanel accent="cyan" title="目标配置概览" subtitle="正在加载配置图表">
+        <div className="h-20 rounded-[12px] bg-[rgba(255,255,255,0.03)]" />
+      </DaaSurfacePanel>
+    ),
+  },
+);
+
 export function ActiveTabPanel(props: {
   model: DashboardPageModel;
   onNavigateTab?: (tab: DashboardTab) => void;
 }) {
   const { model } = props;
+  const hasTargetWeights = model.tableProps.rows.some((row) => row.watchEnabled && row.targetWeightHint > 0);
 
   return (
     <div className="space-y-4">
@@ -61,10 +75,12 @@ export function ActiveTabPanel(props: {
       {/* 观察列表（OKX 风格） + 搜索添加 */}
       {model.activeTab === "watchlist" ? (
         <div className="space-y-4">
-          <TargetWeightSummary
-            rows={model.tableProps.rows}
-            onTemplateApplied={() => model.loadBootstrap(true)}
-          />
+          {hasTargetWeights ? (
+            <LazyTargetWeightSummary
+              rows={model.tableProps.rows}
+              onTemplateApplied={() => model.loadBootstrap(true)}
+            />
+          ) : null}
           <WatchlistSearchBar {...model.watchlistBuilderProps} />
           <WatchlistItemList
             rows={model.tableProps.rows}
