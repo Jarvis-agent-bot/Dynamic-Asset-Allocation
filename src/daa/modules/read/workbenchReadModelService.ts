@@ -51,7 +51,7 @@ function buildSignals(input: {
       level: "warn",
       source: "alert",
       text: `${maxDriftRow.symbol} 偏移 ${Number(maxDriftRow.gapPct || 0).toFixed(2)}%，超过阈值 ${driftThresholdPct.toFixed(2)}%`,
-      actionHref: "/daa/dashboard/portfolio?tab=watchlist",
+      actionHref: "/daa/dashboard/rebalance",
       createdAt,
     });
   }
@@ -63,7 +63,7 @@ function buildSignals(input: {
       level: highlightedHf.hfSignal.level === "bearish" ? "warn" : "info",
       source: "alert",
       text: `人因信号：${highlightedHf.symbol} ${highlightedHf.hfSignal.icon} ${highlightedHf.hfSignal.label}`,
-      actionHref: "/daa/dashboard/portfolio?tab=watchlist",
+      actionHref: "/daa/dashboard/portfolio",
       createdAt,
     });
   }

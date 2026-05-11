@@ -23,14 +23,15 @@ describe("normalizeDashboardTab", () => {
   it("returns valid tab names as-is", () => {
     expect(normalizeDashboardTab("positions")).toBe("positions");
     expect(normalizeDashboardTab("watchlist")).toBe("watchlist");
-    expect(normalizeDashboardTab("rebalance")).toBe("rebalance");
-    expect(normalizeDashboardTab("cash")).toBe("cash");
+    expect(normalizeDashboardTab("analysis")).toBe("analysis");
   });
 
   it("defaults to positions for invalid input", () => {
     expect(normalizeDashboardTab("")).toBe("positions");
     expect(normalizeDashboardTab("invalid")).toBe("positions");
     expect(normalizeDashboardTab("discovery")).toBe("positions");
+    expect(normalizeDashboardTab("rebalance")).toBe("positions");
+    expect(normalizeDashboardTab("cash")).toBe("positions");
     expect(normalizeDashboardTab("settings")).toBe("positions");
   });
 });
@@ -91,15 +92,15 @@ describe("useDashboardModel", () => {
     expect(result.current.authRequired).toBe(true);
   });
 
-  it("respects initialTab", async () => {
+  it("respects a valid initialTab", async () => {
     const { getWorkbenchReadModel } = await import("@/src/daa/modules/read/readApi");
     (getWorkbenchReadModel as ReturnType<typeof vi.fn>).mockResolvedValue({
       bootstrap: { baseCurrency: "CNY", assetRows: [], latestCycle: null },
       cycles: [],
     });
 
-    const { result } = renderHook(() => useDashboardModel({ initialTab: "rebalance" }));
-    expect(result.current.activeTab).toBe("rebalance");
+    const { result } = renderHook(() => useDashboardModel({ initialTab: "watchlist" }));
+    expect(result.current.activeTab).toBe("watchlist");
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);

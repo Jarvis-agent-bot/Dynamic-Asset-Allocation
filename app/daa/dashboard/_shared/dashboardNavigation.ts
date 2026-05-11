@@ -6,8 +6,6 @@ export function resolveTabFromLocation(input: {
   fallbackTab: DashboardTab;
 }): DashboardTab {
   const section = String(input.section || "").trim().toLowerCase();
-  if (section === "rebalance") return "rebalance";
-  if (section === "cash") return "cash";
   if (section === "portfolio") {
     return normalizeDashboardTab(
       input.searchTab || (input.fallbackTab === "watchlist" ? "watchlist" : "positions"),

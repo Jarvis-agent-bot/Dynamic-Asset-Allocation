@@ -91,8 +91,8 @@ export function deriveRebalanceInteractionState(input: {
   );
   const canExecuteSelected = Boolean(canExecuteAll && selectedProposalCount > 0);
   const rebalanceChecklist: RebalanceChecklistItem[] = [
-    { id: "watchlist", label: "观察列表至少 1 个资产", ok: summary.watchlistAssets > 0, hint: "去观察列表添加候选资产" },
-    { id: "basket", label: "再平衡列表至少 1 个目标权重 > 0 的资产", ok: basketAssetCount > 0, hint: "去观察列表设置目标权重" },
+    { id: "watchlist", label: "观察列表至少 1 个资产", ok: summary.watchlistAssets > 0, hint: "先添加候选资产" },
+    { id: "basket", label: "再平衡列表至少 1 个目标权重 > 0 的资产", ok: basketAssetCount > 0, hint: "先为候选资产设置目标权重" },
     { id: "cycle", label: "已生成建议周期", ok: Boolean(currentCycle), hint: "点击生成/刷新建议" },
     { id: "proposal", label: "建议列表中存在可审阅条目", ok: hasCycleProposal, hint: "先完成建议生成" },
     { id: "risk", label: "执行前风控非阻断", ok: riskReadyForExecution, hint: "查看风控检查并消除阻断项" },

@@ -32,16 +32,21 @@ describe("daa/url", () => {
       expect(normalizeDaaReturnTo("/daa/market/funds")).toBe("/daa/dashboard");
     });
 
-    it("canonicalizes /daa/dashboard and strips unsupported tab", () => {
+    it("canonicalizes /daa/dashboard to the shell entry", () => {
       expect(normalizeDaaReturnTo("/daa")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnTo("/daa/dashboard/")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnTo("/daa/dashboard?tab=unknown#x")).toBe("/daa/dashboard#x");
-      expect(normalizeDaaReturnTo("/daa/dashboard?tab=settings&section=security#x")).toBe("/daa/dashboard?section=security#x");
+      expect(normalizeDaaReturnTo("/daa/dashboard?tab=settings&section=security#x")).toBe("/daa/dashboard#x");
     });
 
     it("preserves dashboard deep links", () => {
-      expect(normalizeDaaReturnTo("/daa/dashboard/workbench")).toBe("/daa/dashboard/workbench");
       expect(normalizeDaaReturnTo("/daa/dashboard/settings?section=risk")).toBe("/daa/dashboard/settings?section=risk");
+    });
+
+    it("maps legacy workbench deep links to current dashboard routes", () => {
+      expect(normalizeDaaReturnTo("/daa/dashboard/workbench")).toBe("/daa/dashboard/portfolio");
+      expect(normalizeDaaReturnTo("/daa/dashboard/workbench?tab=watchlist")).toBe("/daa/dashboard/portfolio?tab=watchlist");
+      expect(normalizeDaaReturnTo("/daa/dashboard/workbench?tab=rebalance")).toBe("/daa/dashboard/rebalance");
     });
   });
 });

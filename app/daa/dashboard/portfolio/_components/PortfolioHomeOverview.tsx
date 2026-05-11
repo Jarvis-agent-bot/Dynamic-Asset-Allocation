@@ -11,12 +11,10 @@ import {
   LineChart,
   PieChart,
   RefreshCcw,
-  Route,
   WalletCards,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DaaSurfaceActionButton, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
@@ -27,7 +25,7 @@ type HomeAction = {
   hint: string;
   Icon: ComponentType<{ className?: string }>;
   onClick: () => void;
-  tone: "cyan" | "green" | "amber" | "indigo";
+  tone: "cyan" | "green" | "amber";
 };
 
 function isTerminalCycle(cycle: RebalanceCycle | null | undefined) {
@@ -51,13 +49,9 @@ function cycleStatusTone(cycle: RebalanceCycle | null | undefined) {
 
 function resolvePrimaryAction(input: {
   totalEquity: number;
-  holdingCount: number;
-  watchlistCount: number;
-  basketCount: number;
   latestCycle: RebalanceCycle | null | undefined;
   maxDriftPct: number;
   onDeposit: () => void;
-  onNavigateTab: (tab: DashboardTab) => void;
   onOpenRebalance: () => void;
   onRefresh: () => void;
 }): HomeAction {
@@ -68,24 +62,6 @@ function resolvePrimaryAction(input: {
       Icon: WalletCards,
       onClick: input.onDeposit,
       tone: "green",
-    };
-  }
-  if (input.holdingCount <= 0 && input.watchlistCount <= 0) {
-    return {
-      label: "建立观察列表",
-      hint: "先把候选资产放进视野",
-      Icon: Eye,
-      onClick: () => input.onNavigateTab("watchlist"),
-      tone: "cyan",
-    };
-  }
-  if (input.basketCount <= 0) {
-    return {
-      label: "设置目标权重",
-      hint: "把观察资产转成配置意图",
-      Icon: Route,
-      onClick: () => input.onNavigateTab("watchlist"),
-      tone: "indigo",
     };
   }
   if (input.maxDriftPct >= 5) {
@@ -118,7 +94,6 @@ function resolvePrimaryAction(input: {
 function toneClass(tone: HomeAction["tone"]) {
   if (tone === "green") return "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]";
   if (tone === "amber") return "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]";
-  if (tone === "indigo") return "border-[var(--indigo-border)] bg-[var(--indigo-bg)] text-[var(--indigo)]";
   return "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
 }
 
@@ -137,7 +112,6 @@ export function PortfolioHomeOverview(props: {
   onRefresh: () => void;
   onDeposit: () => void;
   onWithdraw: () => void;
-  onNavigateTab: (tab: DashboardTab) => void;
   onOpenRebalance: () => void;
 }) {
   const basketCount = props.rows.filter((row) => row.watchEnabled && row.targetWeightHint > 0).length;
@@ -156,21 +130,17 @@ export function PortfolioHomeOverview(props: {
   const priceIssueCount = props.rows.filter((row) => row.priceStatus === "missing" || row.priceStatus === "stale").length;
   const primaryAction = resolvePrimaryAction({
     totalEquity: props.totalEquity,
-    holdingCount: props.holdingCount,
-    watchlistCount: props.watchlistCount,
-    basketCount,
     latestCycle: props.latestCycle,
     maxDriftPct,
     onDeposit: props.onDeposit,
-    onNavigateTab: props.onNavigateTab,
     onOpenRebalance: props.onOpenRebalance,
     onRefresh: props.onRefresh,
   });
 
-  const tabActions = [
-    { key: "positions" as const, label: "持仓", value: props.holdingCount, Icon: Briefcase },
-    { key: "watchlist" as const, label: "观察", value: props.watchlistCount, Icon: Eye },
-    { key: "analysis" as const, label: "风险", value: basketCount, Icon: LineChart },
+  const portfolioMetrics = [
+    { label: "持仓", value: props.holdingCount, Icon: Briefcase },
+    { label: "观察", value: props.watchlistCount, Icon: Eye },
+    { label: "目标篮子", value: basketCount, Icon: LineChart },
   ];
 
   return (
@@ -205,12 +175,10 @@ export function PortfolioHomeOverview(props: {
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
-            {tabActions.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => props.onNavigateTab(item.key)}
-                className="group flex min-h-[86px] items-center justify-between rounded-[14px] border border-[var(--border)] bg-[rgba(255,255,255,0.025)] px-4 py-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[rgba(255,255,255,0.045)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            {portfolioMetrics.map((item) => (
+              <div
+                key={item.label}
+                className="flex min-h-[86px] items-center justify-between rounded-[14px] border border-[var(--border)] bg-[rgba(255,255,255,0.025)] px-4 py-3 text-left"
               >
                 <div>
                   <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
@@ -219,8 +187,7 @@ export function PortfolioHomeOverview(props: {
                   </div>
                   <div className="mt-2 font-[var(--font-mono)] text-2xl text-[var(--text)]">{item.value}</div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-[var(--faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--muted)]" />
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -265,14 +232,6 @@ export function PortfolioHomeOverview(props: {
               <PieChart className="h-4 w-4 text-[var(--primary)]" />
               配置分布
             </div>
-            <button
-              type="button"
-              onClick={() => props.onNavigateTab("analysis")}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--primary)] transition-colors hover:text-[var(--primary-strong)]"
-            >
-              查看风险
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
           </div>
           <div className="mt-5 space-y-3">
             {allocationRows.length > 0 ? allocationRows.map((row) => {
@@ -297,7 +256,7 @@ export function PortfolioHomeOverview(props: {
               );
             }) : (
               <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] px-4 py-5 text-sm text-[var(--muted)]">
-                暂无配置资产，先记录入金或加入观察列表。
+                暂无配置资产，记录入金后可在下方资产列表维护配置。
               </div>
             )}
           </div>
@@ -373,11 +332,6 @@ export function PortfolioHomeOverview(props: {
             <div className="flex items-center justify-between gap-3">
               <span className="text-[var(--muted)]">目标篮子</span>
               <span className="font-[var(--font-mono)] text-[var(--text)]">{basketCount}</span>
-            </div>
-            <div className="pt-1">
-              <DaaSurfaceActionButton tone="slate" onClick={() => props.onNavigateTab("watchlist")} className="w-full justify-center">
-                管理观察列表
-              </DaaSurfaceActionButton>
             </div>
           </div>
         </div>

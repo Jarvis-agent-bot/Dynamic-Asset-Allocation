@@ -33,9 +33,17 @@ export function normalizeDaaReturnTo(raw: unknown): string {
 
     // Canonicalize `/daa/dashboard` (and tolerate `/daa/dashboard/`).
     if (u.pathname === "/daa/dashboard" || u.pathname === "/daa/dashboard/") {
-      u.searchParams.delete("tab");
-      const qs = u.searchParams.toString();
-      return `/daa/dashboard${qs ? `?${qs}` : ""}${u.hash || ""}`;
+      return `/daa/dashboard${u.hash || ""}`;
+    }
+
+    // 旧 workbench 已不是实际页面，统一落到当前真实路由。
+    if (u.pathname === "/daa/dashboard/workbench" || u.pathname.startsWith("/daa/dashboard/workbench/")) {
+      const tab = String(u.searchParams.get("tab") || "").trim().toLowerCase();
+      if (tab === "rebalance") return `/daa/dashboard/rebalance${u.hash || ""}`;
+      if (tab === "watchlist" || tab === "positions" || tab === "analysis") {
+        return `/daa/dashboard/portfolio?tab=${tab}${u.hash || ""}`;
+      }
+      return `/daa/dashboard/portfolio${u.hash || ""}`;
     }
 
     // Allow deep links inside the authenticated dashboard shell.

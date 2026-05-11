@@ -32,7 +32,7 @@ export function WatchlistSearchBar(props: {
   loading?: boolean;
   joinedAssetKeys: Record<string, true>;
   onSearch: (input: { q: string; market: string; assetClass: string; region: string }) => Promise<WorkbenchSearchAssetResult[]>;
-  onListFeaturedAssets: (input: { market: string; assetClass: string; theme?: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
+  onListFeaturedAssets: (input: { role?: string; market: string; assetClass: string; theme?: string; limitPerRole?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
   onAddAsset: (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => Promise<void>;
   onRemoveAsset: (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => Promise<void>;
 }) {
@@ -125,7 +125,7 @@ export function WatchlistSearchBar(props: {
           onClick={() => setFeaturedOpen(true)}
         >
           <Sparkles className="h-4 w-4" />
-          推荐
+          候选池
         </DaaSurfaceActionButton>
       </div>
 
@@ -187,36 +187,35 @@ export function WatchlistSearchBar(props: {
 }
 
 /* ------------------------------------------------------------------ */
-/*  推荐资产弹窗                                                       */
+/*  配置候选池弹窗                                                     */
 /* ------------------------------------------------------------------ */
 
 function FeaturedAssetsDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   joinedAssetKeys: Record<string, true>;
-  onListFeaturedAssets: (input: { market: string; assetClass: string; theme?: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
+  onListFeaturedAssets: (input: { role?: string; market: string; assetClass: string; theme?: string; limitPerRole?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
   onAddAsset: (item: WorkbenchFeaturedAssetItem) => Promise<void>;
   onRemoveAsset: (item: WorkbenchFeaturedAssetItem) => Promise<void>;
   loading?: boolean;
 }) {
   const [groups, setGroups] = useState<WorkbenchFeaturedAssetGroup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [market, setMarket] = useState("ALL");
+  const [role, setRole] = useState("ALL");
   const [assetClass, setAssetClass] = useState("ALL");
-  const [theme, setTheme] = useState("ALL");
   const [addingKey, setAddingKey] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await props.onListFeaturedAssets({ market, assetClass, theme, limitPerMarket: 12 });
+      const data = await props.onListFeaturedAssets({ role, market: "ALL", assetClass, limitPerRole: 8 });
       setGroups(Array.isArray(data.groups) ? data.groups : []);
     } catch {
       setGroups([]);
     } finally {
       setLoading(false);
     }
-  }, [market, assetClass, theme, props.onListFeaturedAssets]);
+  }, [role, assetClass, props.onListFeaturedAssets]);
 
   useEffect(() => {
     if (props.open) void loadData();
@@ -252,50 +251,47 @@ function FeaturedAssetsDialog(props: {
     }
   }
 
-  const MARKETS = [
-    { value: "ALL", label: "全部" }, { value: "US", label: "美股" },
-    { value: "HK", label: "港股" }, { value: "CN", label: "A股" }, { value: "KR", label: "韩股" }, { value: "CRYPTO", label: "加密" },
+  const ROLES = [
+    { value: "ALL", label: "全部" },
+    { value: "cash_buffer", label: "现金短债" },
+    { value: "core_equity", label: "核心股票" },
+    { value: "defensive_bond", label: "防守债券" },
+    { value: "real_asset", label: "黄金商品" },
+    { value: "regional_diversifier", label: "区域分散" },
+    { value: "satellite_theme", label: "卫星主题" },
+    { value: "crypto_optional", label: "加密可选" },
+    { value: "currency_hedge", label: "汇率对冲" },
   ];
   const CLASSES = [
-    { value: "ALL", label: "全部" }, { value: "EQUITY", label: "股票" },
-    { value: "ETF", label: "ETF" }, { value: "COMMODITY", label: "商品" },
-    { value: "BOND", label: "债券" }, { value: "CRYPTO", label: "加密" },
+    { value: "ALL", label: "全部类型" }, { value: "EQUITY", label: "股票" },
+    { value: "ETF", label: "ETF 基金" }, { value: "COMMODITY", label: "商品" },
+    { value: "BOND", label: "债券" }, { value: "CRYPTO", label: "加密" }, { value: "CURRENCY", label: "货币" },
   ];
-  const THEMES = [
-    { value: "ALL", label: "全部" },
-    { value: "semiconductor", label: "半导体" },
-    { value: "ai_compute", label: "AI算力" },
-    { value: "ai_infrastructure", label: "AI基建" },
-    { value: "memory_storage", label: "存储/内存" },
-    { value: "optical_networking", label: "光互联" },
-    { value: "platform", label: "平台软件" },
-    { value: "ai_software", label: "AI软件" },
-    { value: "power_grid", label: "电力电网" },
-    { value: "robotics", label: "机器人" },
-    { value: "cybersecurity", label: "网络安全" },
-    { value: "broad_etf", label: "宽基ETF" },
-    { value: "china_core", label: "中国资产" },
-    { value: "global_region", label: "全球区域" },
-    { value: "defensive_income", label: "防守收益" },
-    { value: "commodity_resource", label: "商品资源" },
-  ];
+  const marketLabel = (item: WorkbenchFeaturedAssetItem): string => {
+    if (item.market === "US") return "美股";
+    if (item.market === "HK") return "港股";
+    if (item.market === "CN") return "A股";
+    if (item.market === "KR") return "韩股";
+    if (item.market === "CRYPTO") return "加密";
+    return item.market;
+  };
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DaaSurfaceDialogShell
         accent="indigo"
         className="max-w-[800px] max-h-[80dvh]"
-        title="推荐资产池"
-        description="按市场分类的高流动性标的，可直接加入观察列表。"
+        title="配置候选池"
+        description="按组合角色精选少量高流动性资产，用于构建目标配置。"
         bodyClassName="space-y-4 overflow-y-auto"
       >
         {/* 筛选器 */}
         <div className="flex flex-wrap gap-4">
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">市场</div>
-            <div className="flex gap-1.5">
-              {MARKETS.map((m) => (
-                <DaaSurfaceFilterChip key={m.value} active={market === m.value} onClick={() => { setMarket(m.value); }}>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">配置角色</div>
+            <div className="flex flex-wrap gap-1.5">
+              {ROLES.map((m) => (
+                <DaaSurfaceFilterChip key={m.value} active={role === m.value} onClick={() => { setRole(m.value); }}>
                   {m.label}
                 </DaaSurfaceFilterChip>
               ))}
@@ -311,16 +307,6 @@ function FeaturedAssetsDialog(props: {
               ))}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">主题</div>
-            <div className="flex flex-wrap gap-1.5">
-              {THEMES.map((item) => (
-                <DaaSurfaceFilterChip key={item.value} active={theme === item.value} onClick={() => { setTheme(item.value); }}>
-                  {item.label}
-                </DaaSurfaceFilterChip>
-              ))}
-            </div>
-          </div>
           <DaaSurfaceActionButton tone="primary" className="mt-auto h-8 rounded-full px-4 text-xs" onClick={() => void loadData()} disabled={loading}>
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             刷新
@@ -329,27 +315,36 @@ function FeaturedAssetsDialog(props: {
 
         {/* 资产列表 */}
         {groups.length === 0 && !loading ? (
-          <DaaSurfaceEmptyState title="暂无推荐" description="切换市场或类型试试" />
+          <DaaSurfaceEmptyState title="暂无候选" description="切换配置角色或资产类型试试" />
         ) : null}
 
         {groups.map((group) => (
-          <div key={group.market} className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--faint)]">{group.marketLabelZh}</div>
+          <div key={group.groupKey} className="space-y-2">
+            <div>
+              <div className="text-sm font-semibold text-[var(--text)]">{group.groupLabelZh}</div>
+              <div className="mt-0.5 text-xs leading-5 text-[var(--muted)]">{group.groupDescriptionZh}</div>
+            </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {group.items.map((item) => {
                 const joined = isJoined(item);
                 const busy = addingKey === assetKey(item);
-                const name = item.longName || item.shortName || item.name || item.symbol;
+                const name = item.displayNameZh;
+                const note = item.allocationNoteZh;
                 return (
                   <div
-                    key={`${group.market}::${item.symbol}`}
+                    key={`${item.market}::${item.symbol}`}
                     className="flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.6)] px-3 py-2.5"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-[var(--text)]">{item.symbol}</div>
-                      <div className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{name}</div>
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <div className="text-sm font-semibold text-[var(--text)]">{name}</div>
+                        <div className="font-[var(--font-mono)] text-xs text-[var(--faint)]">{item.symbol}</div>
+                      </div>
+                      <div className="mt-0.5 text-[11px] leading-4 text-[var(--muted)]">{note}</div>
                       <div className="mt-1 flex flex-wrap gap-1.5">
-                        <DaaSurfaceStatusPill tone="slate">{item.themeLabelZh || item.thesisTagZh}</DaaSurfaceStatusPill>
+                        <DaaSurfaceStatusPill tone="slate">{item.typeDisp}</DaaSurfaceStatusPill>
+                        <DaaSurfaceStatusPill tone="slate">{marketLabel(item)} · {item.currency}</DaaSurfaceStatusPill>
+                        <DaaSurfaceStatusPill tone="slate">参考 {item.suggestedWeightBandZh}</DaaSurfaceStatusPill>
                       </div>
                       {item.price > 0 ? (
                         <div className="mt-0.5 font-[var(--font-mono)] text-xs text-[var(--text)]">

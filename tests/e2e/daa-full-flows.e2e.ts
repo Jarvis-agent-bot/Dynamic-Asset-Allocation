@@ -113,7 +113,10 @@ function createAsset(input: Partial<MockAsset> & Pick<MockAsset, 'assetKey' | 's
   };
 }
 
-function featuredItemFromAsset(input: MockAsset & { name: string; thesisTagZh: string }): Record<string, any> {
+function featuredItemFromAsset(input: MockAsset & { name: string; thesisTagZh: string; roleKey?: string; roleLabelZh?: string; roleDescriptionZh?: string }): Record<string, any> {
+  const roleKey = input.roleKey || (input.assetClass === 'COMMODITY' ? 'real_asset' : 'core_equity');
+  const roleLabelZh = input.roleLabelZh || (roleKey === 'real_asset' ? '黄金与实物资产' : '核心股票敞口');
+  const roleDescriptionZh = input.roleDescriptionZh || (roleKey === 'real_asset' ? '通胀、地缘风险和美元波动的对冲层。' : '组合长期增长引擎。');
   return {
     symbol: input.symbol,
     market: input.market,
@@ -136,6 +139,14 @@ function featuredItemFromAsset(input: MockAsset & { name: string; thesisTagZh: s
     marketGroup: input.marketGroup,
     yfinanceSymbol: input.yfinanceSymbol,
     thesisTagZh: input.thesisTagZh,
+    themeKey: roleKey === 'real_asset' ? 'commodity_resource' : 'core_equity',
+    themeLabelZh: roleKey === 'real_asset' ? '商品/资源' : '核心股票',
+    displayNameZh: input.name,
+    allocationRoleKey: roleKey,
+    allocationRoleLabelZh: roleLabelZh,
+    allocationRoleDescriptionZh: roleDescriptionZh,
+    allocationNoteZh: input.thesisTagZh,
+    suggestedWeightBandZh: roleKey === 'real_asset' ? '3%-15%' : '5%-30%',
   };
 }
 
@@ -246,10 +257,18 @@ function createWorkbenchState(): MockState {
     systemConfig: baseSystemConfig(),
     featuredGroups: [
       {
-        market: 'US',
-        marketLabelZh: '美股',
+        groupKey: 'core_equity',
+        groupLabelZh: '核心股票敞口',
+        groupDescriptionZh: '组合长期增长引擎，优先使用宽基 ETF。',
         items: [
           featuredItemFromAsset({ ...createAsset({ assetKey: 'US::QQQ', symbol: 'QQQ', market: 'US', lastPrice: 510, watchEnabled: false }), name: '纳指 ETF', thesisTagZh: '科技龙头' }),
+        ],
+      },
+      {
+        groupKey: 'real_asset',
+        groupLabelZh: '黄金与实物资产',
+        groupDescriptionZh: '通胀、地缘风险和美元波动的对冲层。',
+        items: [
           featuredItemFromAsset({ ...createAsset({ assetKey: 'US::GLD', symbol: 'GLD', market: 'US', lastPrice: 210, watchEnabled: false, assetClass: 'COMMODITY', instrumentType: 'ETF', marketGroup: 'US_COMMODITY' }), name: '黄金 ETF', thesisTagZh: '抗通胀对冲' }),
         ],
       },
@@ -836,7 +855,7 @@ test('工作台支持多资产观察、洞察与手动风控阻断分支', async
       });
     },
   });
-  await loginAsAdmin(page, '/daa/dashboard/workbench?tab=watchlist');
+  await loginAsAdmin(page, '/daa/dashboard/portfolio?tab=watchlist');
 
   await expect(page.getByRole('button', { name: /^观察列表/ })).toBeVisible();
   await expect(page.getByText('AAPL', { exact: true })).toBeVisible();
@@ -915,7 +934,7 @@ test('工作台再平衡执行支持部分成功回执', async ({ page }) => {
       };
     },
   });
-  await loginAsAdmin(page, '/daa/dashboard/workbench?tab=rebalance');
+  await loginAsAdmin(page, '/daa/dashboard/rebalance');
 
   await page.getByRole('button', { name: '生成/刷新建议' }).first().click();
   await expect(page.getByText('AAPL', { exact: true })).toBeVisible();
@@ -965,7 +984,7 @@ test('工作台再平衡在执行前风控阻断时会给出明确提示', async
     executeSummaryHandler: () => buildExecuteSummary(generatedCycle, 'warn'),
     riskCheckHandler: () => buildRiskCheck('block', '组合执行后单笔上限将超过阈值。'),
   });
-  await loginAsAdmin(page, '/daa/dashboard/workbench?tab=rebalance');
+  await loginAsAdmin(page, '/daa/dashboard/rebalance');
 
   await page.getByRole('button', { name: '生成/刷新建议' }).first().click();
   await expect(page.getByText('GLD', { exact: true })).toBeVisible();

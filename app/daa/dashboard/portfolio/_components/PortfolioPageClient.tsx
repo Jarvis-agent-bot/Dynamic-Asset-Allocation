@@ -109,7 +109,6 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
           onRefresh={() => void wbModel.loadBootstrap(true)}
           onDeposit={() => setCashDialogSide("deposit")}
           onWithdraw={() => setCashDialogSide("withdraw")}
-          onNavigateTab={navigateToTab}
           onOpenRebalance={navigateToRebalance}
         />
       ) : null}

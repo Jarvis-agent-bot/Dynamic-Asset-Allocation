@@ -10,10 +10,10 @@ import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 import { usePriceStream, type PriceUpdate } from "./usePriceStream";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
-export type DashboardTab = "positions" | "watchlist" | "analysis" | "rebalance" | "cash";
+export type DashboardTab = "positions" | "watchlist" | "analysis";
 
 export function normalizeDashboardTab(input: string): DashboardTab {
-  if (input === "positions" || input === "watchlist" || input === "analysis" || input === "rebalance" || input === "cash") return input;
+  if (input === "positions" || input === "watchlist" || input === "analysis") return input;
   return "positions";
 }
 

@@ -58,29 +58,43 @@ describe("workbench-featured-assets-route-v1", () => {
     vi.unstubAllGlobals();
   });
 
-  it("默认参数返回股票分组", async () => {
+  it("默认参数按配置角色返回精选分组", async () => {
     const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets"));
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(Array.isArray(json.data.groups)).toBe(true);
-    expect(json.data.groups.map((group: { market: string }) => group.market)).toEqual(["US", "HK", "CN", "KR"]);
+    expect(json.data.groups.map((group: { groupKey: string }) => group.groupKey)).toContain("cash_buffer");
+    expect(json.data.groups.map((group: { groupKey: string }) => group.groupKey)).toContain("real_asset");
     expect(json.data.groups[0]?.items[0]).toMatchObject({
       market: "US",
-      assetClass: "EQUITY",
+      allocationRoleKey: "cash_buffer",
+      displayNameZh: expect.any(String),
       themeKey: expect.any(String),
     });
   });
 
-  it("market=US 仅返回美股分组", async () => {
-    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?market=US"));
+  it("role=real_asset 返回黄金商品候选", async () => {
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?role=real_asset"));
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data.groups.length).toBe(1);
-    expect(json.data.groups[0]?.market).toBe("US");
+    expect(json.data.groups[0]?.groupKey).toBe("real_asset");
+    expect(json.data.groups[0]?.items.map((item: { symbol: string }) => item.symbol)).toEqual(expect.arrayContaining(["GLD", "IAU", "SLV"]));
+  });
+
+  it("market=US 只返回美国市场资产但仍按角色分组", async () => {
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?market=US"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.groups.length).toBeGreaterThan(1);
+    expect(json.data.groups.flatMap((group: { items: Array<{ market: string }> }) => group.items)
+      .every((item: { market: string }) => item.market === "US")).toBe(true);
   });
 
   it("assetClass=CRYPTO 返回加密分组", async () => {
@@ -90,12 +104,12 @@ describe("workbench-featured-assets-route-v1", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data.groups.length).toBe(1);
-    expect(json.data.groups[0]?.market).toBe("CRYPTO");
+    expect(json.data.groups[0]?.groupKey).toBe("crypto_optional");
     expect(json.data.groups[0]?.items.every((item: { assetClass: string }) => item.assetClass === "CRYPTO")).toBe(true);
   });
 
   it("theme=semiconductor 返回半导体主题资产", async () => {
-    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?theme=semiconductor&limitPerMarket=20"));
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?theme=semiconductor&limitPerRole=20"));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -106,15 +120,16 @@ describe("workbench-featured-assets-route-v1", () => {
   });
 
   it.each([
-    ["ai_infrastructure", "AI基础设施"],
-    ["optical_networking", "光互联/网络"],
-    ["power_grid", "电力/电网"],
+    ["cash_equivalent", "现金替代"],
+    ["core_equity", "核心股票"],
+    ["defensive_income", "防守收益"],
+    ["commodity_resource", "商品/资源"],
+    ["currency_hedge", "汇率对冲"],
     ["robotics", "机器人/自动化"],
     ["cybersecurity", "网络安全"],
-    ["ai_software", "AI应用软件"],
     ["global_region", "全球区域"],
   ])("theme=%s 返回对应主题资产", async (theme, label) => {
-    const response = await GET(new Request(`http://localhost/api/daa/workbench/featured-assets?theme=${theme}&limitPerMarket=20`));
+    const response = await GET(new Request(`http://localhost/api/daa/workbench/featured-assets?theme=${theme}&limitPerRole=20`));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -124,8 +139,8 @@ describe("workbench-featured-assets-route-v1", () => {
     expect(items.every((item: { themeKey: string; themeLabelZh: string }) => item.themeKey === theme && item.themeLabelZh === label)).toBe(true);
   });
 
-  it("limitPerMarket 生效", async () => {
-    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?limitPerMarket=2"));
+  it("limitPerRole 生效", async () => {
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?limitPerRole=2"));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -135,7 +150,7 @@ describe("workbench-featured-assets-route-v1", () => {
   });
 
   it("推荐资产优先使用统一行情服务返回的价格与抓取时间", async () => {
-    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?market=US&limitPerMarket=1"));
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?role=cash_buffer&limitPerRole=1"));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -169,7 +184,7 @@ describe("workbench-featured-assets-route-v1", () => {
       }),
     });
 
-    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?market=US&limitPerMarket=1"));
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?role=cash_buffer&limitPerRole=1"));
     const json = await response.json();
 
     expect(response.status).toBe(200);

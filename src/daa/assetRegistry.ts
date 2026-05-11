@@ -1,8 +1,8 @@
 /**
  * 全局资产名称登记表 —— TG 推送 / Agent 日报 / UI 标签的唯一中文名源头。
  *
- * - 中港股：直接用 `featuredAssetsCatalog` 里的 `name`（已是中文）
- * - 美股 / 加密 / ETF / 大宗：这里维护一份中文名覆盖表（下方 US_NAME_ZH）
+ * - 候选池资产：直接用 `featuredAssetsCatalog` 里的 `displayNameZh`
+ * - 常见持仓 / 非候选池资产：这里维护一份中文名覆盖表
  * - 没有登记的 symbol 返回 null，调用方回退原 ticker
  *
  * 只提供 2 个 API：
@@ -13,8 +13,8 @@
 import { parseDaaAssetKey } from "./assetKey";
 import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "./modules/workbench/featuredAssetsCatalog";
 
-/** 美股 / 加密 / 全球 ETF 等英文名资产的中文补充。ticker 全大写匹配。 */
-const US_NAME_ZH: Record<string, string> = {
+/** 常见资产中文名补充。ticker 全大写匹配。 */
+const ASSET_NAME_ZH_OVERRIDES: Record<string, string> = {
   // 美股股票
   AAPL: "苹果",
   MSFT: "微软",
@@ -24,6 +24,7 @@ const US_NAME_ZH: Record<string, string> = {
   META: "Meta",
   TSLA: "特斯拉",
   "BRK-B": "伯克希尔",
+  "0388.HK": "香港交易所",
 
   // 宽基 / 主题 ETF
   SPY: "标普500 ETF",
@@ -75,19 +76,15 @@ function normSymbol(symbol: string): string {
 
 /**
  * 一次性构建 symbol → 中文名映射。
- * catalog 已含中文名（HK/CN）的优先使用；其它（US/CRYPTO）走 US_NAME_ZH。
+ * catalog 已含中文名的优先使用；其它常见持仓走覆盖表。
  */
 const NAME_ZH_BY_SYMBOL: Map<string, string> = (() => {
   const map = new Map<string, string>();
-  // HK / CN 资产：catalog.name 已是中文
   for (const item of WORKBENCH_FEATURED_ASSETS_CATALOG_) {
     const sym = normSymbol(item.symbol);
-    if (item.market === "HK" || item.market === "CN") {
-      map.set(sym, item.name);
-    }
+    map.set(sym, item.displayNameZh);
   }
-  // US/CRYPTO：用 override 表
-  for (const [sym, zh] of Object.entries(US_NAME_ZH)) {
+  for (const [sym, zh] of Object.entries(ASSET_NAME_ZH_OVERRIDES)) {
     map.set(normSymbol(sym), zh);
   }
   return map;

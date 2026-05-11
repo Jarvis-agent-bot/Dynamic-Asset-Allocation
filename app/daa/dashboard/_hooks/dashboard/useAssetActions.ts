@@ -121,25 +121,22 @@ export function useAssetActions(input: {
   }), []);
 
   const handleListFeaturedAssets = useCallback(async (payload: {
+    role?: string;
     market: string;
     assetClass: string;
     theme?: string;
-    limitPerMarket?: number;
+    limitPerRole?: number;
   }): Promise<WorkbenchFeaturedAssetsResult> => listWorkbenchFeaturedAssets({
+    role: payload.role,
     market: payload.market,
     assetClass: payload.assetClass,
     theme: payload.theme,
-    limitPerMarket: payload.limitPerMarket,
+    limitPerRole: payload.limitPerRole,
   }), []);
 
   const handleAddWatchlistAsset = useCallback(async (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => {
     const result = await addWatchlistAsset({ item, upsertWorkbenchAsset });
-    toast.success(result.message, {
-      action: {
-        label: "查看观察列表",
-        onClick: () => inputRef.current.setActiveTab("watchlist"),
-      },
-    });
+    toast.success(result.message);
     await inputRef.current.loadBootstrap(true);
   }, []);
 

@@ -12,6 +12,12 @@ import type {
   RebalanceProposal,
   RebalanceTriggerSource,
 } from "@/src/daa/modules/rebalance/rebalanceTypes";
+import type {
+  WorkbenchFeaturedAssetClass,
+  WorkbenchFeaturedMarket,
+  WorkbenchFeaturedRole,
+  WorkbenchFeaturedTheme,
+} from "./featuredAssetsCatalog";
 
 export type WorkbenchPriceStatus = "fresh" | "stale" | "missing" | "unsupported";
 
@@ -421,15 +427,24 @@ export type WorkbenchSearchAssetResult = {
   yfinanceSymbol: string;
 };
 
-export type WorkbenchFeaturedAssetItem = WorkbenchSearchAssetResult & {
+export type WorkbenchFeaturedAssetItem = Omit<WorkbenchSearchAssetResult, "assetClass" | "market"> & {
+  market: WorkbenchFeaturedMarket;
+  assetClass: WorkbenchFeaturedAssetClass;
   thesisTagZh: string;
-  themeKey: string;
+  themeKey: WorkbenchFeaturedTheme;
   themeLabelZh: string;
+  displayNameZh: string;
+  allocationRoleKey: WorkbenchFeaturedRole;
+  allocationRoleLabelZh: string;
+  allocationRoleDescriptionZh: string;
+  allocationNoteZh: string;
+  suggestedWeightBandZh: string;
 };
 
 export type WorkbenchFeaturedAssetGroup = {
-  market: string;
-  marketLabelZh: string;
+  groupKey: WorkbenchFeaturedRole;
+  groupLabelZh: string;
+  groupDescriptionZh: string;
   items: WorkbenchFeaturedAssetItem[];
 };
 

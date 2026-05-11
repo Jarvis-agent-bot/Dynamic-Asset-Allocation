@@ -106,7 +106,7 @@ describe("auth-routes-api-response-v1", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.redirectTo).toBe("/daa/dashboard/workbench?from=login&notice=signed_in");
+    expect(json.data.redirectTo).toBe("/daa/dashboard/portfolio?notice=signed_in");
   });
 
   it("me silent 未登录时返回 not_authenticated", async () => {
