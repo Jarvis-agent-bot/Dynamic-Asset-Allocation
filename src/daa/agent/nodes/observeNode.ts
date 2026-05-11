@@ -2,7 +2,7 @@
  * Cognitive Agent — Observe 节点（代码驱动，不调 LLM）
  */
 
-import type { CognitiveState, CognitiveUpdate, PortfolioSnapshot, WatchlistSnapshot, MarketSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
+import type { CognitiveState, CognitiveUpdate, PortfolioSnapshot, WatchlistSnapshot, MarketSnapshot, NewsSnapshot, NewsIntelligenceSnapshot } from "@/src/daa/agent/cognitiveState";
 import { getDaaSystemConfig, getDaaAccountState } from "@/src/daa/store/accountStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
@@ -14,7 +14,14 @@ import {
   summarizeMarkToMarketPortfolio,
 } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { ensureAssetThesisCoverage, type BootstrapAsset } from "@/src/daa/agent/bootstrap";
-import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
+import {
+  listDaaDiscoveryCandidates,
+  listDaaNewsEventsBySymbol,
+  listDaaNewsItemsBySymbol,
+  listLatestDaaMarketIndicatorSnapshots,
+  listLatestDaaNewsEventGraphs,
+  listLatestDaaNewsPortfolioImpacts,
+} from "@/src/daa/store/marketCacheStore";
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -181,25 +188,103 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
 
     // 3. 最近新闻（从 DB 缓存读取，不调外部 API）
     const news: NewsSnapshot = { items: [] };
+    const focusSymbolsForNews = new Set((state.focusSymbols ?? []).map((symbol) => String(symbol || "").trim().toUpperCase()).filter(Boolean));
+    const newsSymbols = Array.from(new Set([
+      ...focusSymbolsForNews,
+      ...portfolio.holdings.map(h => h.symbol.toUpperCase()),
+      ...watchlist.candidates.map(w => w.symbol.toUpperCase()),
+    ].filter(Boolean))).slice(0, 12);
     try {
-      const focusSymbols = new Set((state.focusSymbols ?? []).map((symbol) => String(symbol || "").trim().toUpperCase()).filter(Boolean));
-      const newsSymbols = Array.from(new Set([
-        ...focusSymbols,
-        ...portfolio.holdings.map(h => h.symbol.toUpperCase()),
-        ...watchlist.candidates.map(w => w.symbol.toUpperCase()),
-      ].filter(Boolean))).slice(0, 12);
       for (const sym of newsSymbols) {
+        const events = await listDaaNewsEventsBySymbol({ symbol: sym, limit: 3 });
+        if (events.length > 0) {
+          for (const event of events) {
+            news.items.push({
+              symbol: sym,
+              title: event.title,
+              ts: event.publishedAt ?? event.analyzedAt,
+              source: event.source,
+              summary: event.llmSummary,
+              actionHint: event.llmActionHint,
+              scorePct: event.scorePct,
+              confidencePct: event.confidencePct,
+              majorEvent: event.llmMajorEvent,
+            });
+          }
+          continue;
+        }
         const items = await listDaaNewsItemsBySymbol({ symbol: sym, limit: 3 });
         for (const item of items) {
           news.items.push({
             symbol: sym,
             title: item.title ?? "",
             ts: item.publishedAt ?? item.fetchedAt ?? "",
+            source: item.provider,
+            summary: null,
+            actionHint: null,
+            scorePct: null,
+            confidencePct: null,
+            majorEvent: null,
           });
         }
       }
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.news", e);
+    }
+
+    const newsIntelligence: NewsIntelligenceSnapshot = {
+      eventGraphs: [],
+      portfolioImpacts: [],
+      discoveryCandidates: [],
+    };
+    try {
+      const [eventGraphs, portfolioImpacts, discoveryCandidates] = await Promise.all([
+        listLatestDaaNewsEventGraphs({ symbols: newsSymbols, limit: 20 }),
+        listLatestDaaNewsPortfolioImpacts({ symbols: newsSymbols, limit: 20 }),
+        listDaaDiscoveryCandidates({ statuses: ["new", "watching"], limit: 20 }),
+      ]);
+      newsIntelligence.eventGraphs = eventGraphs.map((graph) => ({
+        symbol: graph.symbol,
+        eventHash: graph.eventHash,
+        themeKey: graph.themeKey,
+        themeLabelZh: graph.themeLabelZh,
+        eventScorePct: graph.eventScorePct,
+        reasons: graph.reasons,
+        relatedAssets: graph.relatedAssets.slice(0, 8).map((asset) => ({
+          assetKey: asset.assetKey,
+          symbol: asset.symbol,
+          displayNameZh: asset.displayNameZh,
+          relation: asset.relation,
+          confidencePct: asset.confidencePct,
+          reasonZh: asset.reasonZh,
+        })),
+      }));
+      const focusedAssetKeys = new Set(focusAssetKeys.map((key) => key.toUpperCase()));
+      newsIntelligence.portfolioImpacts = portfolioImpacts
+        .filter((impact) => focusedAssetKeys.size === 0 || focusedAssetKeys.has(impact.assetKey.toUpperCase()) || impact.impactScope === "related_candidate")
+        .map((impact) => ({
+          assetKey: impact.assetKey,
+          symbol: impact.symbol,
+          eventHash: impact.eventHash,
+          impactScope: impact.impactScope,
+          impactLevel: impact.impactLevel,
+          impactScorePct: impact.impactScorePct,
+          recommendedAction: impact.recommendedAction,
+          reasonZh: impact.reasonZh,
+        }));
+      newsIntelligence.discoveryCandidates = discoveryCandidates.map((candidate) => ({
+        topicKey: candidate.topicKey,
+        topicLabelZh: candidate.topicLabelZh,
+        assetKey: candidate.assetKey,
+        symbol: candidate.symbol,
+        displayNameZh: candidate.displayNameZh,
+        scorePct: candidate.scorePct,
+        confidence: candidate.confidence,
+        status: candidate.status,
+        reasonZh: candidate.reasonZh,
+      }));
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.newsIntelligence", e);
     }
 
     return {
@@ -208,8 +293,9 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       watchlist,
       market,
       news,
+      newsIntelligence,
       activeTheses,
-      toolsCalled: [{ tool: "observe", input: {}, outputSummary: `${activeTheses.length} theses, ${portfolio.holdings.length} holdings, ${watchlist.candidates.length} watchlist, ${news.items.length} news, coverage+${thesisCoverageCreated}, regime=${market.regime}`, durationMs: Date.now() - t0 }],
+      toolsCalled: [{ tool: "observe", input: {}, outputSummary: `${activeTheses.length} theses, ${portfolio.holdings.length} holdings, ${watchlist.candidates.length} watchlist, ${news.items.length} news, ${newsIntelligence.portfolioImpacts.length} news impacts, ${newsIntelligence.discoveryCandidates.length} candidates, coverage+${thesisCoverageCreated}, regime=${market.regime}`, durationMs: Date.now() - t0 }],
     };
   } catch (e) {
     logSwallowed("cognitiveGraph.observe", e);

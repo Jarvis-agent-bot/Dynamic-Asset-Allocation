@@ -18,6 +18,7 @@ export function AssetInfoBar(props: {
 
   const priceChange = deriveAssetPriceChange(row, sparkData);
   const priceChangePercent = priceChange?.changePct ?? null;
+  const displayName = row.displayNameZh || row.name || row.symbol;
 
   // 成本与盈亏 — 优先使用 DB 侧预计算的基准货币成本
   const valBase = row.valuationBase ?? 0;
@@ -40,7 +41,8 @@ export function AssetInfoBar(props: {
 
       {/* 标的名称 */}
       <div className="flex items-baseline gap-2">
-        <span className="text-lg font-bold text-[var(--text)]">{row.symbol}</span>
+        <span className="text-lg font-bold text-[var(--text)]">{displayName}</span>
+        <span className="font-[var(--font-mono)] text-xs text-[var(--faint)]">{row.symbol}</span>
         <span className="text-xs text-[var(--muted)]">{row.market} · {row.currency}</span>
       </div>
 

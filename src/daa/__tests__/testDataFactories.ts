@@ -69,6 +69,8 @@ export function buildAssetUniverseRow(
   return {
     assetKey: "US::AAPL",
     symbol: "AAPL",
+    name: "Apple Inc.",
+    displayNameZh: "苹果",
     market: "US",
     currency: "USD",
     assetClass: "EQUITY",
@@ -105,6 +107,8 @@ export function buildAssetUniverseView(
   return {
     assetKey: "US::AAPL",
     symbol: "AAPL",
+    name: "Apple Inc.",
+    displayNameZh: "苹果",
     market: "US",
     currency: "USD",
     assetClass: "EQUITY",

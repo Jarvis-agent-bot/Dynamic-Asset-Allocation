@@ -21,6 +21,11 @@ vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({
     price_snapshots: 0,
     indicator_snapshots: 0,
     news_items: 0,
+    news_events: 0,
+    news_event_related_assets: 0,
+    news_event_graphs: 0,
+    news_portfolio_impacts: 0,
+    discovery_candidates: 0,
     notification_logs: 0,
     job_logs: 0,
   })),
@@ -140,6 +145,11 @@ describe("cron-market-cache-routes-v1", () => {
       price_snapshots: 0,
       indicator_snapshots: 0,
       news_items: 3,
+      news_events: 2,
+      news_event_related_assets: 4,
+      news_event_graphs: 2,
+      news_portfolio_impacts: 1,
+      discovery_candidates: 0,
       notification_logs: 0,
       job_logs: 0,
     });
@@ -151,5 +161,7 @@ describe("cron-market-cache-routes-v1", () => {
     expect(json.ok).toBe(true);
     expect(json.data.raw_payloads).toBe(7);
     expect(json.data.news_items).toBe(3);
+    expect(json.data.news_event_graphs).toBe(2);
+    expect(json.data.news_portfolio_impacts).toBe(1);
   });
 });

@@ -37,6 +37,8 @@ function mockAsset(overrides: Partial<AssetUniverseView> = {}): AssetUniverseVie
   return {
     assetKey: "US::SPY",
     symbol: "SPY",
+    name: "SPDR S&P 500 ETF",
+    displayNameZh: "标普 500 ETF",
     market: "US",
     currency: "USD",
     assetClass: "ETF",

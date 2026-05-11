@@ -80,6 +80,22 @@ async function addPrimaryKeyIfMissing(query: QueryFn, tableName: string, constra
   `);
 }
 
+async function addCheckConstraintIfMissing(query: QueryFn, tableName: string, constraintName: string, checkSql: string): Promise<void> {
+  if (!(await tableExists(query, tableName))) return;
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = '${tableName}'::regclass
+          AND conname = '${constraintName}'
+      ) THEN
+        ALTER TABLE ${tableName} ADD CONSTRAINT ${constraintName} CHECK (${checkSql}) NOT VALID;
+      END IF;
+    END $$;
+  `);
+}
+
 async function ensureVersionTable(query: QueryFn): Promise<void> {
   await query(`
     CREATE TABLE IF NOT EXISTS daa_schema_migrations_v1 (
@@ -149,6 +165,8 @@ const MIGRATIONS_: Migration[] = [
         CREATE TABLE IF NOT EXISTS daa_asset_master (
           asset_key TEXT PRIMARY KEY,
           symbol TEXT NOT NULL,
+          name TEXT,
+          display_name_zh TEXT,
           market TEXT NOT NULL DEFAULT 'US',
           currency TEXT NOT NULL DEFAULT 'USD',
           asset_class TEXT NOT NULL DEFAULT 'EQUITY',
@@ -1027,6 +1045,308 @@ const MIGRATIONS_: Migration[] = [
       ]) {
         if (!(await tableExists(query, tableName))) continue;
         await query(`UPDATE ${tableName} SET trigger_source = 'scheduled_review' WHERE trigger_source = 'calendar'`);
+      }
+    },
+  },
+  {
+    id: "20260511_news_event_snapshot",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_news_event_snapshot_v1 (
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          event_hash TEXT NOT NULL,
+          item_hash TEXT NOT NULL,
+          title TEXT NOT NULL,
+          link TEXT,
+          source TEXT,
+          published_at TIMESTAMPTZ,
+          score_pct NUMERIC NOT NULL DEFAULT 50,
+          confidence_pct NUMERIC NOT NULL DEFAULT 0,
+          llm_summary TEXT,
+          llm_drivers_json JSONB,
+          llm_major_event_json JSONB,
+          llm_action_hint TEXT,
+          analyzed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, symbol, event_hash)
+        )
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_daa_news_event_snapshot_v1_symbol_published_desc
+        ON daa_news_event_snapshot_v1(symbol, (COALESCE(published_at, analyzed_at)) DESC)
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_daa_news_event_snapshot_v1_symbol_item
+        ON daa_news_event_snapshot_v1(symbol, item_hash)
+      `);
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_news_event_graph_v1 (
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          event_hash TEXT NOT NULL,
+          item_hash TEXT NOT NULL,
+          theme_key TEXT NOT NULL,
+          theme_label_zh TEXT NOT NULL,
+          related_assets_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          event_score_pct NUMERIC NOT NULL DEFAULT 50,
+          reasons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, symbol, event_hash, theme_key)
+        )
+      `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_graph_v1_theme_generated
+          ON daa_news_event_graph_v1(theme_key, generated_at DESC)
+        `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_graph_v1_symbol_generated
+          ON daa_news_event_graph_v1(symbol, generated_at DESC)
+        `);
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_news_event_related_asset_v1 (
+            provider TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            event_hash TEXT NOT NULL,
+            theme_key TEXT NOT NULL,
+            related_asset_key TEXT NOT NULL,
+            related_symbol TEXT NOT NULL,
+            related_market TEXT NOT NULL DEFAULT 'US',
+            relation TEXT NOT NULL DEFAULT 'related'
+              CHECK (relation IN ('source', 'same_theme', 'related')),
+            confidence_pct NUMERIC NOT NULL DEFAULT 50
+              CHECK (confidence_pct >= 0 AND confidence_pct <= 100),
+            reason_zh TEXT NOT NULL DEFAULT '',
+            generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (provider, symbol, event_hash, theme_key, related_asset_key)
+          )
+        `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_related_asset_v1_related_generated
+          ON daa_news_event_related_asset_v1(related_asset_key, generated_at DESC)
+        `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_related_asset_v1_symbol_generated
+          ON daa_news_event_related_asset_v1(symbol, generated_at DESC)
+        `);
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_news_portfolio_impact_v1 (
+            id TEXT PRIMARY KEY,
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          event_hash TEXT NOT NULL,
+          asset_key TEXT NOT NULL,
+            impact_scope TEXT NOT NULL
+              CHECK (impact_scope IN ('holding', 'watchlist', 'target', 'related_candidate')),
+            impact_level TEXT NOT NULL
+              CHECK (impact_level IN ('none', 'watch', 'review', 'risk')),
+            impact_score_pct NUMERIC NOT NULL DEFAULT 0
+              CHECK (impact_score_pct >= 0 AND impact_score_pct <= 100),
+            recommended_action TEXT NOT NULL DEFAULT 'record'
+              CHECK (recommended_action IN ('record', 'investigate', 'review_thesis', 'candidate_watchlist')),
+            reason_zh TEXT NOT NULL DEFAULT '',
+            generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (owner_account_id, provider, symbol, event_hash, asset_key)
+        )
+      `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_news_portfolio_impact_v1_owner_generated
+          ON daa_news_portfolio_impact_v1(owner_account_id, generated_at DESC)
+        `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_news_portfolio_impact_v1_owner_symbol_generated
+          ON daa_news_portfolio_impact_v1(owner_account_id, symbol, generated_at DESC)
+        `);
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_discovery_candidates_v1 (
+          id TEXT PRIMARY KEY,
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
+          topic_key TEXT NOT NULL,
+          topic_label_zh TEXT NOT NULL,
+          asset_key TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          market TEXT NOT NULL,
+          name TEXT,
+          display_name_zh TEXT,
+            score_pct NUMERIC NOT NULL DEFAULT 0
+              CHECK (score_pct >= 0 AND score_pct <= 100),
+            confidence TEXT NOT NULL DEFAULT 'low'
+              CHECK (confidence IN ('low', 'medium', 'high')),
+            status TEXT NOT NULL DEFAULT 'new'
+              CHECK (status IN ('new', 'watching', 'dismissed', 'archived')),
+            reason_zh TEXT NOT NULL DEFAULT '',
+            risk_notes_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            evidence_refs_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            seen_count INTEGER NOT NULL DEFAULT 1 CHECK (seen_count >= 1),
+            reviewed_at TIMESTAMPTZ,
+            promoted_at TIMESTAMPTZ,
+            dismissed_at TIMESTAMPTZ,
+            archived_at TIMESTAMPTZ,
+            status_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (owner_account_id, topic_key, asset_key)
+        )
+      `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_discovery_candidates_v1_owner_status_score
+          ON daa_discovery_candidates_v1(owner_account_id, status, score_pct DESC)
+        `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_discovery_candidates_v1_owner_status_score_updated
+          ON daa_discovery_candidates_v1(owner_account_id, status, score_pct DESC, updated_at DESC)
+        `);
+    },
+  },
+  {
+    id: "20260511_asset_master_names",
+    async apply(query) {
+      if (!(await tableExists(query, "daa_asset_master"))) return;
+      await query("ALTER TABLE daa_asset_master ADD COLUMN IF NOT EXISTS name TEXT");
+      await query("ALTER TABLE daa_asset_master ADD COLUMN IF NOT EXISTS display_name_zh TEXT");
+      await query(`
+        UPDATE daa_asset_master am
+        SET display_name_zh = names.display_name_zh
+        FROM (VALUES
+          ('AAPL', '苹果'),
+          ('MSFT', '微软'),
+          ('NVDA', '英伟达'),
+          ('AMZN', '亚马逊'),
+          ('GOOGL', '谷歌'),
+          ('META', 'Meta'),
+          ('TSLA', '特斯拉'),
+          ('0700.HK', '腾讯控股'),
+          ('1810.HK', '小米集团'),
+          ('0388.HK', '香港交易所'),
+          ('MU', '美光科技'),
+          ('AVGO', '博通'),
+          ('AMD', 'AMD'),
+          ('TSM', '台积电'),
+          ('ASML', '阿斯麦'),
+          ('LRCX', '泛林集团'),
+          ('AMAT', '应用材料'),
+          ('ARM', 'Arm'),
+          ('000660.KS', 'SK 海力士'),
+          ('005930.KS', '三星电子'),
+          ('GLD', '黄金 ETF'),
+          ('IAU', '低费率黄金 ETF'),
+          ('SLV', '白银 ETF'),
+          ('GC=F', '黄金'),
+          ('SI=F', '白银'),
+          ('CL=F', 'WTI 原油'),
+          ('BZ=F', '布伦特原油'),
+          ('DBC', '综合商品 ETF'),
+          ('QQQ', '纳斯达克 100 ETF'),
+          ('SPY', '标普 500 ETF'),
+          ('VTI', '美国全市场股票 ETF')
+        ) AS names(symbol, display_name_zh)
+        WHERE UPPER(am.symbol) = names.symbol
+          AND (am.display_name_zh IS NULL OR BTRIM(am.display_name_zh) = '')
+      `);
+    },
+  },
+  {
+    id: "20260512_news_intelligence_hardening",
+    async apply(query) {
+      if (await tableExists(query, "daa_news_event_graph_v1")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_news_event_graph_v1_symbol_generated ON daa_news_event_graph_v1(symbol, generated_at DESC)");
+      }
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_news_event_related_asset_v1 (
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          event_hash TEXT NOT NULL,
+          theme_key TEXT NOT NULL,
+          related_asset_key TEXT NOT NULL,
+          related_symbol TEXT NOT NULL,
+          related_market TEXT NOT NULL DEFAULT 'US',
+          relation TEXT NOT NULL DEFAULT 'related',
+          confidence_pct NUMERIC NOT NULL DEFAULT 50,
+          reason_zh TEXT NOT NULL DEFAULT '',
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, symbol, event_hash, theme_key, related_asset_key)
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_news_event_related_asset_v1_related_generated ON daa_news_event_related_asset_v1(related_asset_key, generated_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_news_event_related_asset_v1_symbol_generated ON daa_news_event_related_asset_v1(symbol, generated_at DESC)");
+      await query(`
+        INSERT INTO daa_news_event_related_asset_v1 (
+          provider, symbol, event_hash, theme_key, related_asset_key, related_symbol,
+          related_market, relation, confidence_pct, reason_zh, generated_at, updated_at
+        )
+        SELECT
+          g.provider,
+          g.symbol,
+          g.event_hash,
+          g.theme_key,
+          UPPER(asset."assetKey"),
+          UPPER(asset.symbol),
+          UPPER(COALESCE(asset.market, 'US')),
+          COALESCE(NULLIF(asset.relation, ''), 'related'),
+          COALESCE(asset."confidencePct", 50),
+          COALESCE(asset."reasonZh", ''),
+          g.generated_at,
+          g.updated_at
+        FROM daa_news_event_graph_v1 g
+        CROSS JOIN LATERAL jsonb_to_recordset(g.related_assets_json) AS asset(
+          "assetKey" TEXT,
+          symbol TEXT,
+          market TEXT,
+          relation TEXT,
+          "confidencePct" NUMERIC,
+          "reasonZh" TEXT
+        )
+        WHERE asset."assetKey" IS NOT NULL
+          AND asset.symbol IS NOT NULL
+        ON CONFLICT (provider, symbol, event_hash, theme_key, related_asset_key)
+        DO UPDATE SET
+          related_symbol = EXCLUDED.related_symbol,
+          related_market = EXCLUDED.related_market,
+          relation = EXCLUDED.relation,
+          confidence_pct = EXCLUDED.confidence_pct,
+          reason_zh = EXCLUDED.reason_zh,
+          generated_at = EXCLUDED.generated_at,
+          updated_at = EXCLUDED.updated_at
+      `);
+
+      await addCheckConstraintIfMissing(query, "daa_news_event_related_asset_v1", "daa_news_event_related_asset_v1_relation_check", "relation IN ('source', 'same_theme', 'related')");
+      await addCheckConstraintIfMissing(query, "daa_news_event_related_asset_v1", "daa_news_event_related_asset_v1_confidence_pct_check", "confidence_pct >= 0 AND confidence_pct <= 100");
+
+      if (await tableExists(query, "daa_news_portfolio_impact_v1")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_news_portfolio_impact_v1_owner_symbol_generated ON daa_news_portfolio_impact_v1(owner_account_id, symbol, generated_at DESC)");
+        await addCheckConstraintIfMissing(query, "daa_news_portfolio_impact_v1", "daa_news_portfolio_impact_v1_impact_scope_check", "impact_scope IN ('holding', 'watchlist', 'target', 'related_candidate')");
+        await addCheckConstraintIfMissing(query, "daa_news_portfolio_impact_v1", "daa_news_portfolio_impact_v1_impact_level_check", "impact_level IN ('none', 'watch', 'review', 'risk')");
+        await addCheckConstraintIfMissing(query, "daa_news_portfolio_impact_v1", "daa_news_portfolio_impact_v1_impact_score_pct_check", "impact_score_pct >= 0 AND impact_score_pct <= 100");
+        await addCheckConstraintIfMissing(query, "daa_news_portfolio_impact_v1", "daa_news_portfolio_impact_v1_recommended_action_check", "recommended_action IN ('record', 'investigate', 'review_thesis', 'candidate_watchlist')");
+      }
+
+      if (await tableExists(query, "daa_discovery_candidates_v1")) {
+        await query("ALTER TABLE daa_discovery_candidates_v1 ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+        await query("ALTER TABLE daa_discovery_candidates_v1 ADD COLUMN IF NOT EXISTS seen_count INTEGER NOT NULL DEFAULT 1");
+        await query("ALTER TABLE daa_discovery_candidates_v1 ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ");
+        await query("ALTER TABLE daa_discovery_candidates_v1 ADD COLUMN IF NOT EXISTS promoted_at TIMESTAMPTZ");
+        await query("ALTER TABLE daa_discovery_candidates_v1 ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ");
+        await query("ALTER TABLE daa_discovery_candidates_v1 ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ");
+        await query("ALTER TABLE daa_discovery_candidates_v1 ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+        await query(`
+          UPDATE daa_discovery_candidates_v1
+          SET
+            last_seen_at = COALESCE(last_seen_at, updated_at, discovered_at, NOW()),
+            seen_count = GREATEST(1, COALESCE(seen_count, 1)),
+            status_updated_at = COALESCE(status_updated_at, updated_at, discovered_at, NOW())
+        `);
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_discovery_candidates_v1_owner_status_score_updated ON daa_discovery_candidates_v1(owner_account_id, status, score_pct DESC, updated_at DESC)");
+        await addCheckConstraintIfMissing(query, "daa_discovery_candidates_v1", "daa_discovery_candidates_v1_score_pct_check", "score_pct >= 0 AND score_pct <= 100");
+        await addCheckConstraintIfMissing(query, "daa_discovery_candidates_v1", "daa_discovery_candidates_v1_confidence_check", "confidence IN ('low', 'medium', 'high')");
+        await addCheckConstraintIfMissing(query, "daa_discovery_candidates_v1", "daa_discovery_candidates_v1_status_check", "status IN ('new', 'watching', 'dismissed', 'archived')");
+        await addCheckConstraintIfMissing(query, "daa_discovery_candidates_v1", "daa_discovery_candidates_v1_seen_count_check", "seen_count >= 1");
       }
     },
   },

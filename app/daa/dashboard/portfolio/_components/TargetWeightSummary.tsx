@@ -27,6 +27,8 @@ const COLORS = [
 type AssetRow = {
   assetKey: string;
   symbol: string;
+  name?: string | null;
+  displayNameZh?: string | null;
   targetWeightHint: number;
   watchEnabled: boolean;
 };
@@ -56,7 +58,7 @@ export function TargetWeightSummary(props: {
 
   const pieData = useMemo(() => {
     const items = basketRows.map((r) => ({
-      name: r.symbol,
+      name: r.displayNameZh || r.name || r.symbol,
       value: r.targetWeightHint * 100,
     }));
     const remaining = 100 - totalWeight;

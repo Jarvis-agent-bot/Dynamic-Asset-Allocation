@@ -172,6 +172,7 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       watchlist: state.watchlist?.candidates ?? [],
       market: state.market ?? { regime: "unknown", vix: null, indicators: {} },
       news: state.news ?? { items: [] },
+      newsIntelligence: state.newsIntelligence ?? null,
       theses: state.activeTheses,
       thesisAccuracy,
       focusSymbols: [...focusSymbols],

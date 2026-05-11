@@ -87,6 +87,7 @@ describe("workbench-search-assets-route-v1", () => {
       market: "HK",
       currency: "HKD",
       name: "Tencent",
+      displayNameZh: "腾讯控股",
       assetClass: "EQUITY",
       region: "HK",
       yfinanceSymbol: "0700.HK",
@@ -216,5 +217,49 @@ describe("workbench-search-assets-route-v1", () => {
     expect(json.ok).toBe(true);
     expect(json.data.items.length).toBe(2);
     expect(new Set(json.data.items.map((item: { market: string }) => item.market))).toEqual(new Set(["HK", "CN"]));
+  });
+
+  it("允许白名单商品期货作为独立黄金配置品种", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      quotes: [
+        {
+          symbol: "GC=F",
+          exchange: "CMX",
+          exchDisp: "COMEX",
+          currency: "USD",
+          regularMarketPrice: 2350.8,
+          shortname: "Gold Jun 26",
+          longname: "Gold Futures Continuous Contract",
+          quoteType: "FUTURE",
+          typeDisp: "Futures",
+        },
+        {
+          symbol: "ES=F",
+          exchange: "CME",
+          currency: "USD",
+          regularMarketPrice: 5200,
+          shortname: "S&P 500 Futures",
+          quoteType: "FUTURE",
+        },
+      ],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await GET(new Request("http://localhost/api/daa/workbench/search-assets?q=gold&market=COMMODITY&assetClass=COMMODITY&region=GLOBAL&limit=10"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.items).toHaveLength(1);
+    expect(json.data.items[0]).toMatchObject({
+      symbol: "GC=F",
+      market: "COMMODITY",
+      currency: "USD",
+      displayNameZh: "黄金",
+      assetClass: "COMMODITY",
+      region: "GLOBAL",
+      instrumentType: "COMMODITY",
+      yfinanceSymbol: "GC=F",
+    });
   });
 });

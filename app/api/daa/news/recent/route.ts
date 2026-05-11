@@ -9,17 +9,10 @@
  *   - limit: 返回条数，默认 30，最大 200
  */
 
-import { createHash } from "node:crypto";
-
 import { withApiHandler, ok, mapDeniedResponse } from "@/src/daa/api/routeHelpers";
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
+import { ensureDaaMarketCacheSchemaPg, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
-
-/** 与 newsProviderRouter.computeItemHashSet 保持一致：title.toLowerCase().trim() 的 sha1 前 8 位。 */
-function titleHash8(title: string): string {
-  return createHash("sha1").update((title || "").toLowerCase().trim()).digest("hex").slice(0, 8);
-}
 
 export const runtime = "nodejs";
 
@@ -32,6 +25,11 @@ type NewsItemRow = {
   fetched_at: string;
   source_credibility: number;
   freshness: number;
+  llm_summary: string | null;
+  llm_major_event_json: { type: string; impact: string; description: string } | null;
+  llm_action_hint: string | null;
+  score_pct: number | string | null;
+  confidence_pct: number | string | null;
 };
 
 export async function GET(req: Request) {
@@ -43,6 +41,7 @@ export async function GET(req: Request) {
     const hours = Math.max(1, Math.min(168, parseInt(url.searchParams.get("hours") || "24", 10) || 24));
     const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "30", 10) || 30));
     const singleSymbol = url.searchParams.get("symbol")?.trim().toUpperCase();
+    await ensureDaaMarketCacheSchemaPg();
 
     // 单 symbol 模式：资产详情页使用
     let watchedSymbols: string[];
@@ -62,78 +61,45 @@ export async function GET(req: Request) {
       return ok({ items: [], watchedSymbols: [], hours, limit });
     }
 
-    // 关联 signal 拿 LLM summary / majorEvent（按 symbol 聚合，合并到每条 item）
+    // 关联事件层拿 LLM summary / majorEvent。事件层按 item_hash 绑定，避免把同一个
+    // symbol 的一次重大新闻误贴到该 symbol 的所有新闻上。
     const rows = await withDaaPgClient(async ({ query }) => {
       const res = await query<NewsItemRow>(
-        `SELECT provider, symbol, title, link, published_at, fetched_at,
-                source_credibility, freshness
-         FROM daa_news_item_snapshot_v1
-         WHERE symbol = ANY($1::text[])
-           AND COALESCE(published_at, fetched_at) > NOW() - ($2 || ' hours')::interval
-         ORDER BY COALESCE(published_at, fetched_at) DESC
+        `SELECT i.provider, i.symbol, i.title, i.link, i.published_at, i.fetched_at,
+                i.source_credibility, i.freshness,
+                e.llm_summary, e.llm_major_event_json, e.llm_action_hint, e.score_pct, e.confidence_pct
+         FROM daa_news_item_snapshot_v1 i
+         LEFT JOIN LATERAL (
+           SELECT llm_summary, llm_major_event_json, llm_action_hint, score_pct, confidence_pct
+           FROM daa_news_event_snapshot_v1 e
+           WHERE e.symbol = i.symbol
+             AND e.item_hash = i.item_hash
+           ORDER BY e.analyzed_at DESC
+           LIMIT 1
+         ) e ON TRUE
+         WHERE i.symbol = ANY($1::text[])
+           AND COALESCE(i.published_at, i.fetched_at) > NOW() - ($2 || ' hours')::interval
+         ORDER BY COALESCE(i.published_at, i.fetched_at) DESC
          LIMIT $3`,
         [watchedSymbols, String(hours), limit],
       );
       return res.rows;
     });
 
-    // 附带每个命中 symbol 的 signal summary（取最新一条），用于高亮 majorEvent。
-    // 注意：signal 只反映 item_hash_set 中那些 news item 的分析结果，
-    // 所以只有 hash 在集合内的 item 才能继承 majorEvent/summary 标签，
-    // 否则前端会把 1 条"重大"放大成多条（同 symbol 下的所有新闻都挂同一标签）。
-    const symbolsInResults = [...new Set(rows.map((r) => r.symbol))];
-    const signalMap = new Map<string, {
-      llmSummary: string | null;
-      llmMajorEvent: { type: string; impact: string; description: string } | null;
-      scorePct: number;
-      itemHashes: Set<string>;
-    }>();
-    if (symbolsInResults.length > 0) {
-      const sigRows = await withDaaPgClient(async ({ query }) => {
-        const res = await query<{
-          symbol: string;
-          llm_summary: string | null;
-          llm_major_event_json: { type: string; impact: string; description: string } | null;
-          score_pct: number | string;
-          item_hash_set: string | null;
-        }>(
-          `SELECT DISTINCT ON (symbol) symbol, llm_summary, llm_major_event_json, score_pct, item_hash_set
-           FROM daa_news_signal_snapshot_v1
-           WHERE symbol = ANY($1::text[])
-           ORDER BY symbol, generated_at DESC`,
-          [symbolsInResults],
-        );
-        return res.rows;
-      });
-      for (const s of sigRows) {
-        const hashes = typeof s.item_hash_set === "string" && s.item_hash_set.length > 0
-          ? new Set(s.item_hash_set.split(",").map((h) => h.trim()).filter(Boolean))
-          : new Set<string>();
-        signalMap.set(s.symbol, {
-          llmSummary: s.llm_summary,
-          llmMajorEvent: s.llm_major_event_json,
-          scorePct: Number(s.score_pct) || 50,
-          itemHashes: hashes,
-        });
-      }
-    }
-
-    const items = rows.map((r) => {
-      const sig = signalMap.get(r.symbol);
-      const inSignal = sig ? sig.itemHashes.has(titleHash8(r.title)) : false;
-      return {
-        symbol: r.symbol,
-        title: r.title,
-        link: r.link,
-        publishedAt: r.published_at ?? r.fetched_at,
-        provider: r.provider,
-        freshness: Number(r.freshness) || 0,
-        sourceCredibility: Number(r.source_credibility) || 0,
-        signalSummary: inSignal ? (sig?.llmSummary ?? null) : null,
-        majorEvent: inSignal ? (sig?.llmMajorEvent ?? null) : null,
-        scorePct: inSignal ? (sig?.scorePct ?? null) : null,
-      };
-    });
+    const items = rows.map((r) => ({
+      symbol: r.symbol,
+      title: r.title,
+      link: r.link,
+      publishedAt: r.published_at ?? r.fetched_at,
+      provider: r.provider,
+      freshness: Number(r.freshness) || 0,
+      sourceCredibility: Number(r.source_credibility) || 0,
+      signalSummary: r.llm_summary ?? null,
+      majorEvent: r.llm_major_event_json ?? null,
+      actionHint: r.llm_action_hint ?? null,
+      scorePct: r.score_pct == null ? null : Number(r.score_pct) || null,
+      confidencePct: r.confidence_pct == null ? null : Number(r.confidence_pct) || null,
+    }));
 
     return ok({ items, watchedSymbols, hours, limit });
   });

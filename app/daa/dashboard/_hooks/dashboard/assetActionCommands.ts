@@ -6,6 +6,7 @@ import type {
   WorkbenchMarketOrderPreviewResult,
   WorkbenchSearchAssetResult,
 } from "@/src/daa/modules/workbench/workbenchTypes";
+import { getAssetDisplayName } from "@/src/daa/assetRegistry";
 
 type CommandResult<T = undefined> = T extends undefined
   ? { ok: true; message: string } | { ok: false; message: string }
@@ -113,6 +114,8 @@ export async function addWatchlistAsset(input: {
   upsertWorkbenchAsset: (payload: {
     symbol: string;
     market: string;
+    name?: string | null;
+    displayNameZh?: string | null;
     currency?: string;
     assetClass?: string;
     region?: string;
@@ -124,9 +127,13 @@ export async function addWatchlistAsset(input: {
   }) => Promise<unknown>;
 }): Promise<CommandResult<{ label: string }>> {
   const item = input.item;
+  const name = item.longName || item.name || item.shortName || item.symbol;
+  const displayNameZh = item.displayNameZh || getAssetDisplayName(item.symbol);
   await input.upsertWorkbenchAsset({
     symbol: item.symbol,
     market: item.market,
+    name,
+    displayNameZh,
     currency: item.currency,
     assetClass: item.assetClass,
     region: item.region,
@@ -136,7 +143,8 @@ export async function addWatchlistAsset(input: {
     watchEnabled: true,
     lastPrice: item.price,
   });
-  return { ok: true, message: `${item.name || item.symbol} 已加入观察列表`, data: { label: item.name || item.symbol } };
+  const label = displayNameZh || name || item.symbol;
+  return { ok: true, message: `${label} 已加入观察列表`, data: { label } };
 }
 
 export async function removeFromWatchlist(input: {
@@ -144,7 +152,7 @@ export async function removeFromWatchlist(input: {
   patchWorkbenchAsset: (assetKey: string, patch: { watchEnabled?: boolean; targetWeightHint?: number }) => Promise<unknown>;
 }): Promise<CommandResult> {
   await input.patchWorkbenchAsset(input.row.assetKey, { watchEnabled: false, targetWeightHint: 0 });
-  return { ok: true, message: `${input.row.symbol} 已移出观察列表` };
+  return { ok: true, message: `${input.row.displayNameZh || input.row.name || input.row.symbol} 已移出观察列表` };
 }
 
 export async function restoreWatchlistAsset(input: {
@@ -152,7 +160,7 @@ export async function restoreWatchlistAsset(input: {
   patchWorkbenchAsset: (assetKey: string, patch: { watchEnabled?: boolean }) => Promise<unknown>;
 }): Promise<CommandResult> {
   await input.patchWorkbenchAsset(input.row.assetKey, { watchEnabled: true });
-  return { ok: true, message: `${input.row.symbol} 已恢复到观察列表` };
+  return { ok: true, message: `${input.row.displayNameZh || input.row.name || input.row.symbol} 已恢复到观察列表` };
 }
 
 export async function toggleBasketMembership(input: {

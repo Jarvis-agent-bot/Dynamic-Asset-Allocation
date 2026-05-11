@@ -3,15 +3,23 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
 import {
   withDaaPgClient, parseJsonb, toIsoString, withPgTransaction, clampNumber, normalizeUpper, normalizeStringArray,
+  isRecord,
 } from "./storeShared";
 import type {
   DaaStoreMarketPriceSnapshot, DaaStoreMarketPriceStatus, DaaStoreMarketPriceHistory,
   DaaStoreFxRateHistory, DaaStoreFxRateHistoryStatus,
   DaaStoreNewsItemSnapshot,
+  DaaStoreNewsEventSnapshot,
+  DaaStoreNewsRelatedAsset,
+  DaaStoreNewsEventGraph, DaaStoreNewsEventRelatedAssetEdge, DaaStoreNewsImpactLevel, DaaStoreNewsImpactScope,
+  DaaStoreNewsPortfolioImpact, DaaStoreNewsRecommendedAction,
+  DaaStoreDiscoveryCandidate, DaaStoreDiscoveryCandidateConfidence,
+  DaaStoreDiscoveryCandidateStatus,
   DaaStoreMarketIndicatorSnapshot, DaaStoreHfHoldingSnapshot, DaaStoreHfSignalSnapshot,
 } from "./storeTypes";
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
@@ -52,6 +60,97 @@ const NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_ = [
   "source_credibility",
   "freshness",
   "raw_ref_id",
+].join(", ");
+
+const NEWS_EVENT_SNAPSHOT_SELECT_COLUMNS_ = [
+  "provider",
+  "symbol",
+  "event_hash",
+  "item_hash",
+  "title",
+  "link",
+  "source",
+  "published_at",
+  "score_pct",
+  "confidence_pct",
+  "llm_summary",
+  "llm_drivers_json",
+  "llm_major_event_json",
+  "llm_action_hint",
+  "analyzed_at",
+  "updated_at",
+].join(", ");
+
+const NEWS_EVENT_GRAPH_SELECT_COLUMNS_ = [
+  "provider",
+  "symbol",
+  "event_hash",
+  "item_hash",
+  "theme_key",
+  "theme_label_zh",
+  "related_assets_json",
+  "event_score_pct",
+  "reasons_json",
+  "generated_at",
+  "updated_at",
+].join(", ");
+
+const NEWS_EVENT_RELATED_ASSET_SELECT_COLUMNS_ = [
+  "provider",
+  "symbol",
+  "event_hash",
+  "theme_key",
+  "related_asset_key",
+  "related_symbol",
+  "related_market",
+  "relation",
+  "confidence_pct",
+  "reason_zh",
+  "generated_at",
+  "updated_at",
+].join(", ");
+
+const NEWS_PORTFOLIO_IMPACT_SELECT_COLUMNS_ = [
+  "id",
+  "owner_account_id",
+  "provider",
+  "symbol",
+  "event_hash",
+  "asset_key",
+  "impact_scope",
+  "impact_level",
+  "impact_score_pct",
+  "recommended_action",
+  "reason_zh",
+  "generated_at",
+  "updated_at",
+].join(", ");
+
+const DISCOVERY_CANDIDATE_SELECT_COLUMNS_ = [
+  "id",
+  "owner_account_id",
+  "topic_key",
+  "topic_label_zh",
+  "asset_key",
+  "symbol",
+  "market",
+  "name",
+  "display_name_zh",
+  "score_pct",
+  "confidence",
+  "status",
+  "reason_zh",
+  "risk_notes_json",
+  "evidence_refs_json",
+  "discovered_at",
+  "last_seen_at",
+  "seen_count",
+  "reviewed_at",
+  "promoted_at",
+  "dismissed_at",
+  "archived_at",
+  "status_updated_at",
+  "updated_at",
 ].join(", ");
 
 const MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_ = [
@@ -140,6 +239,195 @@ function mapNewsItemSnapshotRow(row: Record<string, unknown>): DaaStoreNewsItemS
     sourceCredibility: clampNumber(toFiniteNumber(row.source_credibility, 0), 0, 1),
     freshness: clampNumber(toFiniteNumber(row.freshness, 0), 0, 1),
     rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
+  };
+}
+
+function normalizeNewsDrivers(value: unknown): DaaStoreNewsEventSnapshot["llmDrivers"] {
+  const raw = parseJsonb<Record<string, unknown> | null>(value, null);
+  if (!raw) return null;
+  const bullish = Array.isArray(raw.bullish) ? raw.bullish.map((item) => normalizeText(item)).filter(Boolean) : [];
+  const bearish = Array.isArray(raw.bearish) ? raw.bearish.map((item) => normalizeText(item)).filter(Boolean) : [];
+  if (bullish.length === 0 && bearish.length === 0) return null;
+  return { bullish, bearish };
+}
+
+function normalizeNewsMajorEvent(value: unknown): DaaStoreNewsEventSnapshot["llmMajorEvent"] {
+  const raw = parseJsonb<Record<string, unknown> | null>(value, null);
+  if (!raw) return null;
+  const type = normalizeText(raw.type, "other").toLowerCase();
+  const rawImpact = normalizeText(raw.impact, "medium").toLowerCase();
+  const impact = rawImpact === "high" || rawImpact === "medium" || rawImpact === "low" ? rawImpact : "medium";
+  const description = normalizeText(raw.description);
+  if (!type && !description) return null;
+  return { type: type || "other", impact, description };
+}
+
+function normalizeNewsRelatedAssetRelation(value: unknown): string {
+  const relation = normalizeText(value, "related").toLowerCase();
+  if (relation === "source" || relation === "same_theme" || relation === "related") return relation;
+  return "related";
+}
+
+function mapNewsEventSnapshotRow(row: Record<string, unknown>): DaaStoreNewsEventSnapshot {
+  return {
+    provider: normalizeText(row.provider, "multi"),
+    symbol: normalizeUpper(row.symbol),
+    eventHash: normalizeText(row.event_hash),
+    itemHash: normalizeText(row.item_hash),
+    title: normalizeText(row.title),
+    link: row.link == null ? null : normalizeText(row.link) || null,
+    source: row.source == null ? null : normalizeText(row.source) || null,
+    publishedAt: row.published_at == null ? null : toIsoString(row.published_at, new Date().toISOString()),
+    scorePct: clampNumber(toFiniteNumber(row.score_pct, 50), 0, 100),
+    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 0), 0, 100),
+    llmSummary: row.llm_summary == null ? null : normalizeText(row.llm_summary) || null,
+    llmDrivers: normalizeNewsDrivers(row.llm_drivers_json),
+    llmMajorEvent: normalizeNewsMajorEvent(row.llm_major_event_json),
+    llmActionHint: row.llm_action_hint == null ? null : normalizeText(row.llm_action_hint) || null,
+    analyzedAt: toIsoString(row.analyzed_at, new Date().toISOString()),
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
+  };
+}
+
+function pickRecordValue(row: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
+  }
+  return undefined;
+}
+
+function normalizeNewsRelatedAssets(value: unknown): DaaStoreNewsRelatedAsset[] {
+  const raw = parseJsonb<unknown[]>(value, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const assetKey = normalizeText(pickRecordValue(item, ["assetKey", "asset_key"])).toUpperCase();
+    const symbol = normalizeUpper(pickRecordValue(item, ["symbol"]));
+    const market = normalizeUpper(pickRecordValue(item, ["market"]), "US");
+    if (!assetKey || !symbol) return [];
+    return [{
+      assetKey,
+      symbol,
+      market,
+      name: pickRecordValue(item, ["name"]) == null ? null : normalizeText(pickRecordValue(item, ["name"])) || null,
+      displayNameZh: pickRecordValue(item, ["displayNameZh", "display_name_zh"]) == null
+        ? null
+        : normalizeText(pickRecordValue(item, ["displayNameZh", "display_name_zh"])) || null,
+      relation: normalizeNewsRelatedAssetRelation(pickRecordValue(item, ["relation"])),
+      confidencePct: clampNumber(toFiniteNumber(pickRecordValue(item, ["confidencePct", "confidence_pct"]), 50), 0, 100),
+      reasonZh: normalizeText(pickRecordValue(item, ["reasonZh", "reason_zh"]), "同一事件主题下的关联资产"),
+    }];
+  });
+}
+
+function normalizeNewsImpactScope(value: unknown, fallback: DaaStoreNewsImpactScope = "related_candidate"): DaaStoreNewsImpactScope {
+  const scope = normalizeText(value, fallback).toLowerCase();
+  if (scope === "holding" || scope === "watchlist" || scope === "target" || scope === "related_candidate") return scope;
+  return fallback;
+}
+
+function normalizeNewsImpactLevel(value: unknown, fallback: DaaStoreNewsImpactLevel = "watch"): DaaStoreNewsImpactLevel {
+  const level = normalizeText(value, fallback).toLowerCase();
+  if (level === "none" || level === "watch" || level === "review" || level === "risk") return level;
+  return fallback;
+}
+
+function normalizeNewsRecommendedAction(value: unknown, fallback: DaaStoreNewsRecommendedAction = "investigate"): DaaStoreNewsRecommendedAction {
+  const action = normalizeText(value, fallback).toLowerCase();
+  if (action === "record" || action === "investigate" || action === "review_thesis" || action === "candidate_watchlist") return action;
+  return fallback;
+}
+
+function normalizeDiscoveryCandidateStatus(value: unknown, fallback: DaaStoreDiscoveryCandidateStatus = "new"): DaaStoreDiscoveryCandidateStatus {
+  const status = normalizeText(value, fallback).toLowerCase();
+  if (status === "new" || status === "watching" || status === "dismissed" || status === "archived") return status;
+  return fallback;
+}
+
+function normalizeDiscoveryCandidateConfidence(value: unknown, fallback: DaaStoreDiscoveryCandidateConfidence = "medium"): DaaStoreDiscoveryCandidateConfidence {
+  const confidence = normalizeText(value, fallback).toLowerCase();
+  if (confidence === "low" || confidence === "medium" || confidence === "high") return confidence;
+  return fallback;
+}
+
+function mapNewsEventGraphRow(row: Record<string, unknown>): DaaStoreNewsEventGraph {
+  return {
+    provider: normalizeText(row.provider, "multi"),
+    symbol: normalizeUpper(row.symbol),
+    eventHash: normalizeText(row.event_hash),
+    itemHash: normalizeText(row.item_hash),
+    themeKey: normalizeText(row.theme_key, "general"),
+    themeLabelZh: normalizeText(row.theme_label_zh, "综合事件"),
+    relatedAssets: normalizeNewsRelatedAssets(row.related_assets_json),
+    eventScorePct: clampNumber(toFiniteNumber(row.event_score_pct, 50), 0, 100),
+    reasons: normalizeStringArray(parseJsonb<unknown[]>(row.reasons_json, [])),
+    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
+  };
+}
+
+function mapNewsEventRelatedAssetEdgeRow(row: Record<string, unknown>): DaaStoreNewsEventRelatedAssetEdge {
+  return {
+    provider: normalizeText(row.provider, "multi"),
+    symbol: normalizeUpper(row.symbol),
+    eventHash: normalizeText(row.event_hash),
+    themeKey: normalizeText(row.theme_key, "general"),
+    relatedAssetKey: normalizeText(row.related_asset_key).toUpperCase(),
+    relatedSymbol: normalizeUpper(row.related_symbol),
+    relatedMarket: normalizeUpper(row.related_market, "US"),
+    relation: normalizeNewsRelatedAssetRelation(row.relation),
+    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 50), 0, 100),
+    reasonZh: normalizeText(row.reason_zh, "同一事件主题下的关联资产"),
+    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
+  };
+}
+
+function mapNewsPortfolioImpactRow(row: Record<string, unknown>): DaaStoreNewsPortfolioImpact {
+  return {
+    id: normalizeText(row.id),
+    ownerAccountId: normalizeText(row.owner_account_id, getDaaAccountScopeId()),
+    provider: normalizeText(row.provider, "multi"),
+    symbol: normalizeUpper(row.symbol),
+    eventHash: normalizeText(row.event_hash),
+    assetKey: normalizeText(row.asset_key).toUpperCase(),
+    impactScope: normalizeNewsImpactScope(row.impact_scope),
+    impactLevel: normalizeNewsImpactLevel(row.impact_level),
+    impactScorePct: clampNumber(toFiniteNumber(row.impact_score_pct, 0), 0, 100),
+    recommendedAction: normalizeNewsRecommendedAction(row.recommended_action),
+    reasonZh: normalizeText(row.reason_zh, "新闻事件可能影响该资产"),
+    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
+  };
+}
+
+function mapDiscoveryCandidateRow(row: Record<string, unknown>): DaaStoreDiscoveryCandidate {
+  const status = normalizeDiscoveryCandidateStatus(row.status);
+  return {
+    id: normalizeText(row.id),
+    ownerAccountId: normalizeText(row.owner_account_id, getDaaAccountScopeId()),
+    topicKey: normalizeText(row.topic_key, "general"),
+    topicLabelZh: normalizeText(row.topic_label_zh, "综合主题"),
+    assetKey: normalizeText(row.asset_key).toUpperCase(),
+    symbol: normalizeUpper(row.symbol),
+    market: normalizeUpper(row.market, "US"),
+    name: row.name == null ? null : normalizeText(row.name) || null,
+    displayNameZh: row.display_name_zh == null ? null : normalizeText(row.display_name_zh) || null,
+    scorePct: clampNumber(toFiniteNumber(row.score_pct, 0), 0, 100),
+    confidence: normalizeDiscoveryCandidateConfidence(row.confidence),
+    status,
+    reasonZh: normalizeText(row.reason_zh, "新闻主题触发的候选研究资产"),
+    riskNotesZh: normalizeStringArray(parseJsonb<unknown[]>(row.risk_notes_json, [])),
+    evidenceRefs: normalizeStringArray(parseJsonb<unknown[]>(row.evidence_refs_json, [])),
+    discoveredAt: toIsoString(row.discovered_at, new Date().toISOString()),
+    lastSeenAt: toIsoString(row.last_seen_at, new Date().toISOString()),
+    seenCount: Math.max(1, Math.trunc(toFiniteNumber(row.seen_count, 1))),
+    reviewedAt: row.reviewed_at == null ? null : toIsoString(row.reviewed_at),
+    promotedAt: row.promoted_at == null ? null : toIsoString(row.promoted_at),
+    dismissedAt: row.dismissed_at == null ? null : toIsoString(row.dismissed_at),
+    archivedAt: row.archived_at == null ? null : toIsoString(row.archived_at),
+    statusUpdatedAt: toIsoString(row.status_updated_at, new Date().toISOString()),
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
   };
 }
 
@@ -434,19 +722,610 @@ export async function listDaaNewsItemsBySymbol(input: {
 }): Promise<DaaStoreNewsItemSnapshot[]> {
   await ensureDaaMarketCacheSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const provider = normalizeText(input.provider, "yahoo_rss");
     const symbol = normalizeUpper(input.symbol);
     if (!symbol) return [];
+    const provider = input.provider == null ? "" : normalizeText(input.provider);
     const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(input.limit, 20))));
+    const where = ["symbol = $1"];
+    const params: unknown[] = [symbol];
+    if (provider) {
+      params.push(provider);
+      where.push(`provider = $${params.length}`);
+    }
+    params.push(limit);
     const result = await query(
       `SELECT ${NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_}
        FROM daa_news_item_snapshot_v1
-       WHERE provider = $1 AND symbol = $2
+       WHERE ${where.join(" AND ")}
        ORDER BY COALESCE(published_at, fetched_at) DESC
-       LIMIT $3`,
-      [provider, symbol, limit],
+       LIMIT $${params.length}`,
+      params,
     );
     return result.rows.map((row) => mapNewsItemSnapshotRow(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertDaaNewsEventSnapshots(rows: Array<Partial<DaaStoreNewsEventSnapshot>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    let touched = 0;
+    await withPgTransaction(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "multi");
+        const symbol = normalizeUpper(row.symbol);
+        const title = normalizeText(row.title);
+        if (!symbol || !title) continue;
+        const link = row.link == null ? null : normalizeText(row.link) || null;
+        const source = row.source == null ? null : normalizeText(row.source) || null;
+        const publishedAt = row.publishedAt ? toIsoString(row.publishedAt, new Date().toISOString()) : null;
+        const itemHash = normalizeText(row.itemHash) || hashToken(`${provider}::${symbol}::${title}::${link || ""}::${publishedAt || ""}`).slice(0, 20);
+        const eventHash = normalizeText(row.eventHash) || hashToken(`${provider}::${symbol}::${itemHash}`).slice(0, 20);
+        const scorePct = clampNumber(toFiniteNumber(row.scorePct, 50), 0, 100);
+        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 0), 0, 100);
+        const llmSummary = row.llmSummary == null ? null : normalizeText(row.llmSummary) || null;
+        const llmDriversJson = row.llmDrivers ? JSON.stringify(row.llmDrivers) : null;
+        const llmMajorEventJson = row.llmMajorEvent ? JSON.stringify(row.llmMajorEvent) : null;
+        const llmActionHint = row.llmActionHint == null ? null : normalizeText(row.llmActionHint) || null;
+        const analyzedAt = toIsoString(row.analyzedAt, new Date().toISOString());
+        await query(
+          `INSERT INTO daa_news_event_snapshot_v1
+            (provider, symbol, event_hash, item_hash, title, link, source, published_at,
+             score_pct, confidence_pct, llm_summary, llm_drivers_json, llm_major_event_json, llm_action_hint,
+             analyzed_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14,$15,NOW())
+           ON CONFLICT (provider, symbol, event_hash)
+           DO UPDATE SET
+             item_hash = EXCLUDED.item_hash,
+             title = EXCLUDED.title,
+             link = EXCLUDED.link,
+             source = EXCLUDED.source,
+             published_at = EXCLUDED.published_at,
+             score_pct = EXCLUDED.score_pct,
+             confidence_pct = EXCLUDED.confidence_pct,
+             llm_summary = EXCLUDED.llm_summary,
+             llm_drivers_json = EXCLUDED.llm_drivers_json,
+             llm_major_event_json = EXCLUDED.llm_major_event_json,
+             llm_action_hint = EXCLUDED.llm_action_hint,
+             analyzed_at = EXCLUDED.analyzed_at,
+             updated_at = NOW()`,
+          [
+            provider,
+            symbol,
+            eventHash,
+            itemHash,
+            title,
+            link,
+            source,
+            publishedAt,
+            scorePct,
+            confidencePct,
+            llmSummary,
+            llmDriversJson,
+            llmMajorEventJson,
+            llmActionHint,
+            analyzedAt,
+          ],
+        );
+        touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function listDaaNewsEventsBySymbol(input: {
+  provider?: string;
+  symbol: string;
+  limit?: number;
+}): Promise<DaaStoreNewsEventSnapshot[]> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const symbol = normalizeUpper(input.symbol);
+    if (!symbol) return [];
+    const provider = input.provider == null ? "" : normalizeText(input.provider);
+    const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(input.limit, 20))));
+    const where = ["symbol = $1"];
+    const params: unknown[] = [symbol];
+    if (provider) {
+      params.push(provider);
+      where.push(`provider = $${params.length}`);
+    }
+    params.push(limit);
+    const result = await query(
+      `SELECT ${NEWS_EVENT_SNAPSHOT_SELECT_COLUMNS_}
+       FROM daa_news_event_snapshot_v1
+       WHERE ${where.join(" AND ")}
+       ORDER BY COALESCE(published_at, analyzed_at) DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows.map((row) => mapNewsEventSnapshotRow(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertDaaNewsEventGraphs(rows: Array<Partial<DaaStoreNewsEventGraph>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    let touched = 0;
+    await withPgTransaction(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "multi");
+        const symbol = normalizeUpper(row.symbol);
+        const itemHash = normalizeText(row.itemHash);
+        const eventHash = normalizeText(row.eventHash) || hashToken(`${provider}::${symbol}::${itemHash || row.themeKey || "event"}`).slice(0, 20);
+        const themeKey = normalizeText(row.themeKey, "general").toLowerCase();
+        if (!symbol || !eventHash || !themeKey) continue;
+        const themeLabelZh = normalizeText(row.themeLabelZh, "综合事件");
+        const relatedAssets = normalizeNewsRelatedAssets(row.relatedAssets ?? []);
+        const eventScorePct = clampNumber(toFiniteNumber(row.eventScorePct, 50), 0, 100);
+        const reasons = normalizeStringArray(row.reasons ?? []);
+        const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
+        await query(
+          `INSERT INTO daa_news_event_graph_v1
+            (provider, symbol, event_hash, item_hash, theme_key, theme_label_zh,
+             related_assets_json, event_score_pct, reasons_json, generated_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::jsonb,$10,NOW())
+           ON CONFLICT (provider, symbol, event_hash, theme_key)
+           DO UPDATE SET
+             item_hash = EXCLUDED.item_hash,
+             theme_label_zh = EXCLUDED.theme_label_zh,
+             related_assets_json = EXCLUDED.related_assets_json,
+             event_score_pct = EXCLUDED.event_score_pct,
+             reasons_json = EXCLUDED.reasons_json,
+             generated_at = EXCLUDED.generated_at,
+             updated_at = NOW()`,
+          [
+            provider,
+            symbol,
+            eventHash,
+            itemHash,
+            themeKey,
+            themeLabelZh,
+            JSON.stringify(relatedAssets),
+            eventScorePct,
+            JSON.stringify(reasons),
+            generatedAt,
+          ],
+        );
+        const relatedAssetKeys = relatedAssets.map((asset) => asset.assetKey.toUpperCase());
+        await query(
+          `DELETE FROM daa_news_event_related_asset_v1
+           WHERE provider = $1
+             AND symbol = $2
+             AND event_hash = $3
+             AND theme_key = $4
+             AND NOT (related_asset_key = ANY($5::text[]))`,
+          [provider, symbol, eventHash, themeKey, relatedAssetKeys],
+        );
+        for (const related of relatedAssets) {
+          const relatedAssetKey = related.assetKey.toUpperCase();
+          if (!relatedAssetKey || !related.symbol) continue;
+          await query(
+            `INSERT INTO daa_news_event_related_asset_v1
+              (provider, symbol, event_hash, theme_key, related_asset_key, related_symbol,
+               related_market, relation, confidence_pct, reason_zh, generated_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+             ON CONFLICT (provider, symbol, event_hash, theme_key, related_asset_key)
+             DO UPDATE SET
+               related_symbol = EXCLUDED.related_symbol,
+               related_market = EXCLUDED.related_market,
+               relation = EXCLUDED.relation,
+               confidence_pct = EXCLUDED.confidence_pct,
+               reason_zh = EXCLUDED.reason_zh,
+               generated_at = EXCLUDED.generated_at,
+               updated_at = NOW()`,
+            [
+              provider,
+              symbol,
+              eventHash,
+              themeKey,
+              relatedAssetKey,
+              normalizeUpper(related.symbol),
+              normalizeUpper(related.market, "US"),
+              normalizeNewsRelatedAssetRelation(related.relation),
+              clampNumber(toFiniteNumber(related.confidencePct, 50), 0, 100),
+              normalizeText(related.reasonZh, "同一事件主题下的关联资产"),
+              generatedAt,
+            ],
+          );
+        }
+        touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function listLatestDaaNewsEventGraphs(input: {
+  provider?: string;
+  symbols?: string[];
+  eventHashes?: string[];
+  themeKeys?: string[];
+  limit?: number;
+} = {}): Promise<DaaStoreNewsEventGraph[]> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (input.provider) {
+      params.push(normalizeText(input.provider));
+      where.push(`provider = $${params.length}`);
+    }
+    const symbols = Array.isArray(input.symbols)
+      ? [...new Set(input.symbols.map((item) => normalizeUpper(item)).filter(Boolean))]
+      : [];
+    if (symbols.length > 0) {
+      params.push(symbols);
+      where.push(`symbol = ANY($${params.length})`);
+    }
+    const eventHashes = Array.isArray(input.eventHashes)
+      ? [...new Set(input.eventHashes.map((item) => normalizeText(item)).filter(Boolean))]
+      : [];
+    if (eventHashes.length > 0) {
+      params.push(eventHashes);
+      where.push(`event_hash = ANY($${params.length})`);
+    }
+    const themeKeys = Array.isArray(input.themeKeys)
+      ? [...new Set(input.themeKeys.map((item) => normalizeText(item).toLowerCase()).filter(Boolean))]
+      : [];
+    if (themeKeys.length > 0) {
+      params.push(themeKeys);
+      where.push(`theme_key = ANY($${params.length})`);
+    }
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
+    params.push(limit);
+    const result = await query(
+      `SELECT ${NEWS_EVENT_GRAPH_SELECT_COLUMNS_}
+       FROM daa_news_event_graph_v1
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY generated_at DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows.map((row) => mapNewsEventGraphRow(row as Record<string, unknown>));
+  });
+}
+
+export async function listLatestDaaNewsEventRelatedAssets(input: {
+  provider?: string;
+  symbols?: string[];
+  eventHashes?: string[];
+  themeKeys?: string[];
+  relatedAssetKeys?: string[];
+  limit?: number;
+} = {}): Promise<DaaStoreNewsEventRelatedAssetEdge[]> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (input.provider) {
+      params.push(normalizeText(input.provider));
+      where.push(`provider = $${params.length}`);
+    }
+    const symbols = Array.isArray(input.symbols)
+      ? [...new Set(input.symbols.map((item) => normalizeUpper(item)).filter(Boolean))]
+      : [];
+    if (symbols.length > 0) {
+      params.push(symbols);
+      where.push(`symbol = ANY($${params.length})`);
+    }
+    const eventHashes = Array.isArray(input.eventHashes)
+      ? [...new Set(input.eventHashes.map((item) => normalizeText(item)).filter(Boolean))]
+      : [];
+    if (eventHashes.length > 0) {
+      params.push(eventHashes);
+      where.push(`event_hash = ANY($${params.length})`);
+    }
+    const themeKeys = Array.isArray(input.themeKeys)
+      ? [...new Set(input.themeKeys.map((item) => normalizeText(item).toLowerCase()).filter(Boolean))]
+      : [];
+    if (themeKeys.length > 0) {
+      params.push(themeKeys);
+      where.push(`theme_key = ANY($${params.length})`);
+    }
+    const relatedAssetKeys = Array.isArray(input.relatedAssetKeys)
+      ? [...new Set(input.relatedAssetKeys.map((item) => normalizeText(item).toUpperCase()).filter(Boolean))]
+      : [];
+    if (relatedAssetKeys.length > 0) {
+      params.push(relatedAssetKeys);
+      where.push(`related_asset_key = ANY($${params.length})`);
+    }
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
+    params.push(limit);
+    const result = await query(
+      `SELECT ${NEWS_EVENT_RELATED_ASSET_SELECT_COLUMNS_}
+       FROM daa_news_event_related_asset_v1
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY generated_at DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows.map((row) => mapNewsEventRelatedAssetEdgeRow(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertDaaNewsPortfolioImpacts(rows: Array<Partial<DaaStoreNewsPortfolioImpact>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    let touched = 0;
+    await withPgTransaction(query, async () => {
+      for (const row of rows) {
+        const ownerAccountId = normalizeText(row.ownerAccountId, getDaaAccountScopeId());
+        const provider = normalizeText(row.provider, "multi");
+        const symbol = normalizeUpper(row.symbol);
+        const eventHash = normalizeText(row.eventHash);
+        const assetKey = normalizeText(row.assetKey).toUpperCase();
+        if (!ownerAccountId || !symbol || !eventHash || !assetKey) continue;
+        const id = normalizeText(row.id) || hashToken(`${ownerAccountId}::${provider}::${symbol}::${eventHash}::${assetKey}`);
+        const impactScope = normalizeNewsImpactScope(row.impactScope);
+        const impactLevel = normalizeNewsImpactLevel(row.impactLevel);
+        const impactScorePct = clampNumber(toFiniteNumber(row.impactScorePct, 0), 0, 100);
+        const recommendedAction = normalizeNewsRecommendedAction(row.recommendedAction);
+        const reasonZh = normalizeText(row.reasonZh, "新闻事件可能影响该资产");
+        const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
+        await query(
+          `INSERT INTO daa_news_portfolio_impact_v1
+            (id, owner_account_id, provider, symbol, event_hash, asset_key,
+             impact_scope, impact_level, impact_score_pct, recommended_action, reason_zh, generated_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+           ON CONFLICT (owner_account_id, provider, symbol, event_hash, asset_key)
+           DO UPDATE SET
+             impact_scope = EXCLUDED.impact_scope,
+             impact_level = EXCLUDED.impact_level,
+             impact_score_pct = EXCLUDED.impact_score_pct,
+             recommended_action = EXCLUDED.recommended_action,
+             reason_zh = EXCLUDED.reason_zh,
+             generated_at = EXCLUDED.generated_at,
+             updated_at = NOW()`,
+          [
+            id,
+            ownerAccountId,
+            provider,
+            symbol,
+            eventHash,
+            assetKey,
+            impactScope,
+            impactLevel,
+            impactScorePct,
+            recommendedAction,
+            reasonZh,
+            generatedAt,
+          ],
+        );
+        touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function listLatestDaaNewsPortfolioImpacts(input: {
+  ownerAccountId?: string;
+  provider?: string;
+  symbols?: string[];
+  assetKeys?: string[];
+  eventHashes?: string[];
+  impactScopes?: DaaStoreNewsImpactScope[];
+  impactLevels?: DaaStoreNewsImpactLevel[];
+  limit?: number;
+} = {}): Promise<DaaStoreNewsPortfolioImpact[]> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    params.push(normalizeText(input.ownerAccountId, getDaaAccountScopeId()));
+    where.push(`owner_account_id = $${params.length}`);
+    if (input.provider) {
+      params.push(normalizeText(input.provider));
+      where.push(`provider = $${params.length}`);
+    }
+    const symbols = Array.isArray(input.symbols)
+      ? [...new Set(input.symbols.map((item) => normalizeUpper(item)).filter(Boolean))]
+      : [];
+    if (symbols.length > 0) {
+      params.push(symbols);
+      where.push(`symbol = ANY($${params.length})`);
+    }
+    const assetKeys = Array.isArray(input.assetKeys)
+      ? [...new Set(input.assetKeys.map((item) => normalizeText(item).toUpperCase()).filter(Boolean))]
+      : [];
+    if (assetKeys.length > 0) {
+      params.push(assetKeys);
+      where.push(`asset_key = ANY($${params.length})`);
+    }
+    const eventHashes = Array.isArray(input.eventHashes)
+      ? [...new Set(input.eventHashes.map((item) => normalizeText(item)).filter(Boolean))]
+      : [];
+    if (eventHashes.length > 0) {
+      params.push(eventHashes);
+      where.push(`event_hash = ANY($${params.length})`);
+    }
+    const impactScopes = Array.isArray(input.impactScopes)
+      ? [...new Set(input.impactScopes.map((item) => normalizeNewsImpactScope(item)).filter(Boolean))]
+      : [];
+    if (impactScopes.length > 0) {
+      params.push(impactScopes);
+      where.push(`impact_scope = ANY($${params.length})`);
+    }
+    const impactLevels = Array.isArray(input.impactLevels)
+      ? [...new Set(input.impactLevels.map((item) => normalizeNewsImpactLevel(item)).filter(Boolean))]
+      : [];
+    if (impactLevels.length > 0) {
+      params.push(impactLevels);
+      where.push(`impact_level = ANY($${params.length})`);
+    }
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
+    params.push(limit);
+    const result = await query(
+      `SELECT ${NEWS_PORTFOLIO_IMPACT_SELECT_COLUMNS_}
+       FROM daa_news_portfolio_impact_v1
+       WHERE ${where.join(" AND ")}
+       ORDER BY generated_at DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows.map((row) => mapNewsPortfolioImpactRow(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertDaaDiscoveryCandidates(rows: Array<Partial<DaaStoreDiscoveryCandidate>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    let touched = 0;
+    await withPgTransaction(query, async () => {
+      for (const row of rows) {
+        const ownerAccountId = normalizeText(row.ownerAccountId, getDaaAccountScopeId());
+        const topicKey = normalizeText(row.topicKey, "general").toLowerCase();
+        const assetKey = normalizeText(row.assetKey).toUpperCase();
+        const symbol = normalizeUpper(row.symbol);
+        const market = normalizeUpper(row.market, "US");
+        if (!ownerAccountId || !topicKey || !assetKey || !symbol) continue;
+        const id = normalizeText(row.id) || hashToken(`${ownerAccountId}::${topicKey}::${assetKey}`);
+        const topicLabelZh = normalizeText(row.topicLabelZh, "综合主题");
+        const name = row.name == null ? null : normalizeText(row.name) || null;
+        const displayNameZh = row.displayNameZh == null ? null : normalizeText(row.displayNameZh) || null;
+        const scorePct = clampNumber(toFiniteNumber(row.scorePct, 0), 0, 100);
+        const confidence = normalizeDiscoveryCandidateConfidence(row.confidence);
+        const status = normalizeDiscoveryCandidateStatus(row.status);
+        // 新闻雷达生成的新候选不应把用户已经 dismissed / archived 的候选重新激活。
+        const statusProvided = row.status != null && status !== "new";
+        const reasonZh = normalizeText(row.reasonZh, "新闻主题触发的候选研究资产");
+          const riskNotesZh = normalizeStringArray(row.riskNotesZh ?? []);
+          const evidenceRefs = normalizeStringArray(row.evidenceRefs ?? []);
+          const discoveredAt = toIsoString(row.discoveredAt, new Date().toISOString());
+          const lastSeenAt = toIsoString(row.lastSeenAt, discoveredAt);
+          const seenCount = Math.max(1, Math.trunc(toFiniteNumber(row.seenCount, 1)));
+          const statusTransitionAt = toIsoString(row.statusUpdatedAt, new Date().toISOString());
+          const reviewedAt = row.reviewedAt == null
+            ? (statusProvided ? statusTransitionAt : null)
+            : toIsoString(row.reviewedAt);
+          const promotedAt = row.promotedAt == null
+            ? (statusProvided && status === "watching" ? statusTransitionAt : null)
+            : toIsoString(row.promotedAt);
+          const dismissedAt = row.dismissedAt == null
+            ? (statusProvided && status === "dismissed" ? statusTransitionAt : null)
+            : toIsoString(row.dismissedAt);
+          const archivedAt = row.archivedAt == null
+            ? (statusProvided && status === "archived" ? statusTransitionAt : null)
+            : toIsoString(row.archivedAt);
+          await query(
+            `INSERT INTO daa_discovery_candidates_v1
+              (id, owner_account_id, topic_key, topic_label_zh, asset_key, symbol, market, name, display_name_zh,
+               score_pct, confidence, status, reason_zh, risk_notes_json, evidence_refs_json, discovered_at,
+               last_seen_at, seen_count, reviewed_at, promoted_at, dismissed_at, archived_at, status_updated_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20,$21,$22,$23,NOW())
+             ON CONFLICT (owner_account_id, topic_key, asset_key)
+             DO UPDATE SET
+               topic_label_zh = EXCLUDED.topic_label_zh,
+             symbol = EXCLUDED.symbol,
+             market = EXCLUDED.market,
+             name = EXCLUDED.name,
+               display_name_zh = EXCLUDED.display_name_zh,
+               score_pct = GREATEST(daa_discovery_candidates_v1.score_pct, EXCLUDED.score_pct),
+               confidence = EXCLUDED.confidence,
+               status = CASE WHEN $24::boolean THEN EXCLUDED.status ELSE daa_discovery_candidates_v1.status END,
+               reason_zh = EXCLUDED.reason_zh,
+               risk_notes_json = COALESCE(
+                 (SELECT jsonb_agg(DISTINCT value)
+                  FROM jsonb_array_elements_text(daa_discovery_candidates_v1.risk_notes_json || EXCLUDED.risk_notes_json) AS merged(value)),
+                 '[]'::jsonb
+               ),
+               evidence_refs_json = COALESCE(
+                 (SELECT jsonb_agg(DISTINCT value)
+                  FROM jsonb_array_elements_text(daa_discovery_candidates_v1.evidence_refs_json || EXCLUDED.evidence_refs_json) AS merged(value)),
+                 '[]'::jsonb
+               ),
+               last_seen_at = GREATEST(daa_discovery_candidates_v1.last_seen_at, EXCLUDED.last_seen_at),
+               seen_count = GREATEST(1, daa_discovery_candidates_v1.seen_count) + GREATEST(1, EXCLUDED.seen_count),
+               reviewed_at = CASE WHEN $24::boolean THEN COALESCE(EXCLUDED.reviewed_at, daa_discovery_candidates_v1.reviewed_at, NOW()) ELSE daa_discovery_candidates_v1.reviewed_at END,
+               promoted_at = CASE WHEN $24::boolean AND EXCLUDED.status = 'watching' THEN COALESCE(EXCLUDED.promoted_at, daa_discovery_candidates_v1.promoted_at, NOW()) ELSE daa_discovery_candidates_v1.promoted_at END,
+               dismissed_at = CASE WHEN $24::boolean AND EXCLUDED.status = 'dismissed' THEN COALESCE(EXCLUDED.dismissed_at, daa_discovery_candidates_v1.dismissed_at, NOW()) ELSE daa_discovery_candidates_v1.dismissed_at END,
+               archived_at = CASE WHEN $24::boolean AND EXCLUDED.status = 'archived' THEN COALESCE(EXCLUDED.archived_at, daa_discovery_candidates_v1.archived_at, NOW()) ELSE daa_discovery_candidates_v1.archived_at END,
+               status_updated_at = CASE WHEN $24::boolean AND EXCLUDED.status <> daa_discovery_candidates_v1.status THEN EXCLUDED.status_updated_at ELSE daa_discovery_candidates_v1.status_updated_at END,
+               updated_at = NOW()`,
+          [
+            id,
+            ownerAccountId,
+            topicKey,
+            topicLabelZh,
+            assetKey,
+            symbol,
+            market,
+            name,
+            displayNameZh,
+            scorePct,
+            confidence,
+            status,
+            reasonZh,
+            JSON.stringify(riskNotesZh),
+              JSON.stringify(evidenceRefs),
+              discoveredAt,
+              lastSeenAt,
+              seenCount,
+              reviewedAt,
+              promotedAt,
+              dismissedAt,
+              archivedAt,
+              statusTransitionAt,
+              statusProvided,
+            ],
+          );
+        touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function listDaaDiscoveryCandidates(input: {
+  ownerAccountId?: string;
+  topicKeys?: string[];
+  assetKeys?: string[];
+  statuses?: DaaStoreDiscoveryCandidateStatus[];
+  limit?: number;
+} = {}): Promise<DaaStoreDiscoveryCandidate[]> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    params.push(normalizeText(input.ownerAccountId, getDaaAccountScopeId()));
+    where.push(`owner_account_id = $${params.length}`);
+    const topicKeys = Array.isArray(input.topicKeys)
+      ? [...new Set(input.topicKeys.map((item) => normalizeText(item).toLowerCase()).filter(Boolean))]
+      : [];
+    if (topicKeys.length > 0) {
+      params.push(topicKeys);
+      where.push(`topic_key = ANY($${params.length})`);
+    }
+    const assetKeys = Array.isArray(input.assetKeys)
+      ? [...new Set(input.assetKeys.map((item) => normalizeText(item).toUpperCase()).filter(Boolean))]
+      : [];
+    if (assetKeys.length > 0) {
+      params.push(assetKeys);
+      where.push(`asset_key = ANY($${params.length})`);
+    }
+    const statuses = Array.isArray(input.statuses)
+      ? [...new Set(input.statuses.map((item) => normalizeDiscoveryCandidateStatus(item)).filter(Boolean))]
+      : [];
+    if (statuses.length > 0) {
+      params.push(statuses);
+      where.push(`status = ANY($${params.length})`);
+    }
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
+    params.push(limit);
+    const result = await query(
+      `SELECT ${DISCOVERY_CANDIDATE_SELECT_COLUMNS_}
+       FROM daa_discovery_candidates_v1
+       WHERE ${where.join(" AND ")}
+       ORDER BY score_pct DESC, updated_at DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows.map((row) => mapDiscoveryCandidateRow(row as Record<string, unknown>));
   });
 }
 

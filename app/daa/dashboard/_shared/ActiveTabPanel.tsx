@@ -66,7 +66,12 @@ export function ActiveTabPanel(props: {
             onTemplateApplied={() => model.loadBootstrap(true)}
           />
           <WatchlistSearchBar {...model.watchlistBuilderProps} />
-          <WatchlistItemList rows={model.tableProps.rows} />
+          <WatchlistItemList
+            rows={model.tableProps.rows}
+            onRemoveFromWatchlist={model.tableProps.onRemoveFromWatchlist}
+            actioningAssetKey={model.tableProps.actioningAssetKey}
+            disabled={model.tableProps.disabled}
+          />
         </div>
       ) : null}
 

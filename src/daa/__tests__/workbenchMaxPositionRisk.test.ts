@@ -8,6 +8,8 @@ function makeAsset(overrides: Partial<AssetUniverseView> = {}): AssetUniverseVie
   return {
     assetKey: "US::NVDA",
     symbol: "NVDA",
+    name: "NVIDIA Corporation",
+    displayNameZh: "英伟达",
     market: "US",
     currency: "USD",
     assetClass: "EQUITY",

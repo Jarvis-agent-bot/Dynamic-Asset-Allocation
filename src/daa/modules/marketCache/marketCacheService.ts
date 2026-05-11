@@ -628,6 +628,9 @@ export async function cleanupMarketCacheRawPayload(nowIso?: string): Promise<{ r
  * - 价格快照(非 fresh): 30 天
  * - 市场指标快照: 90 天
  * - 新闻 item: 30 天
+ * - 新闻事件与事件图: 30 天
+ * - 组合新闻影响: 90 天
+ * - 已忽略/归档的候选发现: 180 天
  * - 通知记录: 180 天
  * - Job 日志: 90 天
  */
@@ -664,7 +667,45 @@ export async function runUnifiedDataCleanup(): Promise<Record<string, number>> {
     results.news_items = r.rowCount ?? 0;
   } catch { results.news_items = 0; }
 
-  // 5. 旧通知记录：180 天
+  // 5. 旧新闻事件层与派生图谱：30 天
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_news_event_snapshot_v1 WHERE updated_at < NOW() - INTERVAL '30 days'",
+    );
+    results.news_events = r.rowCount ?? 0;
+  } catch { results.news_events = 0; }
+
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_news_event_related_asset_v1 WHERE generated_at < NOW() - INTERVAL '30 days'",
+    );
+    results.news_event_related_assets = r.rowCount ?? 0;
+  } catch { results.news_event_related_assets = 0; }
+
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_news_event_graph_v1 WHERE generated_at < NOW() - INTERVAL '30 days'",
+    );
+    results.news_event_graphs = r.rowCount ?? 0;
+  } catch { results.news_event_graphs = 0; }
+
+  // 6. 旧组合新闻影响：90 天
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_news_portfolio_impact_v1 WHERE generated_at < NOW() - INTERVAL '90 days'",
+    );
+    results.news_portfolio_impacts = r.rowCount ?? 0;
+  } catch { results.news_portfolio_impacts = 0; }
+
+  // 7. 已处理的候选发现：180 天；new/watching 保留，避免清掉仍需人工复核的研究线索。
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_discovery_candidates_v1 WHERE status IN ('dismissed', 'archived') AND updated_at < NOW() - INTERVAL '180 days'",
+    );
+    results.discovery_candidates = r.rowCount ?? 0;
+  } catch { results.discovery_candidates = 0; }
+
+  // 8. 旧通知记录：180 天
   try {
     const r = await pool.query(
       "DELETE FROM daa_notification_delivery_log WHERE created_at < NOW() - INTERVAL '180 days'",
@@ -672,7 +713,7 @@ export async function runUnifiedDataCleanup(): Promise<Record<string, number>> {
     results.notification_logs = r.rowCount ?? 0;
   } catch { results.notification_logs = 0; }
 
-  // 6. 旧 job 日志：90 天
+  // 9. 旧 job 日志：90 天
   try {
     const r1 = await pool.query(
       "DELETE FROM daa_job_execution_logs WHERE started_at < NOW() - INTERVAL '90 days'",

@@ -80,6 +80,15 @@ vi.mock("@/src/daa/store/jobExecutionLogRepo", () => ({
   findRecentJobExecutionByIdempotencyKey: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("@/src/daa/store/notificationDeliveryLogRepo", () => ({
+  hasRecentMajorEventNotification: vi.fn().mockResolvedValue(false),
+  hasTodayNotification: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock("@/src/daa/agent/autopilotOrchestrator", () => ({
+  runAutopilotLoop: vi.fn(),
+}));
+
 import { POST as dailyAnalysisPost } from "@/app/api/daa/cron/daily-analysis/route";
 import { POST as fxRefreshPost } from "@/app/api/daa/cron/fx-refresh/route";
 import { POST as newsRefreshPost } from "@/app/api/daa/cron/news-refresh/route";
@@ -90,6 +99,8 @@ import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchRe
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSignal";
+import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
+import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import {
   type DaaStoreExternalPayloadRaw,
   type DaaStoreFxRate,
@@ -211,6 +222,7 @@ function buildFxRateFixture(overrides?: Partial<DaaStoreFxRate>): DaaStoreFxRate
 function buildNewsSignalFixture(input: {
   symbol?: string;
   itemIds: string[];
+  majorEvent?: DaaNewsSignal["llmMajorEvent"];
 }): DaaNewsSignal {
   const symbol = input.symbol ?? "AAPL";
   return {
@@ -230,8 +242,41 @@ function buildNewsSignalFixture(input: {
     })),
     llmSummary: null,
     llmDrivers: null,
-    llmMajorEvent: null,
-    llmActionHint: null,
+    llmMajorEvent: input.majorEvent ?? null,
+    llmActionHint: input.majorEvent ? "关注" : null,
+  };
+}
+
+function buildAutopilotLoopResult(): Awaited<ReturnType<typeof runAutopilotLoop>> {
+  return {
+    skipped: false,
+    reason: null,
+    source: "cron_news_refresh",
+    brainMode: "auto",
+    bootstrapped: { attempted: false, created: 0, errors: [] },
+    cognitiveRun: {
+      attempted: true,
+      runId: "agent-cycle-1",
+      thesesUpdated: 0,
+      surprisesCount: 0,
+      totalTokens: 0,
+      durationMs: 0,
+      errors: [],
+    },
+    rebalance: {
+      attempted: false,
+      created: false,
+      cycleId: null,
+      proposalCount: 0,
+      autoExecute: {
+        attempted: false,
+        executed: false,
+        ordersCount: 0,
+        blockedReason: null,
+        error: null,
+      },
+      reason: null,
+    },
   };
 }
 
@@ -275,6 +320,8 @@ beforeEach(() => {
   });
   vi.mocked(sendFeishuByEnv).mockResolvedValue(false);
   vi.mocked(sendTelegramByEnv).mockResolvedValue(false);
+  vi.mocked(hasRecentMajorEventNotification).mockResolvedValue(false);
+  vi.mocked(runAutopilotLoop).mockResolvedValue(buildAutopilotLoopResult());
 });
 
 afterEach(() => {
@@ -319,6 +366,33 @@ describe("cron-ops-routes-v1", () => {
     });
     // news-refresh 使用 runLoggedJob 记录日志
     expect(json.data.jobId).toBeTruthy();
+  });
+
+  it("news-refresh 发现重大事件时，即使 TG 去重未推送也会触发 Agent", async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig({
+      newsFeed: { enabled: true, symbols: ["NVDA"], query: "" },
+    }));
+    vi.mocked(buildNewsSignals).mockResolvedValue([
+      buildNewsSignalFixture({
+        symbol: "NVDA",
+        itemIds: ["n1"],
+        majorEvent: { type: "earnings", impact: "high", description: "财报首次公布" },
+      }),
+    ]);
+    vi.mocked(hasRecentMajorEventNotification).mockResolvedValue(true);
+
+    const response = await newsRefreshPost(new Request("http://localhost/api/daa/cron/news-refresh", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.majorEventsDetected).toBe(1);
+    expect(json.data.majorEventsPushed).toBe(0);
+    expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAutopilotLoop)).toHaveBeenCalledWith(expect.objectContaining({
+      source: "cron_news_refresh",
+      affectedSymbols: ["NVDA"],
+    }));
   });
 
   it("fx-refresh 直接路由会区分更新、跳过与失败的货币对", async () => {

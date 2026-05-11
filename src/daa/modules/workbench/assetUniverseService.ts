@@ -84,6 +84,8 @@ export function buildAssetUniverseViewRows(input: {
     return {
       assetKey: row.assetKey,
       symbol: row.symbol,
+      name: row.name,
+      displayNameZh: row.displayNameZh,
       market: row.market,
       currency: row.currency,
       assetClass: row.assetClass,

@@ -20,6 +20,8 @@ export async function upsertAssetMasterInTx(
   input: {
     assetKey: string;
     symbol: string;
+    name?: string | null;
+    displayNameZh?: string | null;
     market: string;
     currency?: string;
     assetClass?: string;
@@ -31,12 +33,16 @@ export async function upsertAssetMasterInTx(
 ): Promise<void> {
   const market = normalizeText(input.market, "US").toUpperCase();
   const assetClass = normalizeAssetClass(input.assetClass, "EQUITY");
+  const name = normalizeText(input.name) || null;
+  const displayNameZh = normalizeText(input.displayNameZh) || null;
   await query(
     `INSERT INTO daa_asset_master (
-      asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW())
+      asset_key, symbol, name, display_name_zh, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())
     ON CONFLICT (asset_key) DO UPDATE SET
       symbol = EXCLUDED.symbol,
+      name = COALESCE(EXCLUDED.name, daa_asset_master.name),
+      display_name_zh = COALESCE(EXCLUDED.display_name_zh, daa_asset_master.display_name_zh),
       market = EXCLUDED.market,
       currency = EXCLUDED.currency,
       asset_class = EXCLUDED.asset_class,
@@ -48,6 +54,8 @@ export async function upsertAssetMasterInTx(
     [
       input.assetKey,
       normalizeText(input.symbol).toUpperCase(),
+      name,
+      displayNameZh,
       market,
       normalizeCurrencyAlias(input.currency, "USD"),
       assetClass,

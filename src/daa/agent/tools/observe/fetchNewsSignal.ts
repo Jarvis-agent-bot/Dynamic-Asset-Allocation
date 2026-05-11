@@ -10,6 +10,16 @@ function makeResult(success: boolean, data: unknown, outputFields: Record<string
   return { toolName: "fetch_news_signal", category: "observe", success, data, outputFields, error, latencyMs: Date.now() - t0 };
 }
 
+function inferMarketFromSymbol(symbol: string): string {
+  const s = symbol.trim().toUpperCase();
+  if (s.includes("=F")) return "COMMODITY";
+  if (s.endsWith(".HK")) return "HK";
+  if (s.endsWith(".SS") || s.endsWith(".SZ")) return "CN";
+  if (s.endsWith(".KS")) return "KR";
+  if (s.endsWith(".T")) return "JP";
+  return "US";
+}
+
 registerTool(
   {
     name: "fetch_news_signal",
@@ -32,26 +42,32 @@ registerTool(
 
     try {
       const { buildNewsSignalForSymbol } = await import("@/src/daa/signals/newsSignal");
-      const market = symbol.endsWith(".HK") ? "HK" : symbol.endsWith(".SS") || symbol.endsWith(".SZ") ? "CN" : "US";
+      const market = inferMarketFromSymbol(symbol);
       const signal = await buildNewsSignalForSymbol(symbol, market);
       if (!signal) return makeResult(false, null, {}, t0, `${symbol} 无新闻信号数据`);
 
-      const s = signal as Record<string, unknown>;
       const data = {
-        scorePct: s.scorePct,
-        evidenceCount: s.evidenceCount,
-        llmSummary: s.llmSummary,
-        llmDrivers: s.llmDrivers,
-        llmMajorEvent: s.llmMajorEvent,
-        reasons: s.reasons,
-        items: Array.isArray(s.items)
-          ? (s.items as Array<Record<string, unknown>>).slice(0, 5).map((i) => ({ title: i.title, ts: i.ts }))
-          : [],
+        scorePct: signal.scorePct,
+        confidencePct: signal.confidencePct,
+        evidenceCount: signal.evidenceCount,
+        llmSummary: signal.llmSummary,
+        llmDrivers: signal.llmDrivers,
+        llmMajorEvent: signal.llmMajorEvent,
+        llmActionHint: signal.llmActionHint,
+        reasons: signal.reasons,
+        items: signal.items.slice(0, 5).map((item) => ({
+          title: item.title,
+          ts: item.ts,
+          sourceCredibility: item.sourceCredibility,
+          freshness: item.freshness,
+        })),
       };
       return makeResult(true, data, {
-        scorePct: s.scorePct as number,
-        evidenceCount: s.evidenceCount as number,
-        llmSummary: s.llmSummary as string,
+        scorePct: signal.scorePct,
+        confidencePct: signal.confidencePct,
+        evidenceCount: signal.evidenceCount,
+        llmSummary: signal.llmSummary,
+        llmActionHint: signal.llmActionHint,
         symbol,
       }, t0);
     } catch (e) {

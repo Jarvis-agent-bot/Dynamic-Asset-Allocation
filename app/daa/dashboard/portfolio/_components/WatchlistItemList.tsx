@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Eye } from "lucide-react";
+import { ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
@@ -16,8 +16,20 @@ import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTyp
 /*  单行                                                               */
 /* ------------------------------------------------------------------ */
 
-function WatchlistRow(props: { row: AssetUniverseView; sparkData: number[] | null; onClick: () => void }) {
+function assetDisplayName(row: AssetUniverseView): string {
+  return row.displayNameZh || row.name || row.symbol;
+}
+
+function WatchlistRow(props: {
+  row: AssetUniverseView;
+  sparkData: number[] | null;
+  onClick: () => void;
+  onRemove?: (row: AssetUniverseView) => Promise<void> | void;
+  removing?: boolean;
+  disabled?: boolean;
+}) {
   const { row, sparkData } = props;
+  const displayName = assetDisplayName(row);
 
   const priceChange = deriveAssetPriceChange(row, sparkData);
   const changePct = priceChange?.changePct ?? null;
@@ -39,8 +51,11 @@ function WatchlistRow(props: { row: AssetUniverseView; sparkData: number[] | nul
       {/* 标的 */}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-[var(--text)]">{row.symbol}</span>
-          <span className="truncate text-xs text-[var(--muted)]">{row.market} · {row.currency}</span>
+          <span className="truncate text-sm font-semibold text-[var(--text)]">{displayName}</span>
+          <span className="shrink-0 font-[var(--font-mono)] text-xs text-[var(--faint)]">{row.symbol}</span>
+        </div>
+        <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
+          {row.market} · {row.currency}
         </div>
         {row.holdingQty > 0 ? (
           <div className="mt-0.5 flex items-center gap-1 text-[10px] text-emerald-400/70">
@@ -110,6 +125,24 @@ function WatchlistRow(props: { row: AssetUniverseView; sparkData: number[] | nul
         )}
       </div>
 
+      <button
+        type="button"
+        title="移出观察列表"
+        aria-label={`移出观察列表 ${displayName}`}
+        disabled={props.disabled || props.removing}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void props.onRemove?.(row);
+        }}
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--faint)] transition-colors hover:bg-red-500/10 hover:text-red-300",
+          (props.disabled || props.removing) ? "cursor-not-allowed opacity-50" : "",
+        )}
+      >
+        {props.removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+      </button>
+
       <ChevronRight className="h-4 w-4 shrink-0 text-[var(--faint)] transition-colors group-hover:text-[var(--text)]" />
     </div>
   );
@@ -119,7 +152,12 @@ function WatchlistRow(props: { row: AssetUniverseView; sparkData: number[] | nul
 /*  主组件                                                             */
 /* ------------------------------------------------------------------ */
 
-export function WatchlistItemList(props: { rows: AssetUniverseView[] }) {
+export function WatchlistItemList(props: {
+  rows: AssetUniverseView[];
+  onRemoveFromWatchlist?: (row: AssetUniverseView) => Promise<void> | void;
+  actioningAssetKey?: string | null;
+  disabled?: boolean;
+}) {
   const router = useRouter();
   const { rows } = props;
   const [activeCategory, setActiveCategory] = useState("all");
@@ -179,6 +217,9 @@ export function WatchlistItemList(props: { rows: AssetUniverseView[] }) {
             row={row}
             sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
             onClick={() => handleRowClick(row)}
+            onRemove={props.onRemoveFromWatchlist}
+            removing={props.actioningAssetKey === row.assetKey}
+            disabled={props.disabled}
           />
         ))}
       </div>

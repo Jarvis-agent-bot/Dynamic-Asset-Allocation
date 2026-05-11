@@ -27,16 +27,18 @@ function normalizeUpper(value: unknown): string {
 
 type SymbolWithMarket = { symbol: string; market: string };
 
-/** 将 region (US/HK/CN) 映射到 newsProvider 需要的 market */
+/** 将 region 映射到 newsProvider 需要的 market */
 function regionToMarket(region: string): string {
-  const map: Record<string, string> = { US: "US", HK: "HK", CN: "CN", JP: "JP", EU: "EU" };
+  const map: Record<string, string> = { US: "US", HK: "HK", CN: "CN", KR: "KR", JP: "JP", EU: "EU", COMMODITY: "COMMODITY" };
   return map[region.toUpperCase()] || "US";
 }
 
 /** 根据 symbol 后缀猜测 market（针对非 asset universe 来源的 symbol） */
 function guessMarketFromSymbol(symbol: string): string {
+  if (symbol.includes("=F")) return "COMMODITY";
   if (symbol.endsWith(".HK")) return "HK";
   if (symbol.endsWith(".SS") || symbol.endsWith(".SZ")) return "CN";
+  if (symbol.endsWith(".KS")) return "KR";
   if (symbol.endsWith(".T")) return "JP";
   return "US";
 }
@@ -62,21 +64,29 @@ async function resolveSymbolsWithMarket(): Promise<SymbolWithMarket[]> {
   for (const row of assets) {
     if (!(row.holdingQty > 0) && row.watchEnabled === false) continue;
     const key = normalizeUpper(row.symbol);
-    if (key && !seen.has(key)) seen.set(key, { symbol: key, market: regionToMarket(row.region || "US") });
+    const market = normalizeUpper(row.market) || regionToMarket(row.region || "US");
+    if (key && !seen.has(key)) seen.set(key, { symbol: key, market });
   }
 
   return [...seen.values()];
 }
 
+type MajorEventRefreshResult = {
+  pushed: number;
+  highImpactSymbols: string[];
+};
+
 /** 检测重大事件并发送 TG 推送（同一 symbol+type 24 小时内只推一次） */
-async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
+async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<MajorEventRefreshResult> {
   let pushed = 0;
+  const highImpactSymbols = new Set<string>();
   // 局部变量：本次执行内的快速去重（避免同一批次重复查 DB）
   const batchPushedKeys = new Set<string>();
 
   for (const signal of signals) {
     if (signal.llmMajorEvent && signal.llmMajorEvent.impact === "high") {
       const eventKey = `${signal.symbol}:${signal.llmMajorEvent.type}`;
+      highImpactSymbols.add(signal.symbol);
 
       // 1) 本次批量内去重
       if (batchPushedKeys.has(eventKey)) continue;
@@ -126,7 +136,7 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
       }
     }
   }
-  return pushed;
+  return { pushed, highImpactSymbols: [...highImpactSymbols] };
 }
 
 export async function POST(req: Request) {
@@ -160,7 +170,15 @@ async function runNewsRefreshJob(req: Request, idempotencyKey: string | null): P
       handler: async () => {
         const symbolsWithMarket = await resolveSymbolsWithMarket();
         if (symbolsWithMarket.length === 0) {
-          return { refreshedSymbols: 0, signals: 0, items: 0, majorEventsPushed: 0 };
+          return {
+            refreshedSymbols: 0,
+            signals: 0,
+            items: 0,
+            majorEventsDetected: 0,
+            majorEventSymbols: [],
+            majorEventsPushed: 0,
+            autopilot: { attempted: false, reason: "no symbols" },
+          };
         }
 
         const signals = await buildNewsSignals({ symbolsWithMarket });
@@ -168,14 +186,12 @@ async function runNewsRefreshJob(req: Request, idempotencyKey: string | null): P
         const itemRows = signals.reduce((acc, s) => acc + s.items.length, 0);
 
         // 检测重大事件 → TG 即时推送
-        const majorEventsPushed = await checkMajorEvents(signals);
-        const autopilot = majorEventsPushed > 0
+        const majorEvents = await checkMajorEvents(signals);
+        const autopilot = majorEvents.highImpactSymbols.length > 0
           ? await runAutopilotLoop({
               source: "cron_news_refresh",
-              reason: `news refresh detected ${majorEventsPushed} high-impact events`,
-              affectedSymbols: signals
-                .filter((signal) => signal.llmMajorEvent?.impact === "high")
-                .map((signal) => signal.symbol),
+              reason: `news refresh detected ${majorEvents.highImpactSymbols.length} high-impact events`,
+              affectedSymbols: majorEvents.highImpactSymbols,
             }).catch((error) => {
               logSwallowed("newsRefresh.autopilot", error);
               return {
@@ -189,7 +205,9 @@ async function runNewsRefreshJob(req: Request, idempotencyKey: string | null): P
           refreshedSymbols: symbolsWithMarket.length,
           signals: signalRows,
           items: itemRows,
-          majorEventsPushed,
+          majorEventsDetected: majorEvents.highImpactSymbols.length,
+          majorEventSymbols: majorEvents.highImpactSymbols,
+          majorEventsPushed: majorEvents.pushed,
           autopilot,
           at: new Date().toISOString(),
         };

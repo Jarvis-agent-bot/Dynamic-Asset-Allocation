@@ -8,10 +8,10 @@
 
 ## 1. 系统定位
 
-DAA Rebalance 是面向**单个投资者**的动态资产配置与再平衡金融系统。
+DAA Rebalance 是面向个人/小团队管理者的动态资产配置与再平衡金融系统。
 
 - 不是实盘交易系统 — 默认执行边界是本地 `sim` / `crypto_paper`，不向真实券商下单
-- 不是多租户 SaaS — 硬编码 `'default'` 账户
+- 不是开放式多租户 SaaS — 当前以一个 admin 账户为主，但核心组合、观察列表、交易和通知数据已按 `owner_account_id` 做账户隔离
 - 是"观察 + 研究 + 目标权重计划 + 本地模拟执行 + 复盘"的闭环工作台
 - AI-Native：系统不只是展示数据，而是维护一组持续演化的**投资论点（Thesis）**，每天自问"我现在最可能错在哪里"
 
@@ -196,7 +196,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 ---
 
-## 5. 数据模型（26 张表）
+## 5. 数据模型（核心表）
 
 ### 5.1 Agent / Memory（8 张）
 
@@ -223,7 +223,7 @@ daa_target_allocations     — 目标权重
 daa_trade_tickets          — 交易草稿、提交与执行状态
 ```
 
-### 5.3 市场数据（5 张）
+### 5.3 市场数据与新闻智能
 
 ```
 daa_market_price_snapshots          — 最新价
@@ -231,6 +231,13 @@ daa_market_price_history_v1         — 历史序列（永久）
 daa_market_indicator_snapshot_v1    — 指标（VIX / 比率等）
 daa_macro_cycle_snapshots           — 宏观周期
 daa_external_payload_raw_v1         — 原始 API 响应（90 天）
+daa_news_item_snapshot_v1           — 新闻原始 item 快照（30 天）
+daa_news_signal_snapshot_v1         — symbol 级新闻信号快照
+daa_news_event_snapshot_v1          — 新闻事件层快照（30 天）
+daa_news_event_graph_v1             — 事件主题图谱摘要（30 天）
+daa_news_event_related_asset_v1     — 事件 ↔ 关联资产边表（30 天）
+daa_news_portfolio_impact_v1        — 账户组合影响判断（90 天）
+daa_discovery_candidates_v1         — 候选发现池，保留人工复核状态与审计字段
 ```
 
 ### 5.4 运营与其他
@@ -252,9 +259,14 @@ daa_schema_migrations_v1           — 迁移元表
 
 ## 6. 核心约束（强制规范）
 
-### 6.1 单租户
+### 6.1 账户隔离与权限边界
 
-所有表硬编码 `'default'` 账户。不支持多用户 / 多组合。
+系统不是开放注册的 SaaS，但不能再假设所有业务表都硬编码 `'default'`。当前规则：
+
+- 登录、会话和角色在 `daa_auth_accounts` / `daa_auth_sessions` 中维护。
+- 持仓、观察列表、目标权重、交易、调仓周期、通知和组合影响等账户相关表必须带 `owner_account_id`。
+- 资产主数据、市场价格、新闻 item、新闻事件图谱属于全局事实层；组合影响和候选处理状态属于账户层。
+- AI 只能生成候选、影响判断和建议动作；加入观察列表、忽略候选、调仓和执行都必须经过权限与策略门禁。
 
 ### 6.2 Money / Valuation Domain
 

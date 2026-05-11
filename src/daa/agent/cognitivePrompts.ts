@@ -7,7 +7,7 @@
 
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
-import type { MarketSnapshot, PortfolioSnapshot, WatchlistSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
+import type { MarketSnapshot, PortfolioSnapshot, WatchlistSnapshot, NewsSnapshot, NewsIntelligenceSnapshot } from "@/src/daa/agent/cognitiveState";
 import { formatAssetLabel, formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 
 // ── Prioritize 节点 Prompt ──
@@ -17,6 +17,7 @@ export function buildPrioritizePrompt(ctx: {
   watchlist?: WatchlistSnapshot["candidates"];
   market: MarketSnapshot;
   news: NewsSnapshot;
+  newsIntelligence?: NewsIntelligenceSnapshot | null;
   theses: ResearchThread[];
   focusSymbols?: string[];
   maxTargets?: number;
@@ -39,7 +40,36 @@ export function buildPrioritizePrompt(ctx: {
 
   const newsSummary = ctx.news.items
     .slice(0, 10)
-    .map(n => `${n.symbol}: ${sanitizeForPrompt(n.title, 80)}`)
+    .map((n) => {
+      const event = n.majorEvent
+        ? ` 重大事件=${n.majorEvent.impact}/${n.majorEvent.type}/${sanitizeForPrompt(n.majorEvent.description, 60)}`
+        : "";
+      const summary = n.summary ? ` 摘要=${sanitizeForPrompt(n.summary, 80)}` : "";
+      const score = n.scorePct != null ? ` 新闻分=${n.scorePct.toFixed(0)}` : "";
+      const source = n.source ? ` 来源=${sanitizeForPrompt(n.source, 24)}` : "";
+      return `${n.symbol}: ${sanitizeForPrompt(n.title, 80)}${source}${score}${event}${summary}`;
+    })
+    .join("\n");
+
+  const eventGraphSummary = (ctx.newsIntelligence?.eventGraphs ?? [])
+    .slice(0, 8)
+    .map((graph) => {
+      const related = graph.relatedAssets
+        .slice(0, 4)
+        .map((asset) => asset.displayNameZh ? `${asset.displayNameZh} ${asset.symbol}` : asset.symbol)
+        .join(", ");
+      return `${graph.symbol}: 主题=${graph.themeLabelZh} 分=${graph.eventScorePct.toFixed(0)} 关联=${related || "无"}`;
+    })
+    .join("\n");
+
+  const portfolioImpactSummary = (ctx.newsIntelligence?.portfolioImpacts ?? [])
+    .slice(0, 10)
+    .map((impact) => `${impact.assetKey}: ${impact.impactScope}/${impact.impactLevel} 分=${impact.impactScorePct.toFixed(0)} 动作=${impact.recommendedAction} 原因=${sanitizeForPrompt(impact.reasonZh, 90)}`)
+    .join("\n");
+
+  const discoverySummary = (ctx.newsIntelligence?.discoveryCandidates ?? [])
+    .slice(0, 10)
+    .map((candidate) => `${candidate.assetKey}: 主题=${candidate.topicLabelZh} 分=${candidate.scorePct.toFixed(0)} 置信=${candidate.confidence} 状态=${candidate.status} 原因=${sanitizeForPrompt(candidate.reasonZh, 90)}`)
     .join("\n");
 
   const watchlistSummary = (ctx.watchlist ?? [])
@@ -77,6 +107,16 @@ ${focusSummary || "无"}
 ## 最近新闻
 ${newsSummary || "无最新新闻"}
 
+## 新闻智能层
+事件图:
+${eventGraphSummary || "暂无事件图"}
+
+组合影响:
+${portfolioImpactSummary || "暂无组合影响"}
+
+候选发现:
+${discoverySummary || "暂无候选发现"}
+
 ## 活跃研究论点
 ${thesisSummary || "暂无活跃论点（首次运行）"}
 
@@ -86,6 +126,8 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
    - 相关资产权重高但 thesis 久未更新
    - 观察列表资产没有稳定方向，且可能进入目标权重计划
    - 新闻与现有 thesis 矛盾
+   - 新闻智能层提示 holding/target 为 risk 或 review
+   - 候选发现只能作为研究线索，不能被当成自动加入观察列表或自动交易授权
    - conviction 为 "uncertain" 需要明确
    - 历史准确率低（<50%）的论点需要重新审视
 2. 如果发现任何不在现有论点中的重大变化，建议创建新研究线索。

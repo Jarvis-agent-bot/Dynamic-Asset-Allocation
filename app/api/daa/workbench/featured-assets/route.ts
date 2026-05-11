@@ -38,7 +38,7 @@ function clampLimitPerRole(value: unknown): number {
 
 function normalizeMarketFilter(value: unknown): FeaturedMarketFilter {
   const market = normalizeText(value).toUpperCase();
-  if (market === "US" || market === "HK" || market === "CN" || market === "KR" || market === "CRYPTO") return market;
+  if (market === "US" || market === "HK" || market === "CN" || market === "KR" || market === "CRYPTO" || market === "COMMODITY") return market;
   return "ALL";
 }
 
@@ -79,7 +79,8 @@ function normalizeRoleFilter(value: unknown): FeaturedRoleFilter {
 }
 
 function quoteType(assetClass: WorkbenchFeaturedAssetClass): string {
-  if (assetClass === "ETF" || assetClass === "COMMODITY" || assetClass === "CURRENCY") return "ETF";
+  if (assetClass === "ETF" || assetClass === "CURRENCY") return "ETF";
+  if (assetClass === "COMMODITY") return "COMMODITY";
   if (assetClass === "BOND") return "BOND";
   if (assetClass === "CRYPTO") return "CRYPTOCURRENCY";
   return "EQUITY";

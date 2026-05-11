@@ -18,10 +18,11 @@ function normalizeUpper(value: unknown): string {
   return String(value || "").trim().toUpperCase();
 }
 
-/** 猜 market：.HK/.SS/.SZ/.T 后缀明确是非 US 的排除 */
+/** 猜 market：常见非 US 后缀明确排除 */
 function isLikelyUsSymbol(symbol: string): boolean {
   const s = symbol.toUpperCase();
-  if (s.endsWith(".HK") || s.endsWith(".SS") || s.endsWith(".SZ") || s.endsWith(".T")) return false;
+  if (s.includes("=F")) return false;
+  if (s.endsWith(".HK") || s.endsWith(".SS") || s.endsWith(".SZ") || s.endsWith(".KS") || s.endsWith(".T")) return false;
   return true;
 }
 
@@ -53,10 +54,10 @@ export async function GET(req: Request) {
       }
     }
 
-    // 持仓 + watchlist（region=US 才加入）
+    // 持仓 + watchlist（以交易 market 为准；region 只是资产暴露地区，不能决定 Alpaca 订阅）
     for (const row of assets) {
-      const region = String(row.region || "US").toUpperCase();
-      if (region !== "US") continue;
+      const market = String(row.market || "US").toUpperCase();
+      if (market !== "US") continue;
       const held = row.holdingQty > 0;
       const watched = row.watchEnabled !== false;
       if (!held && !watched) continue;

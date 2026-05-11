@@ -44,6 +44,8 @@ async function isStoreSchemaReady(): Promise<boolean> {
       daa_asset_master: [
         "asset_key",
         "symbol",
+        "name",
+        "display_name_zh",
         "market",
         "currency",
         "asset_class",
@@ -926,6 +928,131 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_daa_news_signal_snapshot_v1_generated_desc
           ON daa_news_signal_snapshot_v1(generated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_news_event_snapshot_v1 (
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          event_hash TEXT NOT NULL,
+          item_hash TEXT NOT NULL,
+          title TEXT NOT NULL,
+          link TEXT,
+          source TEXT,
+          published_at TIMESTAMPTZ,
+          score_pct NUMERIC NOT NULL DEFAULT 50,
+          confidence_pct NUMERIC NOT NULL DEFAULT 0,
+          llm_summary TEXT,
+          llm_drivers_json JSONB,
+          llm_major_event_json JSONB,
+          llm_action_hint TEXT,
+          analyzed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, symbol, event_hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_news_event_snapshot_v1_symbol_published_desc
+          ON daa_news_event_snapshot_v1(symbol, (COALESCE(published_at, analyzed_at)) DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_news_event_snapshot_v1_symbol_item
+          ON daa_news_event_snapshot_v1(symbol, item_hash);
+
+          CREATE TABLE IF NOT EXISTS daa_news_event_graph_v1 (
+            provider TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+          event_hash TEXT NOT NULL,
+          item_hash TEXT NOT NULL,
+          theme_key TEXT NOT NULL,
+          theme_label_zh TEXT NOT NULL,
+          related_assets_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          event_score_pct NUMERIC NOT NULL DEFAULT 50,
+          reasons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (provider, symbol, event_hash, theme_key)
+          );
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_graph_v1_theme_generated
+            ON daa_news_event_graph_v1(theme_key, generated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_graph_v1_symbol_generated
+            ON daa_news_event_graph_v1(symbol, generated_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_news_event_related_asset_v1 (
+            provider TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            event_hash TEXT NOT NULL,
+            theme_key TEXT NOT NULL,
+            related_asset_key TEXT NOT NULL,
+            related_symbol TEXT NOT NULL,
+            related_market TEXT NOT NULL DEFAULT 'US',
+            relation TEXT NOT NULL DEFAULT 'related'
+              CHECK (relation IN ('source', 'same_theme', 'related')),
+            confidence_pct NUMERIC NOT NULL DEFAULT 50
+              CHECK (confidence_pct >= 0 AND confidence_pct <= 100),
+            reason_zh TEXT NOT NULL DEFAULT '',
+            generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (provider, symbol, event_hash, theme_key, related_asset_key)
+          );
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_related_asset_v1_related_generated
+            ON daa_news_event_related_asset_v1(related_asset_key, generated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_news_event_related_asset_v1_symbol_generated
+            ON daa_news_event_related_asset_v1(symbol, generated_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_news_portfolio_impact_v1 (
+            id TEXT PRIMARY KEY,
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          event_hash TEXT NOT NULL,
+          asset_key TEXT NOT NULL,
+            impact_scope TEXT NOT NULL
+              CHECK (impact_scope IN ('holding', 'watchlist', 'target', 'related_candidate')),
+            impact_level TEXT NOT NULL
+              CHECK (impact_level IN ('none', 'watch', 'review', 'risk')),
+            impact_score_pct NUMERIC NOT NULL DEFAULT 0
+              CHECK (impact_score_pct >= 0 AND impact_score_pct <= 100),
+            recommended_action TEXT NOT NULL DEFAULT 'record'
+              CHECK (recommended_action IN ('record', 'investigate', 'review_thesis', 'candidate_watchlist')),
+            reason_zh TEXT NOT NULL DEFAULT '',
+            generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (owner_account_id, provider, symbol, event_hash, asset_key)
+        );
+          CREATE INDEX IF NOT EXISTS idx_daa_news_portfolio_impact_v1_owner_generated
+            ON daa_news_portfolio_impact_v1(owner_account_id, generated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_news_portfolio_impact_v1_owner_symbol_generated
+            ON daa_news_portfolio_impact_v1(owner_account_id, symbol, generated_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_discovery_candidates_v1 (
+          id TEXT PRIMARY KEY,
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
+          topic_key TEXT NOT NULL,
+          topic_label_zh TEXT NOT NULL,
+          asset_key TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          market TEXT NOT NULL,
+          name TEXT,
+          display_name_zh TEXT,
+            score_pct NUMERIC NOT NULL DEFAULT 0
+              CHECK (score_pct >= 0 AND score_pct <= 100),
+            confidence TEXT NOT NULL DEFAULT 'low'
+              CHECK (confidence IN ('low', 'medium', 'high')),
+            status TEXT NOT NULL DEFAULT 'new'
+              CHECK (status IN ('new', 'watching', 'dismissed', 'archived')),
+            reason_zh TEXT NOT NULL DEFAULT '',
+            risk_notes_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            evidence_refs_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            seen_count INTEGER NOT NULL DEFAULT 1 CHECK (seen_count >= 1),
+            reviewed_at TIMESTAMPTZ,
+            promoted_at TIMESTAMPTZ,
+            dismissed_at TIMESTAMPTZ,
+            archived_at TIMESTAMPTZ,
+            status_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (owner_account_id, topic_key, asset_key)
+          );
+          CREATE INDEX IF NOT EXISTS idx_daa_discovery_candidates_v1_owner_status_score
+            ON daa_discovery_candidates_v1(owner_account_id, status, score_pct DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_discovery_candidates_v1_owner_status_score_updated
+            ON daa_discovery_candidates_v1(owner_account_id, status, score_pct DESC, updated_at DESC);
 
         CREATE TABLE IF NOT EXISTS daa_market_indicator_snapshot_v1 (
           id TEXT PRIMARY KEY,

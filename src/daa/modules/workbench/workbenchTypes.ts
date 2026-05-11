@@ -45,6 +45,8 @@ export type HfSignalSummary = {
 export type AssetUniverseView = {
   assetKey: string;
   symbol: string;
+  name: string | null;
+  displayNameZh: string | null;
   market: string;
   currency: string;
   assetClass: string;
@@ -414,6 +416,7 @@ export type WorkbenchSearchAssetResult = {
   priceSource?: string;
   priceAgeSec?: number | null;
   name: string;
+  displayNameZh: string | null;
   shortName: string;
   longName: string;
   exchange: string;

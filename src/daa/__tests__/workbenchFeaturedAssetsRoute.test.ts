@@ -83,7 +83,31 @@ describe("workbench-featured-assets-route-v1", () => {
     expect(json.ok).toBe(true);
     expect(json.data.groups.length).toBe(1);
     expect(json.data.groups[0]?.groupKey).toBe("real_asset");
-    expect(json.data.groups[0]?.items.map((item: { symbol: string }) => item.symbol)).toEqual(expect.arrayContaining(["GLD", "IAU", "SLV"]));
+    expect(json.data.groups[0]?.items.map((item: { symbol: string }) => item.symbol)).toEqual(expect.arrayContaining(["GC=F", "GLD", "IAU", "SLV"]));
+    expect(json.data.groups[0]?.items[0]).toMatchObject({
+      symbol: "GC=F",
+      market: "COMMODITY",
+      assetClass: "COMMODITY",
+      displayNameZh: "黄金",
+      quoteType: "COMMODITY",
+      typeDisp: "商品",
+    });
+  });
+
+  it("market=COMMODITY 返回独立商品交易品种", async () => {
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?market=COMMODITY"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.groups.length).toBe(1);
+    expect(json.data.groups[0]?.items).toEqual([
+      expect.objectContaining({
+        symbol: "GC=F",
+        market: "COMMODITY",
+        displayNameZh: "黄金",
+      }),
+    ]);
   });
 
   it("market=US 只返回美国市场资产但仍按角色分组", async () => {
@@ -115,8 +139,21 @@ describe("workbench-featured-assets-route-v1", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data.groups.length).toBeGreaterThan(0);
+    expect(json.data.groups.flatMap((group: { items: Array<{ symbol: string }> }) => group.items)
+      .map((item: { symbol: string }) => item.symbol)).toEqual(expect.arrayContaining(["NVDA", "MU", "AVGO", "AMD", "TSM", "ASML"]));
     expect(json.data.groups.flatMap((group: { items: Array<{ themeKey: string }> }) => group.items)
       .every((item: { themeKey: string }) => item.themeKey === "semiconductor")).toBe(true);
+  });
+
+  it("assetClass=EQUITY 返回港股与美股核心个股候选", async () => {
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?assetClass=EQUITY&limitPerRole=20"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    const symbols = json.data.groups.flatMap((group: { items: Array<{ symbol: string }> }) => group.items)
+      .map((item: { symbol: string }) => item.symbol);
+    expect(symbols).toEqual(expect.arrayContaining(["0700.HK", "1810.HK", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA"]));
   });
 
   it.each([

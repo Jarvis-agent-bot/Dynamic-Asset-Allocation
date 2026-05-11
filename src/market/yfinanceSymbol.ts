@@ -19,6 +19,7 @@ export function toYfinanceSymbolByMarket(symbolRaw: string, marketRaw: string): 
     if (/^\d{6}$/.test(symbol)) return symbol.startsWith("6") ? `${symbol}.SS` : `${symbol}.SZ`;
   }
 
+  if (market === "COMMODITY") return symbol;
+
   return normalizeYfinanceSymbol(symbol);
 }
-

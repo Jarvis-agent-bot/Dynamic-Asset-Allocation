@@ -88,6 +88,8 @@ describe("money valuation boundary", () => {
       rows: [{
         assetKey: "HK::0388.HK",
         symbol: "0388.HK",
+        name: "Hong Kong Exchanges and Clearing",
+        displayNameZh: "香港交易所",
         market: "HK",
         currency: "HKD",
         assetClass: "EQUITY",

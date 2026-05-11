@@ -139,6 +139,7 @@ export function WatchlistSearchBar(props: {
               const joined = isJoined(item);
               const busy = addingKey === assetKey(item);
               const name = item.longName || item.shortName || item.name || item.symbol;
+              const displayName = item.displayNameZh || name;
               return (
                 <div
                   key={`${item.market}::${item.symbol}`}
@@ -146,8 +147,8 @@ export function WatchlistSearchBar(props: {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-semibold text-[var(--text)]">{item.symbol}</span>
-                      <span className="truncate text-xs text-[var(--muted)]">{name}</span>
+                      <span className="text-sm font-semibold text-[var(--text)]">{displayName}</span>
+                      <span className="font-[var(--font-mono)] text-xs text-[var(--faint)]">{item.symbol}</span>
                     </div>
                     <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--faint)]">
                       <span>{item.market} · {item.currency}</span>
@@ -208,7 +209,7 @@ function FeaturedAssetsDialog(props: {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await props.onListFeaturedAssets({ role, market: "ALL", assetClass, limitPerRole: 8 });
+      const data = await props.onListFeaturedAssets({ role, market: "ALL", assetClass, limitPerRole: 20 });
       setGroups(Array.isArray(data.groups) ? data.groups : []);
     } catch {
       setGroups([]);
@@ -273,6 +274,7 @@ function FeaturedAssetsDialog(props: {
     if (item.market === "CN") return "A股";
     if (item.market === "KR") return "韩股";
     if (item.market === "CRYPTO") return "加密";
+    if (item.market === "COMMODITY") return "商品";
     return item.market;
   };
 

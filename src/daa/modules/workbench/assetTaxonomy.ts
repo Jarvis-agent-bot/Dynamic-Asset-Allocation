@@ -1,5 +1,5 @@
 export type AssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
-export type Region = "US" | "HK" | "CN" | "EU" | "JP" | "GLOBAL" | "OTHER";
+export type Region = "US" | "HK" | "CN" | "KR" | "EU" | "JP" | "GLOBAL" | "OTHER";
 export type InstrumentType = "STOCK" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
 
 export function normalizeAssetClass(value: unknown, fallback: AssetClass = "OTHER"): AssetClass {
@@ -12,7 +12,7 @@ export function normalizeAssetClass(value: unknown, fallback: AssetClass = "OTHE
 
 export function normalizeRegion(value: unknown, fallback: Region = "GLOBAL"): Region {
   const v = String(value || "").trim().toUpperCase();
-  if (v === "US" || v === "HK" || v === "CN" || v === "EU" || v === "JP" || v === "GLOBAL" || v === "OTHER") {
+  if (v === "US" || v === "HK" || v === "CN" || v === "KR" || v === "EU" || v === "JP" || v === "GLOBAL" || v === "OTHER") {
     return v;
   }
   return fallback;
@@ -31,6 +31,7 @@ export function inferRegionByMarket(marketRaw: unknown): Region {
   if (market === "US") return "US";
   if (market === "HK") return "HK";
   if (market === "CN") return "CN";
+  if (market === "KR") return "KR";
   if (market === "JP") return "JP";
   if (market === "EU") return "EU";
   if (market === "CRYPTO") return "GLOBAL";

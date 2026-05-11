@@ -6,6 +6,7 @@ import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/norma
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { getAssetDisplayName } from "@/src/daa/assetRegistry";
 import {
   inferMarketGroup, inferRegionByMarket,
   normalizeAssetClass, normalizeInstrumentType, normalizeRegion,
@@ -33,6 +34,8 @@ function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUnivers
   return {
     assetKey: buildPositionKey(symbol, market),
     symbol,
+    name: normalizeText(row.name) || null,
+    displayNameZh: normalizeText(row.display_name_zh) || getAssetDisplayName(symbol),
     market,
     currency: normalizeText(row.currency, "USD").toUpperCase(),
     assetClass,
@@ -65,6 +68,8 @@ function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUnivers
 const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
   "am.asset_key",
   "am.symbol",
+  "am.name",
+  "am.display_name_zh",
   "am.market",
   "am.currency",
   "am.asset_class",
@@ -228,6 +233,8 @@ export async function batchReadAssetPriceSnapshots(
 
 export async function upsertDaaAssetUniverseRow(input: {
   symbol: string;
+  name?: string | null;
+  displayNameZh?: string | null;
   market?: string;
   currency?: string;
   assetClass?: string;
@@ -248,6 +255,8 @@ export async function upsertDaaAssetUniverseRow(input: {
     const market = normalizeText(input.market, "US").toUpperCase();
     if (!symbol) throw new Error("symbol is required");
     const assetKey = buildPositionKey(symbol, market);
+    const name = normalizeText(input.name) || null;
+    const displayNameZh = normalizeText(input.displayNameZh) || getAssetDisplayName(symbol);
     const currency = normalizeCcyCode(input.currency, "USD");
     const assetClass = normalizeAssetClass(input.assetClass, "EQUITY");
     const region = normalizeRegion(input.region, inferRegionByMarket(market));
@@ -263,7 +272,7 @@ export async function upsertDaaAssetUniverseRow(input: {
 
     const txQuery = query;
     await upsertAssetMasterInTx(txQuery, {
-      assetKey, symbol, market, currency, assetClass, region, exchange, instrumentType, marketGroup,
+      assetKey, symbol, name, displayNameZh, market, currency, assetClass, region, exchange, instrumentType, marketGroup,
     });
     await upsertWatchlistEntryInTx(txQuery, {
       assetKey, watchEnabled, watchTags, notes,
@@ -278,6 +287,8 @@ export async function upsertDaaAssetUniverseRow(input: {
 
 export async function patchDaaAssetUniverseRow(input: {
   assetKey: string;
+  name?: string | null;
+  displayNameZh?: string | null;
   market?: string;
   currency?: string;
   assetClass?: string;
@@ -316,6 +327,8 @@ export async function patchDaaAssetUniverseRow(input: {
       const assetClass: AssetClass = normalizeAssetClass(input.assetClass, currentAssetClass);
       const next = {
         symbol: current.symbol,
+        name: input.name === undefined ? current.name : (normalizeText(input.name) || null),
+        displayNameZh: input.displayNameZh === undefined ? current.displayNameZh : (normalizeText(input.displayNameZh) || getAssetDisplayName(current.symbol)),
         market,
         currency: normalizeCcyCode(input.currency, current.currency),
         assetClass,
@@ -337,6 +350,7 @@ export async function patchDaaAssetUniverseRow(input: {
       // 写入规范化表
       await upsertAssetMasterInTx(txQuery, {
         assetKey, symbol: next.symbol, market: next.market, currency: next.currency,
+        name: next.name, displayNameZh: next.displayNameZh,
         assetClass: next.assetClass, region: next.region, exchange: next.exchange,
         instrumentType: next.instrumentType, marketGroup: next.marketGroup,
       });

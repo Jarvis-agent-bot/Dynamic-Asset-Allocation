@@ -17,8 +17,13 @@ import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTyp
 /*  单行组件                                                           */
 /* ------------------------------------------------------------------ */
 
+function assetDisplayName(row: AssetUniverseView): string {
+  return row.displayNameZh || row.name || row.symbol;
+}
+
 function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; sparkData: number[] | null; onClick: () => void }) {
   const { row, baseCurrency, sparkData } = props;
+  const displayName = assetDisplayName(row);
 
   const pnl = row.unrealizedPnlPct ?? null;
 
@@ -39,8 +44,11 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; spark
       {/* 标的信息 */}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-[var(--text)]">{row.symbol}</span>
-          <span className="truncate text-xs text-[var(--muted)]">{row.market} · {row.currency}</span>
+          <span className="truncate text-sm font-semibold text-[var(--text)]">{displayName}</span>
+          <span className="shrink-0 font-[var(--font-mono)] text-xs text-[var(--faint)]">{row.symbol}</span>
+        </div>
+        <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
+          {row.market} · {row.currency}
         </div>
       </div>
 

@@ -148,7 +148,7 @@ export function useAssetActions(input: {
     setAssetActioningKey(key);
     try {
       await patchWorkbenchAsset(key, { watchEnabled: false, targetWeightHint: 0 });
-      toast.success(`${item.name || item.symbol} 已移出观察列表`);
+      toast.success(`${item.displayNameZh || item.name || item.symbol} 已移出观察列表`);
       await inputRef.current.loadBootstrap(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "移除观察失败");

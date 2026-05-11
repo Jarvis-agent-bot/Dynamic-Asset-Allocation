@@ -15,8 +15,9 @@ import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, toPositive } from "@/src/daa/utils/normalize";
 import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getAssetDisplayName } from "@/src/daa/assetRegistry";
 
-type LookupMarket = "US" | "HK" | "CN" | "CRYPTO" | "OTHER";
+type LookupMarket = "US" | "HK" | "CN" | "CRYPTO" | "COMMODITY" | "OTHER";
 
 type SearchAssetItem = {
   symbol: string;
@@ -28,6 +29,7 @@ type SearchAssetItem = {
   priceSource?: string;
   priceAgeSec?: number | null;
   name: string;
+  displayNameZh: string | null;
   shortName: string;
   longName: string;
   exchange: string;
@@ -81,11 +83,15 @@ function safeQuotesArray(payload: unknown): unknown[] {
   return Array.isArray(obj.quotes) ? obj.quotes : [];
 }
 
-function shouldSkipQuoteType(quoteTypeRaw: unknown): boolean {
-  const quoteType = normalizeText(quoteTypeRaw).toUpperCase();
+const COMMODITY_FUTURE_SYMBOLS_ = new Set(["GC=F", "SI=F", "CL=F", "BZ=F", "HG=F", "NG=F"]);
+const COMMODITY_ETF_SYMBOLS_ = new Set(["GLD", "IAU", "SLV", "USO", "BNO", "DBC", "DBA"]);
+
+function shouldSkipQuote(input: { quoteType: unknown; symbol: string }): boolean {
+  const quoteType = normalizeText(input.quoteType).toUpperCase();
+  const symbol = normalizeText(input.symbol).toUpperCase();
   if (!quoteType) return false;
   if (quoteType === "OPTION") return true;
-  if (quoteType === "FUTURE") return true;
+  if (quoteType === "FUTURE") return !COMMODITY_FUTURE_SYMBOLS_.has(symbol);
   if (quoteType === "WARRANT") return true;
   return false;
 }
@@ -133,6 +139,7 @@ async function enrichPreferredPrice(
 function inferMarket(symbolRaw: unknown, exchangeRaw: unknown): LookupMarket {
   const symbol = normalizeText(symbolRaw).toUpperCase();
   const exchange = normalizeText(exchangeRaw).toUpperCase();
+  if (COMMODITY_FUTURE_SYMBOLS_.has(symbol) || symbol.includes("=F")) return "COMMODITY";
   if (symbol.includes("-USD")) return "CRYPTO";
   if (symbol.endsWith(".HK") || exchange.includes("HK") || exchange.includes("HONG KONG")) return "HK";
   if (symbol.endsWith(".SS") || symbol.endsWith(".SZ") || exchange.includes("SHANGHAI") || exchange.includes("SHENZHEN") || exchange.includes("SSE")) return "CN";
@@ -140,8 +147,6 @@ function inferMarket(symbolRaw: unknown, exchangeRaw: unknown): LookupMarket {
   if (/^[A-Z][A-Z0-9.\-]{0,9}$/.test(symbol) && !symbol.includes(".")) return "US";
   return "OTHER";
 }
-
-const COMMODITY_ETF_SYMBOLS_ = new Set(["GLD", "IAU", "SLV", "USO", "BNO", "DBC", "DBA"]);
 
 function shouldTreatAsCommodity(input: {
   symbol: string;
@@ -161,6 +166,7 @@ function shouldTreatAsCommodity(input: {
   ].map((item) => normalizeText(item).toUpperCase()).join(" ");
 
   if (quoteType === "COMMODITY") return true;
+  if (COMMODITY_FUTURE_SYMBOLS_.has(symbol)) return true;
   if (COMMODITY_ETF_SYMBOLS_.has(symbol)) return true;
   if (quoteType !== "ETF" && quoteType !== "EQUITY") return false;
   return /GOLD|SILVER|OIL|CRUDE|BRENT|COMMODITY|METALS|AGRICULTURE|ENERGY/.test(text);
@@ -247,7 +253,7 @@ export async function GET(req: Request) {
     for (const raw of quotes) {
       const row = safeQuote(raw);
       const symbol = normalizeText(row.symbol).toUpperCase();
-      if (shouldSkipQuoteType(row.quoteType)) continue;
+      if (shouldSkipQuote({ quoteType: row.quoteType, symbol })) continue;
       const exchange = normalizeText(safeString(row.exchange) || safeString(row.exchDisp));
       const market = inferMarket(symbol, exchange);
       const dedupKey = `${market}::${symbol}`;
@@ -258,6 +264,7 @@ export async function GET(req: Request) {
         market,
       });
       const name = normalizeText(safeString(row.shortname) || safeString(row.longname) || symbol) || symbol;
+      const displayNameZh = getAssetDisplayName(symbol);
       const shortName = normalizeText(safeString(row.shortname) || symbol);
       const longName = normalizeText(safeString(row.longname) || safeString(row.shortname) || symbol);
       const typeDisp = normalizeText(safeString(row.typeDisp) || safeString(row.quoteType));
@@ -276,6 +283,7 @@ export async function GET(req: Request) {
         currency: normalizeDaaCurrencyCode(row.currency, market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD"),
         price: toPositive(row.regularMarketPrice) || toPositive(row.postMarketPrice) || toPositive(row.bid) || toPositive(row.ask),
         name,
+        displayNameZh,
         shortName,
         longName,
         exchange,

@@ -1,4 +1,4 @@
-export type WorkbenchFeaturedMarket = "US" | "HK" | "CN" | "KR" | "CRYPTO";
+export type WorkbenchFeaturedMarket = "US" | "HK" | "CN" | "KR" | "CRYPTO" | "COMMODITY";
 export type WorkbenchFeaturedAssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CRYPTO" | "CURRENCY";
 
 export type WorkbenchFeaturedTheme =
@@ -142,6 +142,10 @@ export const WORKBENCH_FEATURED_ASSETS_CATALOG_: WorkbenchFeaturedCatalogItem[] 
   }),
 
   withRole({
+    symbol: "GC=F", market: "COMMODITY", assetClass: "COMMODITY", name: "Gold Futures Continuous Contract", displayNameZh: "黄金",
+    currency: "USD", exchange: "COMEX", thesisTagZh: "黄金价格基准", roleKey: "real_asset", allocationNoteZh: "独立黄金敞口，用于组合里的黄金配置；真实交易时需映射到券商支持的现货、期货或 ETF 工具。", suggestedWeightBandZh: "3%-15%", themeKey: "commodity_resource", themeLabelZh: "商品/资源",
+  }),
+  withRole({
     symbol: "GLD", market: "US", assetClass: "COMMODITY", name: "SPDR Gold Shares", displayNameZh: "黄金 ETF",
     currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "黄金现货代理", roleKey: "real_asset", allocationNoteZh: "黄金核心敞口，用于抗通胀与避险。", suggestedWeightBandZh: "3%-15%", themeKey: "commodity_resource", themeLabelZh: "商品/资源",
   }),
@@ -176,8 +180,73 @@ export const WORKBENCH_FEATURED_ASSETS_CATALOG_: WorkbenchFeaturedCatalogItem[] 
   }),
 
   withRole({
+    symbol: "0700.HK", market: "HK", assetClass: "EQUITY", name: "Tencent Holdings", displayNameZh: "腾讯控股",
+    currency: "HKD", exchange: "HKEX", thesisTagZh: "港股互联网平台", roleKey: "satellite_theme", allocationNoteZh: "港股平台龙头，适合作为中国互联网敞口的观察仓。", suggestedWeightBandZh: "0%-8%", themeKey: "satellite_theme", themeLabelZh: "平台龙头",
+  }),
+  withRole({
+    symbol: "1810.HK", market: "HK", assetClass: "EQUITY", name: "Xiaomi Corporation", displayNameZh: "小米集团",
+    currency: "HKD", exchange: "HKEX", thesisTagZh: "消费电子与智能汽车", roleKey: "satellite_theme", allocationNoteZh: "消费电子、IoT 与智能汽车主题，波动高于宽基，应小比例观察。", suggestedWeightBandZh: "0%-6%", themeKey: "satellite_theme", themeLabelZh: "平台龙头",
+  }),
+  withRole({
+    symbol: "AAPL", market: "US", assetClass: "EQUITY", name: "Apple Inc.", displayNameZh: "苹果",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "美股七姐妹", roleKey: "satellite_theme", allocationNoteZh: "高质量消费科技龙头，适合作为美股大盘之外的卫星观察。", suggestedWeightBandZh: "0%-8%", themeKey: "satellite_theme", themeLabelZh: "美股七姐妹",
+  }),
+  withRole({
+    symbol: "MSFT", market: "US", assetClass: "EQUITY", name: "Microsoft Corporation", displayNameZh: "微软",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "云计算与 AI 平台", roleKey: "satellite_theme", allocationNoteZh: "云和企业 AI 平台龙头，适合观察估值与盈利韧性。", suggestedWeightBandZh: "0%-8%", themeKey: "satellite_theme", themeLabelZh: "美股七姐妹",
+  }),
+  withRole({
+    symbol: "NVDA", market: "US", assetClass: "EQUITY", name: "NVIDIA Corporation", displayNameZh: "英伟达",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "AI 算力核心", roleKey: "satellite_theme", allocationNoteZh: "AI 算力核心标的，景气弹性强但估值和回撤风险也高。", suggestedWeightBandZh: "0%-8%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "AMZN", market: "US", assetClass: "EQUITY", name: "Amazon.com Inc.", displayNameZh: "亚马逊",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "云与电商平台", roleKey: "satellite_theme", allocationNoteZh: "云计算和电商平台龙头，可用于观察消费与云资本开支周期。", suggestedWeightBandZh: "0%-8%", themeKey: "satellite_theme", themeLabelZh: "美股七姐妹",
+  }),
+  withRole({
+    symbol: "GOOGL", market: "US", assetClass: "EQUITY", name: "Alphabet Inc.", displayNameZh: "谷歌",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "搜索广告与 AI", roleKey: "satellite_theme", allocationNoteZh: "广告、云和 AI 模型能力共同驱动，适合作为平台科技观察仓。", suggestedWeightBandZh: "0%-8%", themeKey: "satellite_theme", themeLabelZh: "美股七姐妹",
+  }),
+  withRole({
+    symbol: "META", market: "US", assetClass: "EQUITY", name: "Meta Platforms", displayNameZh: "Meta",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "社交广告与 AI", roleKey: "satellite_theme", allocationNoteZh: "广告现金流和 AI 推荐效率相关，适合小比例卫星配置。", suggestedWeightBandZh: "0%-8%", themeKey: "satellite_theme", themeLabelZh: "美股七姐妹",
+  }),
+  withRole({
+    symbol: "TSLA", market: "US", assetClass: "EQUITY", name: "Tesla Inc.", displayNameZh: "特斯拉",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "电动车与机器人", roleKey: "satellite_theme", allocationNoteZh: "成长叙事弹性大，价格波动和预期差都较强，应严格控制仓位。", suggestedWeightBandZh: "0%-6%", themeKey: "satellite_theme", themeLabelZh: "美股七姐妹",
+  }),
+
+  withRole({
     symbol: "SMH", market: "US", assetClass: "ETF", name: "VanEck Semiconductor ETF", displayNameZh: "半导体 ETF",
     currency: "USD", exchange: "NASDAQ", thesisTagZh: "半导体产业链", roleKey: "satellite_theme", allocationNoteZh: "高景气主题仓，适合小比例增强。", suggestedWeightBandZh: "0%-12%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "MU", market: "US", assetClass: "EQUITY", name: "Micron Technology", displayNameZh: "美光科技",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "存储周期", roleKey: "satellite_theme", allocationNoteZh: "存储价格周期和 AI 服务器需求相关，适合作为存储主题观察仓。", suggestedWeightBandZh: "0%-5%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "000660.KS", market: "KR", assetClass: "EQUITY", name: "SK hynix", displayNameZh: "SK 海力士",
+    currency: "KRW", exchange: "KRX", thesisTagZh: "HBM 存储", roleKey: "satellite_theme", allocationNoteZh: "HBM 和高端存储代表，适合跟踪 AI 服务器存储景气度。", suggestedWeightBandZh: "0%-5%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "AVGO", market: "US", assetClass: "EQUITY", name: "Broadcom Inc.", displayNameZh: "博通",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "AI 网络与定制芯片", roleKey: "satellite_theme", allocationNoteZh: "网络芯片与定制 ASIC 暴露，适合观察 AI 基建资本开支。", suggestedWeightBandZh: "0%-6%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "AMD", market: "US", assetClass: "EQUITY", name: "Advanced Micro Devices", displayNameZh: "AMD",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "AI 加速器与 CPU", roleKey: "satellite_theme", allocationNoteZh: "GPU/CPU 竞争格局标的，适合和英伟达、台积电一起观察。", suggestedWeightBandZh: "0%-6%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "TSM", market: "US", assetClass: "EQUITY", name: "Taiwan Semiconductor Manufacturing", displayNameZh: "台积电",
+    currency: "USD", exchange: "NYSE", thesisTagZh: "先进制程代工", roleKey: "satellite_theme", allocationNoteZh: "先进制程和 AI 芯片代工核心，适合代表半导体制造环节。", suggestedWeightBandZh: "0%-6%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "ASML", market: "US", assetClass: "EQUITY", name: "ASML Holding", displayNameZh: "阿斯麦",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "光刻机设备", roleKey: "satellite_theme", allocationNoteZh: "半导体设备稀缺环节，适合观察先进制程资本开支周期。", suggestedWeightBandZh: "0%-5%", themeKey: "semiconductor", themeLabelZh: "半导体",
+  }),
+  withRole({
+    symbol: "ARM", market: "US", assetClass: "EQUITY", name: "Arm Holdings", displayNameZh: "Arm",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "芯片架构授权", roleKey: "satellite_theme", allocationNoteZh: "芯片架构授权模式，适合作为 AI 终端与服务器芯片生态观察项。", suggestedWeightBandZh: "0%-5%", themeKey: "semiconductor", themeLabelZh: "半导体",
   }),
   withRole({
     symbol: "BOTZ", market: "US", assetClass: "ETF", name: "Global X Robotics & Artificial Intelligence ETF", displayNameZh: "机器人与人工智能 ETF",

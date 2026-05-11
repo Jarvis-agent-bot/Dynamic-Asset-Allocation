@@ -58,6 +58,56 @@ export interface NewsSnapshot {
     symbol: string;
     title: string;
     ts: string;
+    source: string | null;
+    summary: string | null;
+    actionHint: string | null;
+    scorePct: number | null;
+    confidencePct: number | null;
+    majorEvent: {
+      type: string;
+      impact: string;
+      description: string;
+    } | null;
+  }>;
+}
+
+export interface NewsIntelligenceSnapshot {
+  eventGraphs: Array<{
+    symbol: string;
+    eventHash: string;
+    themeKey: string;
+    themeLabelZh: string;
+    eventScorePct: number;
+    reasons: string[];
+    relatedAssets: Array<{
+      assetKey: string;
+      symbol: string;
+      displayNameZh: string | null;
+      relation: string;
+      confidencePct: number;
+      reasonZh: string;
+    }>;
+  }>;
+  portfolioImpacts: Array<{
+    assetKey: string;
+    symbol: string;
+    eventHash: string;
+    impactScope: string;
+    impactLevel: string;
+    impactScorePct: number;
+    recommendedAction: string;
+    reasonZh: string;
+  }>;
+  discoveryCandidates: Array<{
+    topicKey: string;
+    topicLabelZh: string;
+    assetKey: string;
+    symbol: string;
+    displayNameZh: string | null;
+    scorePct: number;
+    confidence: string;
+    status: string;
+    reasonZh: string;
   }>;
 }
 
@@ -74,6 +124,7 @@ export const CognitiveStateAnnotation = Annotation.Root({
   watchlist: Annotation<WatchlistSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   market: Annotation<MarketSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   news: Annotation<NewsSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
+  newsIntelligence: Annotation<NewsIntelligenceSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   activeTheses: Annotation<ResearchThread[]>({ reducer: (_, b) => b, default: () => [] }),
 
   // 调查队列（prioritize 节点填充）

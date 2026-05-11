@@ -11,6 +11,8 @@ export const runtime = "nodejs";
 type Body = {
   symbol?: unknown;
   market?: unknown;
+  name?: unknown;
+  displayNameZh?: unknown;
   currency?: unknown;
   assetClass?: unknown;
   region?: unknown;
@@ -45,6 +47,8 @@ export async function POST(req: Request) {
     const saved = await upsertDaaAssetUniverseRow({
       symbol,
       market,
+      name: toOptionalText(body?.name) ?? null,
+      displayNameZh: toOptionalText(body?.displayNameZh) ?? null,
       currency: toOptionalText(body?.currency),
       assetClass: toOptionalText(body?.assetClass),
       region: toOptionalText(body?.region),

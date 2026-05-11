@@ -18,11 +18,12 @@ import { analyzeNewsWithLlm, majorEventTypeLabelZh, type LlmNewsAnalysis } from 
 import { sourceCredibility } from "@/src/daa/signals/newsProviders";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
-import { listDaaAssetUniverse, upsertDaaNewsItemSnapshots } from "@/src/daa/store/daaStorePg";
+import { listDaaAssetUniverse, upsertDaaNewsEventSnapshots, upsertDaaNewsItemSnapshots } from "@/src/daa/store/daaStorePg";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
+import { refreshNewsIntelligenceForEvents } from "@/src/daa/modules/news-intelligence/newsIntelligenceService";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -79,16 +80,25 @@ function titleHash8(title: string): string {
 }
 
 /**
- * 把实时分析结果写进 daa_news_signal_snapshot_v1，并把当前 item 的 title hash 并入 item_hash_set。
+ * 把实时分析结果同时写进 symbol signal 与事件层。
  *
- * 这是修复前端"Today 新闻流"延迟的关键：UI 只给 item_hash_set 里的 item 挂 majorEvent 标签，
- * 以前 realtime 只推送不写 signal，要等 30 分钟 news-refresh cron 才补齐 hash_set。
+ * signal 负责聚合评分与缓存；event snapshot 负责把 majorEvent 精准绑定到当前 item，
+ * 避免同一 symbol 下的其他新闻被误标为重大事件。
  */
 async function upsertRealtimeNewsSignal(
   symbol: string,
   analysis: LlmNewsAnalysis,
-  titleHash: string,
+  item: {
+    titleHash: string;
+    itemHash: string;
+    title: string;
+    link: string | null;
+    source: string;
+    publishedAt: string;
+  },
 ): Promise<void> {
+  const scorePct = clamp(50 + analysis.sentimentScore / 2, 0, 100);
+  const confidencePct = analysis.majorEvent?.impact === "high" ? 80 : analysis.majorEvent?.impact === "medium" ? 60 : 40;
   await withDaaPgClient(async ({ query }) => {
     await query(
       `INSERT INTO daa_news_signal_snapshot_v1
@@ -118,18 +128,40 @@ async function upsertRealtimeNewsSignal(
       [
         "alpaca",
         symbol,
-        // 中性分数：score_pct 50 代表"有数据但未评估方向"，避免覆盖批量 cron 的真实分数
-        50 + Math.round(analysis.sentimentScore / 4),
-        analysis.majorEvent?.impact === "high" ? 80 : analysis.majorEvent?.impact === "medium" ? 60 : 40,
+        scorePct,
+        confidencePct,
         1,
         JSON.stringify([]),
         analysis.summary,
         JSON.stringify(analysis.drivers),
         analysis.majorEvent ? JSON.stringify(analysis.majorEvent) : null,
         analysis.actionHint,
-        titleHash,
+        item.titleHash,
       ],
     );
+  });
+  const now = new Date().toISOString();
+  const eventSnapshot = {
+    provider: "alpaca",
+    symbol,
+    eventHash: createHash("sha1").update(`alpaca::${symbol}::${item.itemHash}`).digest("hex").slice(0, 20),
+    itemHash: item.itemHash,
+    title: item.title,
+    link: item.link,
+    source: item.source,
+    publishedAt: item.publishedAt,
+    scorePct,
+    confidencePct,
+    llmSummary: analysis.summary,
+    llmDrivers: analysis.drivers,
+    llmMajorEvent: analysis.majorEvent,
+    llmActionHint: analysis.actionHint,
+    analyzedAt: now,
+    updatedAt: now,
+  };
+  await upsertDaaNewsEventSnapshots([eventSnapshot]);
+  await refreshNewsIntelligenceForEvents([eventSnapshot]).catch((e) => {
+    logSwallowed(`newsRealtime.newsIntelligence.${symbol}`, e);
   });
 }
 
@@ -273,7 +305,14 @@ export async function POST(req: Request) {
 
           // 立即把分析结果写回 signal 表，让 Today 新闻流能即时标出 majorEvent
           try {
-            await upsertRealtimeNewsSignal(symbol, analysis, titleHash);
+            await upsertRealtimeNewsSignal(symbol, analysis, {
+              titleHash,
+              itemHash,
+              title: event.headline,
+              link,
+              source: event.source,
+              publishedAt: event.created_at,
+            });
           } catch (e) {
             logSwallowed(`newsRealtime.signal.${symbol}`, e);
           }

@@ -88,6 +88,8 @@ export async function listWorkbenchFeaturedAssets(input: {
 export async function upsertWorkbenchAsset(input: {
   symbol: string;
   market: string;
+  name?: string | null;
+  displayNameZh?: string | null;
   currency?: string;
   assetClass?: string;
   region?: string;
@@ -117,6 +119,8 @@ export async function patchWorkbenchAsset(assetKey: string, input: {
   costBasis?: number | null;
   notes?: string;
   assetClass?: string;
+  name?: string | null;
+  displayNameZh?: string | null;
   region?: string;
   exchange?: string;
   instrumentType?: string;

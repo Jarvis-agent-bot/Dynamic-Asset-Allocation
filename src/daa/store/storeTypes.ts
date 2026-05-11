@@ -73,6 +73,8 @@ export type DaaStoreCandidateAsset = {
 export type DaaStoreAssetUniverseRow = {
   assetKey: string;
   symbol: string;
+  name: string | null;
+  displayNameZh: string | null;
   market: string;
   currency: string;
   assetClass: string;
@@ -167,6 +169,126 @@ export type DaaStoreNewsItemSnapshot = {
   sourceCredibility: number;
   freshness: number;
   rawRefId: string | null;
+};
+
+export type DaaStoreNewsDrivers = {
+  bullish: string[];
+  bearish: string[];
+};
+
+export type DaaStoreNewsMajorEvent = {
+  type: string;
+  impact: string;
+  description: string;
+};
+
+export type DaaStoreNewsEventSnapshot = {
+  provider: string;
+  symbol: string;
+  eventHash: string;
+  itemHash: string;
+  title: string;
+  link: string | null;
+  source: string | null;
+  publishedAt: string | null;
+  scorePct: number;
+  confidencePct: number;
+  llmSummary: string | null;
+  llmDrivers: DaaStoreNewsDrivers | null;
+  llmMajorEvent: DaaStoreNewsMajorEvent | null;
+  llmActionHint: string | null;
+  analyzedAt: string;
+  updatedAt: string;
+};
+
+export type DaaStoreNewsRelatedAsset = {
+  assetKey: string;
+  symbol: string;
+  market: string;
+  name: string | null;
+  displayNameZh: string | null;
+  relation: string;
+  confidencePct: number;
+  reasonZh: string;
+};
+
+export type DaaStoreNewsEventGraph = {
+  provider: string;
+  symbol: string;
+  eventHash: string;
+  itemHash: string;
+  themeKey: string;
+  themeLabelZh: string;
+  relatedAssets: DaaStoreNewsRelatedAsset[];
+  eventScorePct: number;
+  reasons: string[];
+  generatedAt: string;
+  updatedAt: string;
+};
+
+export type DaaStoreNewsEventRelatedAssetEdge = {
+  provider: string;
+  symbol: string;
+  eventHash: string;
+  themeKey: string;
+  relatedAssetKey: string;
+  relatedSymbol: string;
+  relatedMarket: string;
+  relation: string;
+  confidencePct: number;
+  reasonZh: string;
+  generatedAt: string;
+  updatedAt: string;
+};
+
+export type DaaStoreNewsImpactScope = "holding" | "watchlist" | "target" | "related_candidate";
+export type DaaStoreNewsImpactLevel = "none" | "watch" | "review" | "risk";
+export type DaaStoreNewsRecommendedAction = "record" | "investigate" | "review_thesis" | "candidate_watchlist";
+
+export type DaaStoreNewsPortfolioImpact = {
+  id: string;
+  ownerAccountId: string;
+  provider: string;
+  symbol: string;
+  eventHash: string;
+  assetKey: string;
+  impactScope: DaaStoreNewsImpactScope;
+  impactLevel: DaaStoreNewsImpactLevel;
+  impactScorePct: number;
+  recommendedAction: DaaStoreNewsRecommendedAction;
+  reasonZh: string;
+  generatedAt: string;
+  updatedAt: string;
+};
+
+export type DaaStoreDiscoveryCandidateStatus = "new" | "watching" | "dismissed" | "archived";
+export type DaaStoreDiscoveryCandidateConfidence = "low" | "medium" | "high";
+
+export type DaaStoreDiscoveryCandidate = {
+  id: string;
+  ownerAccountId: string;
+  topicKey: string;
+  topicLabelZh: string;
+  assetKey: string;
+  symbol: string;
+  market: string;
+  name: string | null;
+  displayNameZh: string | null;
+  scorePct: number;
+  confidence: DaaStoreDiscoveryCandidateConfidence;
+  status: DaaStoreDiscoveryCandidateStatus;
+  reasonZh: string;
+  riskNotesZh: string[];
+  evidenceRefs: string[];
+  discoveredAt: string;
+  lastSeenAt: string;
+  seenCount: number;
+  reviewedAt: string | null;
+  promotedAt: string | null;
+  dismissedAt: string | null;
+  archivedAt: string | null;
+  statusUpdatedAt: string;
+  updatedAt: string;
 };
 
 export type DaaStoreMarketIndicatorSnapshot = {

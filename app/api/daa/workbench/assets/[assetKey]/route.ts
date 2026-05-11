@@ -16,6 +16,8 @@ type Body = {
   holdingPrice?: unknown;
   costBasis?: unknown;
   notes?: unknown;
+  name?: unknown;
+  displayNameZh?: unknown;
   assetClass?: unknown;
   region?: unknown;
   exchange?: unknown;
@@ -48,6 +50,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
       holdingPrice: body?.holdingPrice == null ? undefined : Number(body.holdingPrice),
       costBasis: body?.costBasis === undefined ? undefined : (body.costBasis == null ? null : Number(body.costBasis)),
       notes: body?.notes === undefined ? undefined : (body?.notes == null ? null : String(body.notes)),
+      name: body?.name === undefined ? undefined : (body?.name == null ? null : String(body.name)),
+      displayNameZh: body?.displayNameZh === undefined ? undefined : (body?.displayNameZh == null ? null : String(body.displayNameZh)),
       assetClass: body?.assetClass == null ? undefined : String(body.assetClass),
       region: body?.region == null ? undefined : String(body.region),
       exchange: body?.exchange == null ? undefined : String(body.exchange),

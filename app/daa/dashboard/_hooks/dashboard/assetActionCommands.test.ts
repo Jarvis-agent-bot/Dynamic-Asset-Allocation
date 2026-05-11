@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  addWatchlistAsset,
   buildCalibrationDraft,
   buildManualExecutionInput,
   createManualOrderDraft,
@@ -140,6 +141,41 @@ describe("assetActionCommands", () => {
       targetWeightHint: 0.125,
       watchEnabled: true,
     });
+  });
+
+  it("adds watchlist assets with persisted names", async () => {
+    const upsertWorkbenchAsset = vi.fn().mockResolvedValue(undefined);
+    const result = await addWatchlistAsset({
+      item: {
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        price: 180,
+        name: "Apple Inc.",
+        displayNameZh: "苹果",
+        shortName: "Apple",
+        longName: "Apple Inc.",
+        exchange: "NASDAQ",
+        exchangeDisp: "NASDAQ",
+        quoteType: "EQUITY",
+        typeDisp: "股票",
+        assetClass: "EQUITY",
+        region: "US",
+        instrumentType: "STOCK",
+        marketGroup: "US_EQUITY",
+        yfinanceSymbol: "AAPL",
+      },
+      upsertWorkbenchAsset,
+    });
+
+    expect(result).toEqual({ ok: true, message: "苹果 已加入观察列表", data: { label: "苹果" } });
+    expect(upsertWorkbenchAsset).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: "AAPL",
+      market: "US",
+      name: "Apple Inc.",
+      displayNameZh: "苹果",
+      watchEnabled: true,
+    }));
   });
 
   it("rejects negative target weight before API mutation", async () => {
