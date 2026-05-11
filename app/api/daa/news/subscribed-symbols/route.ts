@@ -13,6 +13,7 @@ import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaSto
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function normalizeUpper(value: unknown): string {
   return String(value || "").trim().toUpperCase();

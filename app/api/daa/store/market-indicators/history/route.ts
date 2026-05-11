@@ -6,6 +6,7 @@ import {
 import type { DaaMarketIndicatorKey, DaaMarketIndicatorScope } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const VALID_KEYS = new Set<DaaMarketIndicatorKey>([
   "vix",

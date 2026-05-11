@@ -3,6 +3,7 @@ import { getDaaAuthContextFromRequest } from "@/src/daa/auth/daaAuthRequest";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function isSilentMode(req: Request): boolean {
   try {
