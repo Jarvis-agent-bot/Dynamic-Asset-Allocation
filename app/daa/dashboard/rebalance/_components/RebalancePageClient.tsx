@@ -4,12 +4,16 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, CalendarClock, Gauge, ShieldCheck, WalletCards } from "lucide-react";
+import { Bot, Gauge, ListChecks, ShieldCheck, TrendingUp, WalletCards } from "lucide-react";
 
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { DaaSurfaceStatusPill, type DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
+import type { DaaMarketContext, DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type { PolicyDecision } from "@/src/daa/modules/policy-engine/policyTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
+import type { RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { DashboardNotificationBar } from "@/app/daa/dashboard/_shared/DashboardNotificationBar";
 import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
@@ -17,13 +21,9 @@ import { RebalanceProposalList } from "@/app/daa/dashboard/_shared/rebalance/Reb
 import type { WhatIfPreviewProps } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
 import type { DriftBarChartProps } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
 import {
-  cycleStatusLabel,
-  cycleStatusTone,
   marketRegimeLabel,
   marketRegimeTone,
-  riskOverallTone,
   riskStatusLabel,
-  triggerSourceLabel,
 } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 // 历史周期已移至交易记录页
 import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndicatorDashboard";
@@ -60,31 +60,19 @@ function formatSnapshotTime(value: string | null | undefined) {
   }).format(date);
 }
 
-function WorkbenchStatusCard(props: {
+function DecisionMetric(props: {
   label: string;
   value: string;
   hint: string;
-  icon: ReactNode;
-  tone?: "cyan" | "green" | "amber" | "red" | "indigo" | "slate";
+  icon?: ReactNode;
 }) {
-  const toneClass = props.tone === "green"
-    ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]"
-    : props.tone === "amber"
-      ? "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]"
-      : props.tone === "red"
-        ? "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]"
-        : props.tone === "indigo"
-          ? "border-[var(--indigo-border)] bg-[var(--indigo-bg)] text-[var(--indigo)]"
-          : "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
   return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.88)] px-4 py-3">
-      <div className="flex items-start gap-3">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border ${toneClass}`}>
-          {props.icon}
-        </div>
+    <div className="min-w-0 border-t border-[var(--border)] px-0 py-3 sm:border-l sm:border-t-0 sm:px-4 sm:py-0">
+      <div className="flex items-start gap-2.5">
+        {props.icon ? <div className="mt-0.5 text-[var(--muted)]">{props.icon}</div> : null}
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{props.label}</div>
-          <div className="mt-1 truncate text-sm font-semibold text-[var(--text)]">{props.value}</div>
+          <div className="mt-1 truncate font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">{props.value}</div>
           <div className="mt-0.5 line-clamp-1 text-xs text-[var(--muted)]">{props.hint}</div>
         </div>
       </div>
@@ -101,12 +89,199 @@ function policyActionLabel(action: string | null | undefined) {
   return "等待决策";
 }
 
-function noTradeBandLabel(state: string | null | undefined) {
-  if (state === "entered_outer") return "外圈";
-  if (state === "cooling") return "冷静";
-  if (state === "exited_inner") return "回归";
-  if (state === "inside") return "内圈";
-  return "未评估";
+function formatIndicatorValue(indicator: DaaMarketIndicatorSnapshot): string {
+  if (indicator.rawValue === null || indicator.rawValue === undefined) return "-";
+  const value = Math.abs(indicator.rawValue) >= 100
+    ? indicator.rawValue.toFixed(0)
+    : indicator.rawValue.toFixed(2);
+  return `${value}${indicator.unit ? ` ${indicator.unit}` : ""}`;
+}
+
+function stanceTone(stance: DaaMarketIndicatorSnapshot["stance"]): DaaSurfaceTone {
+  if (stance === "risk_on") return "green";
+  if (stance === "risk_off") return "amber";
+  return "slate";
+}
+
+function stanceLabel(stance: DaaMarketIndicatorSnapshot["stance"]): string {
+  if (stance === "risk_on") return "偏进攻";
+  if (stance === "risk_off") return "偏防守";
+  if (stance === "neutral") return "中性";
+  return marketRegimeLabel(stance);
+}
+
+function totalProposalNotional(cycle: RebalanceCycle | null): number {
+  return (cycle?.proposals ?? []).reduce((sum, item) => sum + Math.max(0, item.suggestedNotional || 0), 0);
+}
+
+function buildDecisionState(input: {
+  cycle: RebalanceCycle | null;
+  riskCheck: PreTradeRiskCheck | null;
+  selectedProposalCount: number;
+  canExecuteSelected: boolean;
+  isCurrentCycleTerminal: boolean;
+}) {
+  const { cycle, riskCheck, selectedProposalCount, canExecuteSelected, isCurrentCycleTerminal } = input;
+  if (!cycle) {
+    return {
+      tone: "cyan" as DaaSurfaceTone,
+      title: "等待生成本轮调仓建议",
+      description: "先生成本轮建议，再审阅买卖清单、风控结果和执行影响。",
+      nextStep: "下一步：在右侧执行面板生成本轮建议。",
+    };
+  }
+  if (riskCheck?.overallStatus === "block") {
+    return {
+      tone: "red" as DaaSurfaceTone,
+      title: "风控阻断，暂不应执行",
+      description: riskCheck.items.find((item) => item.status === "block")?.message || "存在阻断项，需要先降低仓位或调整建议。",
+      nextStep: "下一步：展开建议详情，处理阻断项后重新复核。",
+    };
+  }
+  if (isCurrentCycleTerminal) {
+    return {
+      tone: cycle.status === "completed" ? "green" as DaaSurfaceTone : "slate" as DaaSurfaceTone,
+      title: cycle.status === "completed" ? "本轮调仓已完成" : "本轮调仓已终止",
+      description: cycle.status === "completed" ? "该周期已进入只读状态，可生成新一轮建议继续审阅。" : "该周期已取消或结束，建议生成新周期重新评估。",
+      nextStep: "下一步：如需继续调仓，生成新一轮建议。",
+    };
+  }
+  if ((cycle.proposals?.length ?? 0) === 0) {
+    return {
+      tone: "slate" as DaaSurfaceTone,
+      title: "本轮没有可执行建议",
+      description: cycle.triggerReason || "组合仍在目标范围内，或候选资产暂未满足金额、信念与风控条件。",
+      nextStep: "下一步：查看下方证据，确认是否需要调整策略阈值。",
+    };
+  }
+  if (selectedProposalCount > 0 && canExecuteSelected) {
+    return {
+      tone: "green" as DaaSurfaceTone,
+      title: "已选建议可执行",
+      description: "当前选中项已通过执行前检查，可以先执行选中项，保留其余建议继续观察。",
+      nextStep: "下一步：在右侧执行面板执行选中建议。",
+    };
+  }
+  return {
+    tone: "amber" as DaaSurfaceTone,
+    title: "建议待审阅",
+    description: cycle.triggerReason || "本轮已生成买卖建议，请先确认理由、金额和冲突标记。",
+    nextStep: "下一步：勾选要执行的建议，或按买入/卖出快速筛选。",
+  };
+}
+
+function RebalanceDecisionSummary(props: {
+  bootstrap: WorkbenchBootstrap;
+  cycle: RebalanceCycle | null;
+  riskCheck: PreTradeRiskCheck | null;
+  policyDecision: PolicyDecision | null;
+  selectedProposalCount: number;
+  selectedProposalNotional: number;
+  buyProposalCount: number;
+  sellProposalCount: number;
+  canExecuteSelected: boolean;
+  isCurrentCycleTerminal: boolean;
+  priceStreamConnected: boolean;
+}) {
+  const cycle = props.cycle;
+  const allProposalNotional = totalProposalNotional(cycle);
+  const decision = buildDecisionState({
+    cycle,
+    riskCheck: props.riskCheck,
+    selectedProposalCount: props.selectedProposalCount,
+    canExecuteSelected: props.canExecuteSelected,
+    isCurrentCycleTerminal: props.isCurrentCycleTerminal,
+  });
+
+  return (
+    <section className="rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,24,39,0.9),rgba(8,12,20,0.94))] p-4 shadow-[0_18px_38px_rgba(0,0,0,0.22)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.94fr)] xl:items-center">
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <DaaSurfaceStatusPill tone={decision.tone}>本轮结论</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone={props.priceStreamConnected ? "green" : "slate"}>
+              {props.priceStreamConnected ? "实时价格" : "价格离线"}
+            </DaaSurfaceStatusPill>
+            {cycle ? (
+              <span className="font-[var(--font-mono)] text-xs text-[var(--faint)]">
+                {cycle.cycleId.slice(0, 8)} · {formatSnapshotTime(cycle.snapshotAt)}
+              </span>
+            ) : null}
+          </div>
+          <div>
+            <h2 className="font-[var(--font-display)] text-[28px] leading-tight tracking-[-0.02em] text-[var(--text)]">
+              {decision.title}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">{decision.description}</p>
+          </div>
+          <div className="rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.64)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+            {decision.nextStep}
+          </div>
+        </div>
+
+        <div className="grid gap-0 sm:grid-cols-4">
+          <DecisionMetric
+            label="建议规模"
+            value={cycle ? formatCurrency(allProposalNotional, props.bootstrap.baseCurrency) : "未生成"}
+            hint={cycle ? `买入 ${props.buyProposalCount} · 卖出 ${props.sellProposalCount}` : "等待周期创建"}
+            icon={<ListChecks className="h-4 w-4" />}
+          />
+          <DecisionMetric
+            label="已选执行"
+            value={props.selectedProposalCount > 0 ? formatCurrency(props.selectedProposalNotional, props.bootstrap.baseCurrency) : "未选择"}
+            hint={props.selectedProposalCount > 0 ? `${props.selectedProposalCount} 条建议` : "先勾选建议"}
+            icon={<WalletCards className="h-4 w-4" />}
+          />
+          <DecisionMetric
+            label="风控"
+            value={riskStatusLabel(props.riskCheck?.overallStatus ?? "pass")}
+            hint={`${props.riskCheck?.items.filter((item) => item.status !== "pass").length ?? 0} 条提示`}
+            icon={<ShieldCheck className="h-4 w-4" />}
+          />
+          <DecisionMetric
+            label="策略"
+            value={policyActionLabel(props.policyDecision?.action)}
+            hint={props.policyDecision ? `行动分 ${props.policyDecision.score.toFixed(1)} / ${props.policyDecision.threshold.toFixed(1)}` : "等待评估"}
+            icon={<Bot className="h-4 w-4" />}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MarketEvidenceStrip({ marketContext }: { marketContext: DaaMarketContext }) {
+  const topIndicators = [...(marketContext.indicators ?? [])]
+    .sort((a, b) => Math.abs(b.riskOffScorePct - 50) - Math.abs(a.riskOffScorePct - 50))
+    .slice(0, 4);
+
+  return (
+    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.84)] px-4 py-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-[var(--primary)]" />
+          <span className="text-sm font-semibold text-[var(--text)]">市场证据摘要</span>
+        </div>
+        <DaaSurfaceStatusPill tone={marketRegimeTone(marketContext.regime)}>
+          {marketRegimeLabel(marketContext.regime)} · 风险分 {marketContext.riskOffScorePct.toFixed(0)}
+        </DaaSurfaceStatusPill>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {topIndicators.map((indicator) => (
+          <div key={indicator.key} className="min-w-0 border-t border-[var(--border)] pt-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-semibold text-[var(--text)]">{indicator.label}</span>
+              <DaaSurfaceStatusPill tone={stanceTone(indicator.stance)} className="shrink-0">
+                {stanceLabel(indicator.stance)}
+              </DaaSurfaceStatusPill>
+            </div>
+            <div className="mt-2 font-[var(--font-mono)] text-lg text-[var(--text)]">{formatIndicatorValue(indicator)}</div>
+            <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{indicator.reason}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function RebalancePageClient() {
@@ -150,52 +325,6 @@ export default function RebalancePageClient() {
 
   const cycle = rp?.currentCycle ?? null;
   const policyDecision = cycle?.policySnapshot?.decision ?? null;
-  const riskStatus = rp?.currentRiskCheck?.overallStatus ?? "pass";
-  const statusCards = wbModel.bootstrap && rp ? [
-    {
-      label: "周期状态",
-      value: cycle ? cycleStatusLabel(cycle.status) : "未生成",
-      hint: cycle ? `${triggerSourceLabel(cycle.triggerSource)} · ${cycle.cycleId.slice(0, 8)}` : "生成后可审阅建议",
-      icon: <Gauge className="h-4 w-4" />,
-      tone: cycle ? cycleStatusTone(cycle.status) : "slate",
-    },
-    {
-      label: "策略决策",
-      value: policyActionLabel(policyDecision?.action),
-      hint: policyDecision
-        ? `行动分 ${policyDecision.score.toFixed(1)} / ${policyDecision.threshold.toFixed(1)} · ${noTradeBandLabel(policyDecision.noTradeBandState)}`
-        : "等待 Policy Engine 评估",
-      icon: <Bot className="h-4 w-4" />,
-      tone: policyDecision?.action === "authorize_auto_execute" || policyDecision?.action === "propose"
-        ? "green" as const
-        : policyDecision?.blockers.length
-          ? "amber" as const
-          : "indigo" as const,
-    },
-    {
-      label: "调仓时点",
-      value: formatSnapshotTime(cycle?.snapshotAt),
-      hint: cycle?.triggerReason || "等待触发原因",
-      icon: <CalendarClock className="h-4 w-4" />,
-      tone: "indigo" as const,
-    },
-    {
-      label: "市场与风控",
-      value: `${marketRegimeLabel(wbModel.bootstrap.marketContext?.regime)} / ${riskStatusLabel(riskStatus)}`,
-      hint: `风险分 ${(wbModel.bootstrap.marketContext?.riskOffScorePct ?? 0).toFixed(0)} · ${rp.currentRiskCheck?.items.filter((item) => item.status !== "pass").length ?? 0} 条提示`,
-      icon: <ShieldCheck className="h-4 w-4" />,
-      tone: riskStatus === "pass" ? marketRegimeTone(wbModel.bootstrap.marketContext?.regime) : riskOverallTone(riskStatus),
-    },
-    {
-      label: "执行范围",
-      value: rp.selectedProposalCount > 0
-        ? formatCurrency(rp.selectedProposalNotional, wbModel.bootstrap.baseCurrency)
-        : `${cycle?.proposals.length ?? 0} 条建议`,
-      hint: rp.selectedProposalCount > 0 ? `已选 ${rp.selectedProposalCount} 条` : `买入 ${rp.buyProposalCount} · 卖出 ${rp.sellProposalCount}`,
-      icon: <WalletCards className="h-4 w-4" />,
-      tone: rp.selectedProposalCount > 0 ? "green" as const : "cyan" as const,
-    },
-  ] : [];
 
   return (
     <div className="space-y-4">
@@ -209,29 +338,32 @@ export default function RebalancePageClient() {
         warnings={wbModel.bootstrap?.warnings || []}
       />
 
-      <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.52)] p-3">
-        <div className="mb-3 flex items-center justify-between gap-3 px-1">
-          <div className="flex items-center gap-2">
-            <Bot className="h-4 w-4 text-[var(--primary)]" />
-            <span className="text-sm font-semibold text-[var(--text)]">调仓工作台</span>
-            <DaaSurfaceStatusPill tone={wbModel.priceStreamConnected ? "green" : "slate"}>
-              {wbModel.priceStreamConnected ? "实时价格" : "价格离线"}
-            </DaaSurfaceStatusPill>
-          </div>
-          <QuickConfigPopover driftThresholdPct={wbModel.bootstrap?.policy?.drift?.outerBandPct} />
-        </div>
-        {statusCards.length > 0 ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {statusCards.map((card) => (
-              <WorkbenchStatusCard key={card.label} {...card} />
-            ))}
-          </div>
-        ) : null}
-      </div>
-
       {/* ── 两栏决策区域 ── */}
       {wbModel.bootstrap && rp ? (
         <>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+                <Gauge className="h-4 w-4 text-[var(--primary)]" />
+                调仓工作台
+              </div>
+              <QuickConfigPopover driftThresholdPct={wbModel.bootstrap.policy?.drift?.outerBandPct} />
+            </div>
+            <RebalanceDecisionSummary
+              bootstrap={wbModel.bootstrap}
+              cycle={cycle}
+              riskCheck={rp.currentRiskCheck}
+              policyDecision={policyDecision}
+              selectedProposalCount={rp.selectedProposalCount}
+              selectedProposalNotional={rp.selectedProposalNotional}
+              buyProposalCount={rp.buyProposalCount}
+              sellProposalCount={rp.sellProposalCount}
+              canExecuteSelected={rp.canExecuteSelected}
+              isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
+              priceStreamConnected={wbModel.priceStreamConnected}
+            />
+          </div>
+
           <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
             {/* 左侧：提案列表 */}
             <div className="space-y-4">
@@ -250,7 +382,6 @@ export default function RebalancePageClient() {
                   setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
                   onSelectAllProposals={rp.onSelectAllProposals}
                   onToggleProposal={rp.onToggleProposal}
-                  onGenerateCycle={rp.onGenerateCycle}
                 />
               </SectionErrorBoundary>
             </div>
@@ -317,11 +448,27 @@ export default function RebalancePageClient() {
 
           {/* ── 全宽：市场指标仪表盘（美林时钟 + 指标概览 + scope 分析） ── */}
           {wbModel.bootstrap.marketContext ? (
-            <SectionErrorBoundary sectionName="市场指标">
-              <MarketIndicatorDashboard
-                marketContext={wbModel.bootstrap.marketContext}
-              />
-            </SectionErrorBoundary>
+            <div className="space-y-3">
+              <MarketEvidenceStrip marketContext={wbModel.bootstrap.marketContext} />
+              <details className="group rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.72)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[var(--text)]">
+                  <span>完整市场指标</span>
+                  <span className="text-xs font-normal text-[var(--faint)] group-open:hidden">
+                    展开 {wbModel.bootstrap.marketContext.indicators.length} 项指标
+                  </span>
+                  <span className="hidden text-xs font-normal text-[var(--faint)] group-open:inline">
+                    收起指标面板
+                  </span>
+                </summary>
+                <div className="border-t border-[var(--border)] px-4 py-4">
+                  <SectionErrorBoundary sectionName="市场指标">
+                    <MarketIndicatorDashboard
+                      marketContext={wbModel.bootstrap.marketContext}
+                    />
+                  </SectionErrorBoundary>
+                </div>
+              </details>
+            </div>
           ) : null}
         </>
       ) : null}

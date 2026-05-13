@@ -38,6 +38,13 @@ export function InlineTradePanel(props: {
     callbacks: props.callbacks,
     submitting: props.submitting,
   });
+  const previewSlippageCost = form.preview ? form.preview.grossNotional * (slippageBps / 10000) : 0;
+  const previewTotalCost = form.preview ? form.preview.grossNotional + form.preview.fee + previewSlippageCost : 0;
+  const projectedHoldingQty = form.preview
+    ? side === "BUY"
+      ? row.holdingQty + form.preview.qty
+      : Math.max(0, row.holdingQty - form.preview.qty)
+    : row.holdingQty;
 
   return (
     <div className="space-y-3 rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
@@ -70,11 +77,17 @@ export function InlineTradePanel(props: {
       </div>
 
       {/* 当前价格 */}
-      <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-        <span>价格 ({row.currency})</span>
-        <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">
-          {row.lastPrice.toFixed(4)}
-        </span>
+      <div className="rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-3 py-2.5">
+        <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+          <span>市价单 · {row.currency}</span>
+          <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">
+            {row.lastPrice.toFixed(4)}
+          </span>
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--faint)]">
+          <span>滑点参数</span>
+          <span className="font-[var(--font-mono)]">{slippageBps.toFixed(0)} bps</span>
+        </div>
       </div>
 
       {/* 数量输入 */}
@@ -167,16 +180,13 @@ export function InlineTradePanel(props: {
               tone="amber"
             />
             <DaaSurfaceMiniStat
-              label="手续费"
-              value={`${form.preview.currency} ${form.preview.fee.toFixed(4)}`}
+              label="手续费 / 滑点"
+              value={`${form.preview.currency} ${(form.preview.fee + previewSlippageCost).toFixed(4)}`}
               tone="slate"
             />
             <DaaSurfaceMiniStat
-              label="总成本"
-              value={formatCurrency(
-                form.preview.fee + form.preview.grossNotional * (slippageBps / 10000),
-                form.preview.currency,
-              )}
+              label={side === "BUY" ? "预估占用" : "成交后持仓"}
+              value={side === "BUY" ? formatCurrency(previewTotalCost, form.preview.currency) : projectedHoldingQty.toFixed(6)}
               tone="red"
             />
           </div>

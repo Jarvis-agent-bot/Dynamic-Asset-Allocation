@@ -551,7 +551,7 @@ export function AssetKlineChart({
         )}
         <div
           ref={containerRef}
-          className="h-[420px] w-full rounded-lg"
+          className="h-[420px] w-full rounded-lg sm:h-[500px]"
         />
       </div>
     </div>
