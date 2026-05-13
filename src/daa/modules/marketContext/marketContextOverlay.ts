@@ -150,7 +150,7 @@ export function buildMarketContextFromIndicators(input: {
     ...summaryUniverse
       .filter((item) => item.scope !== topScope.scope && item.regime === "risk_off")
       .slice(0, 2)
-      .map((item) => `${item.label}：${item.reasons[0] || "环境偏防守"}`),
+      .map((item) => `${item.label}：${item.reasons[0] || "风险压力升高"}`),
   ].slice(0, 4);
 
   const generatedAt = scopes

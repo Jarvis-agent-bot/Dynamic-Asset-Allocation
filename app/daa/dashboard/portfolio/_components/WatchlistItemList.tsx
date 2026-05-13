@@ -9,8 +9,15 @@ import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
+import { useFundamentals, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
+import {
+  deriveValuationBadge,
+  formatCompanyMarketCap,
+  formatFundamentalRatio,
+  type ValuationTone,
+} from "./fundamentalDisplay";
 
 /* ------------------------------------------------------------------ */
 /*  单行                                                               */
@@ -20,9 +27,18 @@ function assetDisplayName(row: AssetUniverseView): string {
   return row.displayNameZh || row.name || row.symbol;
 }
 
+function badgeClass(tone: ValuationTone): string {
+  if (tone === "cheap") return "bg-emerald-500/12 text-emerald-300";
+  if (tone === "fair") return "bg-sky-500/12 text-sky-300";
+  if (tone === "expensive") return "bg-amber-500/12 text-amber-300";
+  if (tone === "danger") return "bg-red-500/12 text-red-300";
+  return "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
+}
+
 function WatchlistRow(props: {
   row: AssetUniverseView;
   sparkData: number[] | null;
+  fundamentals?: AssetFundamentals;
   onClick: () => void;
   onRemove?: (row: AssetUniverseView) => Promise<void> | void;
   removing?: boolean;
@@ -39,6 +55,11 @@ function WatchlistRow(props: {
   const targetPct = (row.targetWeightHint ?? 0) * 100;
   const actualPct = row.actualWeightPct ?? 0;
   const gap = row.gapPct;
+  const valuation = deriveValuationBadge(row, props.fundamentals);
+  const marketCap = formatCompanyMarketCap(
+    props.fundamentals?.marketCap,
+    props.fundamentals?.marketCapCurrency || row.currency,
+  );
 
   return (
     <div
@@ -56,6 +77,18 @@ function WatchlistRow(props: {
         </div>
         <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
           {row.market} · {row.currency}
+        </div>
+        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={valuation.description}>
+          估值依据：{valuation.reason}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--faint)]">
+          {targetPct > 0 ? <span>目标 {targetPct.toFixed(1)}%</span> : null}
+          {actualPct > 0 ? <span>实际 {actualPct.toFixed(1)}%</span> : null}
+          {gap != null ? (
+            <span className={Math.abs(gap) > 3 ? "text-amber-400/80" : ""}>
+              偏离 {gap >= 0 ? "+" : ""}{gap.toFixed(1)}%
+            </span>
+          ) : null}
         </div>
         {row.holdingQty > 0 ? (
           <div className="mt-0.5 flex items-center gap-1 text-[10px] text-emerald-400/70">
@@ -91,38 +124,39 @@ function WatchlistRow(props: {
         )}
       </div>
 
-      {/* 目标权重 */}
-      <div className="hidden w-[70px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">目标</div>
-        <div className={cn(
-          "font-[var(--font-mono)] text-xs",
-          targetPct > 0 ? "text-[var(--text)]" : "text-[var(--faint)]",
-        )}>
-          {targetPct > 0 ? `${targetPct.toFixed(1)}%` : "--"}
-        </div>
-      </div>
-
-      {/* 实际权重 */}
-      <div className="hidden w-[70px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">实际</div>
+      {/* 公司市值 */}
+      <div className="hidden w-[110px] text-right lg:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">公司市值</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
-          {actualPct > 0 ? `${actualPct.toFixed(1)}%` : "--"}
+          {marketCap}
         </div>
       </div>
 
-      {/* 偏离度 */}
-      <div className="w-[70px] text-right">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">偏离</div>
-        {gap != null ? (
-          <div className={cn(
-            "font-[var(--font-mono)] text-xs",
-            Math.abs(gap) > 3 ? "text-amber-400" : "text-[var(--muted)]",
-          )}>
-            {gap >= 0 ? "+" : ""}{gap.toFixed(1)}%
-          </div>
-        ) : (
-          <div className="font-[var(--font-mono)] text-xs text-[var(--faint)]">--</div>
-        )}
+      {/* PE */}
+      <div className="hidden w-[74px] text-right xl:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PE(TTM)</div>
+        <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
+          {formatFundamentalRatio(props.fundamentals?.trailingPE)}
+        </div>
+      </div>
+
+      {/* PEG */}
+      <div className="hidden w-[64px] text-right xl:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PEG</div>
+        <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
+          {formatFundamentalRatio(props.fundamentals?.pegRatio)}
+        </div>
+      </div>
+
+      {/* 估值状态 */}
+      <div className="hidden w-[82px] text-right md:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值</div>
+        <span
+          title={valuation.description}
+          className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}
+        >
+          {valuation.label}
+        </span>
       </div>
 
       <button
@@ -167,6 +201,7 @@ export function WatchlistItemList(props: {
   // 批量 sparkline（1 次 API）
   const sparklineSymbols = useMemo(() => watchRows.map((r) => r.yfinanceSymbol || r.symbol), [watchRows]);
   const sparklines = useSparklines(sparklineSymbols);
+  const fundamentals = useFundamentals(sparklineSymbols);
 
   const availableCategories = useMemo(() => {
     const keys = new Set(watchRows.map((r) => holdingCategoryKey(r.market, r.assetClass)));
@@ -216,6 +251,7 @@ export function WatchlistItemList(props: {
             key={row.assetKey}
             row={row}
             sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
+            fundamentals={fundamentals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? fundamentals[row.symbol.toUpperCase()]}
             onClick={() => handleRowClick(row)}
             onRemove={props.onRemoveFromWatchlist}
             removing={props.actioningAssetKey === row.assetKey}

@@ -9,6 +9,12 @@ export type ReactAction =
   | { action: "tool_calls"; tool_calls: Array<{ name: string; params: Record<string, unknown> }>; reasoning?: string }
   | { action: "result"; result: InvestigateOutput };
 
+function looksLikeInvestigateOutput(obj: Record<string, unknown>): boolean {
+  return typeof obj.thesisChanged === "boolean"
+    && typeof obj.evidenceSummary === "string"
+    && obj.evidenceSummary.trim().length > 0;
+}
+
 export function parseReactResponse(data: unknown): ReactAction | null {
   if (!data || typeof data !== "object") return null;
   const obj = data as Record<string, unknown>;
@@ -21,6 +27,9 @@ export function parseReactResponse(data: unknown): ReactAction | null {
   }
   if (obj.action === "result" && obj.result && typeof obj.result === "object") {
     return { action: "result", result: obj.result as InvestigateOutput };
+  }
+  if (looksLikeInvestigateOutput(obj)) {
+    return { action: "result", result: obj as unknown as InvestigateOutput };
   }
   return null;
 }

@@ -10,8 +10,15 @@ import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { DaaSurfaceEmptyState, DaaSurfacePanel } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
+import { useFundamentals, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
+import {
+  deriveValuationBadge,
+  formatCompanyMarketCap,
+  formatFundamentalRatio,
+  type ValuationTone,
+} from "./fundamentalDisplay";
 
 /* ------------------------------------------------------------------ */
 /*  单行组件                                                           */
@@ -21,7 +28,21 @@ function assetDisplayName(row: AssetUniverseView): string {
   return row.displayNameZh || row.name || row.symbol;
 }
 
-function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; sparkData: number[] | null; onClick: () => void }) {
+function badgeClass(tone: ValuationTone): string {
+  if (tone === "cheap") return "bg-emerald-500/12 text-emerald-300";
+  if (tone === "fair") return "bg-sky-500/12 text-sky-300";
+  if (tone === "expensive") return "bg-amber-500/12 text-amber-300";
+  if (tone === "danger") return "bg-red-500/12 text-red-300";
+  return "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
+}
+
+function HoldingRow(props: {
+  row: AssetUniverseView;
+  baseCurrency: string;
+  sparkData: number[] | null;
+  fundamentals?: AssetFundamentals;
+  onClick: () => void;
+}) {
   const { row, baseCurrency, sparkData } = props;
   const displayName = assetDisplayName(row);
 
@@ -32,6 +53,11 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; spark
 
   const isUp = priceChangePercent != null ? priceChangePercent >= 0 : null;
   const sparkColor = isUp === true ? "hsl(142 71% 45%)" : isUp === false ? "hsl(0 84% 60%)" : "hsl(188 95% 60%)";
+  const valuation = deriveValuationBadge(row, props.fundamentals);
+  const companyMarketCap = formatCompanyMarketCap(
+    props.fundamentals?.marketCap,
+    props.fundamentals?.marketCapCurrency || row.currency,
+  );
 
   return (
     <div
@@ -49,6 +75,9 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; spark
         </div>
         <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
           {row.market} · {row.currency}
+        </div>
+        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={valuation.description}>
+          估值依据：{valuation.reason}
         </div>
       </div>
 
@@ -86,11 +115,29 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; spark
         </div>
       </div>
 
-      {/* 市值 */}
+      {/* 持仓市值 */}
       <div className="hidden w-[100px] text-right lg:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">市值</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">持仓市值</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {formatCurrency(row.valuationBase ?? 0, baseCurrency)}
+        </div>
+      </div>
+
+      {/* 公司估值 */}
+      <div className="hidden w-[112px] text-right xl:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">公司市值</div>
+        <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
+          {companyMarketCap}
+        </div>
+      </div>
+
+      {/* PE / PEG */}
+      <div className="hidden w-[82px] text-right 2xl:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PE / PEG</div>
+        <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
+          {formatFundamentalRatio(props.fundamentals?.trailingPE)}
+          <span className="mx-0.5 text-[var(--faint)]">/</span>
+          {formatFundamentalRatio(props.fundamentals?.pegRatio)}
         </div>
       </div>
 
@@ -125,6 +172,17 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; spark
         )}
       </div>
 
+      {/* 估值状态 */}
+      <div className="hidden w-[82px] text-right md:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值</div>
+        <span
+          title={valuation.description}
+          className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}
+        >
+          {valuation.label}
+        </span>
+      </div>
+
       {/* 箭头 */}
       <ChevronRight className="h-4 w-4 shrink-0 text-[var(--faint)] transition-colors group-hover:text-[var(--text)]" />
     </div>
@@ -151,6 +209,7 @@ export function PortfolioHoldingsList(props: {
     [holdingRows],
   );
   const sparklines = useSparklines(sparklineSymbols);
+  const fundamentals = useFundamentals(sparklineSymbols);
 
   // 自动生成有数据的分类 tab
   const availableCategories = useMemo(() => {
@@ -213,6 +272,7 @@ export function PortfolioHoldingsList(props: {
             row={row}
             baseCurrency={baseCurrency}
             sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
+            fundamentals={fundamentals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? fundamentals[row.symbol.toUpperCase()]}
             onClick={() => handleRowClick(row)}
           />
         ))}

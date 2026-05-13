@@ -1,5 +1,6 @@
 import { buildAssistantBrainStatusText } from "./assistantBrain";
 import { formatBriefingTextExcerpt } from "@/src/daa/agent/cognitivePrompts";
+import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import { formatMoney, formatPct } from "./agentContext";
 import type { DaaAgentToolContext, DaaAgentToolExecutor, DaaAgentToolResult } from "./agentToolTypes";
 import type { DaaChatPendingAction } from "./chatTypes";
@@ -53,7 +54,7 @@ function formatMarketStatus(readModel: DaaAgentToolContext["readModel"]): string
   const context = readModel.bootstrap.marketContext;
   const scopes = (context?.scopes || [])
     .slice(0, 4)
-    .map((item) => `${item.label}: ${item.regime}（普通买入 ${Math.round(item.buyScale * 100)}%）`)
+    .map((item) => `${item.label}: ${marketRegimeActionLabelZh(item.regime)}（买入预算系数 ${Math.round(item.buyScale * 100)}%）`)
     .join("\n");
   const dataHealth = readModel.bootstrap.marketDataHealth;
   return [

@@ -36,11 +36,14 @@ describe("parseReactResponse", () => {
     expect(parsed && "result" in parsed ? parsed.result.evidenceSummary : null).toBe("证据不足，保持观察。");
   });
 
-  it("拒绝无 action 包装的旧 InvestigateOutput", () => {
-    expect(parseReactResponse({
+  it("兼容无 action 包装的最终结论", () => {
+    const parsed = parseReactResponse({
       thesisChanged: false,
       evidenceType: "neutral",
-      evidenceSummary: "旧结构不再接受。",
-    })).toBeNull();
+      evidenceSummary: "模型直接返回了最终结论。",
+    });
+
+    expect(parsed?.action).toBe("result");
+    expect(parsed && "result" in parsed ? parsed.result.evidenceSummary : null).toBe("模型直接返回了最终结论。");
   });
 });

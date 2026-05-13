@@ -9,6 +9,7 @@ import {
 } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { nextReviewDueDate } from "@/src/daa/modules/workbench/reviewSchedule";
+import { isActionableMarketScope, marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import type {
@@ -98,7 +99,9 @@ function buildSignals(input: {
     });
   }
 
-  const riskOffScopes = (input.bootstrap.marketContext?.scopes || []).filter((scope) => scope.regime === "risk_off");
+  const riskOffScopes = (input.bootstrap.marketContext?.scopes || []).filter(
+    (scope) => isActionableMarketScope(scope.scope) && scope.regime === "risk_off",
+  );
   if (riskOffScopes.length > 0) {
     const labels = riskOffScopes.map((scope) => scope.label).filter(Boolean);
     const strongestScope = [...riskOffScopes].sort((a, b) => (b.buyScale + b.highRiskBuyScale) - (a.buyScale + a.highRiskBuyScale))[0] || riskOffScopes[0];
@@ -106,7 +109,7 @@ function buildSignals(input: {
       id: "alert:market:risk-off-summary",
       level: "warn",
       source: "alert",
-      text: `${labels.join(" / ")}进入偏防守，常规标的建议仓位 ${Math.round(strongestScope.buyScale * 100)}%，高波动标的建议仓位 ${Math.round(strongestScope.highRiskBuyScale * 100)}%。`,
+      text: `${labels.join(" / ")}进入${marketRegimeActionLabelZh("risk_off")}，常规标的买入预算系数 ${Math.round(strongestScope.buyScale * 100)}%，高波动标的买入预算系数 ${Math.round(strongestScope.highRiskBuyScale * 100)}%。`,
       actionHref: "/daa/dashboard/rebalance",
       createdAt: strongestScope.generatedAt || createdAt,
     });

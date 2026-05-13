@@ -11,9 +11,17 @@ import { SkeletonIndicatorGrid } from "@/app/daa/dashboard/_components/SkeletonP
 import { cn } from "@/lib/utils";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
+import {
+  isActionableMarketScope,
+  marketActionByRiskOffScoreLabelZh,
+  marketRegimeEnvironmentLabelZh,
+  marketScopeMeaningZh,
+  marketScopeMetricLabelZh,
+  marketScopePrimaryLabelZh,
+} from "@/src/daa/modules/marketContext/marketContextLabels";
 
 import { InvestmentClockWidget } from "./InvestmentClockWidget";
-import { macroCyclePhaseLabel, marketRegimeLabel, marketRegimeTone } from "./rebalance/rebalanceLabels";
+import { macroCyclePhaseLabel, marketRegimeTone } from "./rebalance/rebalanceLabels";
 
 /* ---------- types ---------- */
 
@@ -44,17 +52,19 @@ function scopeLabelZh(scope: string): string {
   return SCOPE_LABEL_ZH[scope] || scope;
 }
 
-function stanceTone(stance: string) {
-  if (stance === "risk_off") return "amber" as const;
-  if (stance === "risk_on") return "green" as const;
+function riskScoreTone(scorePct: number | null | undefined) {
+  const score = Number.isFinite(scorePct) ? Number(scorePct) : 50;
+  if (score >= 80) return "red" as const;
+  if (score >= 65) return "amber" as const;
+  if (score <= 35) return "green" as const;
   return "slate" as const;
 }
 
-function stanceLabel(stance: string) {
-  if (stance === "risk_off") return "偏防守";
-  if (stance === "risk_on") return "偏进攻";
-  if (stance === "neutral") return "中性";
-  return stance;
+function indicatorSignalLabel(indicator: DaaMarketContext["indicators"][number]) {
+  if (isActionableMarketScope(indicator.scope)) {
+    return marketActionByRiskOffScoreLabelZh(indicator.riskOffScorePct);
+  }
+  return marketScopePrimaryLabelZh(indicator);
 }
 
 function percentileBarColor(pct: number): string {
@@ -231,8 +241,8 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   {trendArrow(ind.trend7dPct, "7d")}
                   {trendArrow(ind.trend30dPct, "30d")}
-                  <DaaSurfaceStatusPill tone={stanceTone(ind.stance)}>
-                    {stanceLabel(ind.stance)}
+                  <DaaSurfaceStatusPill tone={riskScoreTone(ind.riskOffScorePct)}>
+                    {indicatorSignalLabel(ind)}
                   </DaaSurfaceStatusPill>
                 </div>
               </div>
@@ -254,11 +264,19 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-[var(--text)]">{s.label}</span>
                   <DaaSurfaceStatusPill tone={marketRegimeTone(s.regime)}>
-                    {marketRegimeLabel(s.regime)}
+                    {marketScopePrimaryLabelZh(s)}
                   </DaaSurfaceStatusPill>
                 </div>
                 <div className="mt-2 font-[var(--font-mono)] text-base text-[var(--text)]">
-                  建议仓位 {Math.round(s.buyScale * 100)}%
+                  {marketScopeMetricLabelZh(s.scope)} {isActionableMarketScope(s.scope)
+                    ? `${Math.round(s.buyScale * 100)}%`
+                    : `${Math.round(s.riskOffScorePct)}/100`}
+                </div>
+                <div className="mt-1 text-[11px] text-[var(--faint)]">
+                  {marketRegimeEnvironmentLabelZh(s.regime)}
+                </div>
+                <div className="mt-2 text-xs leading-5 text-[var(--faint)]">
+                  {marketScopeMeaningZh(s.scope)}
                 </div>
                 {s.reasons.length > 0 ? (
                   <div className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted)]">

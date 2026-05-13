@@ -77,7 +77,7 @@ describe("buildDailyReportText", () => {
     expect(text).toContain("每日报告");
     expect(text).toContain("组合概览");
     expect(text).toContain("2个标的");
-    expect(text).toContain("偏进攻");
+    expect(text).toContain("买入/加仓");
     expect(text).toContain("VIX");
     expect(text).toContain("AAPL");
     expect(text).toContain("偏移监控");

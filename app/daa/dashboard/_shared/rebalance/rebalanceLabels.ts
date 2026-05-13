@@ -1,4 +1,5 @@
 import type { DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
@@ -20,10 +21,7 @@ export function triggerSourceLabel(source: RebalanceCycle["triggerSource"]): str
 }
 
 export function marketRegimeLabel(regime: string | null | undefined): string {
-  if (regime === "risk_off") return "偏防守";
-  if (regime === "risk_on") return "偏进攻";
-  if (regime === "transitional") return "过渡";
-  return "待计算";
+  return marketRegimeActionLabelZh(regime);
 }
 
 export function marketRegimeTone(regime: string | null | undefined): DaaSurfaceTone {

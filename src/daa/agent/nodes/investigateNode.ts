@@ -23,6 +23,7 @@ import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { isNoResultFallbackEvidence } from "@/src/daa/agent/evidenceText";
 
 function buildNoResultFallback(prefix: string): InvestigateOutput {
   return {
@@ -36,6 +37,20 @@ function buildNoResultFallback(prefix: string): InvestigateOutput {
     suggestedReviewDays: 3,
     nextActions: ["下一轮继续复核该论点的最新证据。"],
   };
+}
+
+function evidenceConfidence(input: {
+  evidenceSummary: string;
+  evidenceType: InvestigateOutput["evidenceType"];
+  toolCount: number;
+  hasDataSnapshot?: boolean;
+}): number {
+  let score = input.toolCount > 0 ? 0.64 : 0.42;
+  if (input.hasDataSnapshot) score += 0.12;
+  if (input.evidenceSummary.length >= 120) score += 0.08;
+  if (input.evidenceType === "supporting" || input.evidenceType === "contradicting") score += 0.05;
+  if (input.evidenceType === "neutral") score -= 0.04;
+  return Math.max(0.25, Math.min(0.85, Number(score.toFixed(2))));
 }
 
 export async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> {
@@ -101,6 +116,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
           });
 
           if (!out || !subThread) continue;
+          const hasUsableEvidence = Boolean(out.evidenceSummary && !isNoResultFallbackEvidence(out.evidenceSummary));
 
           // 1) thesis 文本 / conviction / 失效条件 / 复盘时间 更新（与父 agent 同一套字段）
           if (out.thesisChanged && out.updatedThesis) {
@@ -118,22 +134,27 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
             }
           }
 
-          // 2) 证据链：无论是否变更，有摘要就存档
-          if (out.evidenceSummary) {
+          // 2) 证据链：只有形成真实证据时才存档；解析失败的轮询状态不算证据。
+          if (hasUsableEvidence) {
             try {
               await thesisStore.addEvidence({
                 threadId: r.threadId,
                 evidenceType: out.evidenceType ?? "neutral",
                 source: "agent_reasoning",
                 content: `[子 agent] ${out.evidenceSummary}`,
+                confidence: evidenceConfidence({
+                  evidenceSummary: out.evidenceSummary,
+                  evidenceType: out.evidenceType ?? "neutral",
+                  toolCount: r.toolsCalled.length,
+                }),
               });
             } catch (e) {
               logSwallowed("cognitiveGraph.investigate.subAgent.evidence", e);
             }
           }
 
-          // 3) bump updated_at — 核心修复：否则 cognitionGap 永远显示"N 天未复盘"
-          if (out.evidenceSummary || out.thesisChanged === false) {
+          // 3) bump updated_at — 只有真实调查结论才算复盘成功。
+          if (hasUsableEvidence || out.thesisChanged) {
             try {
               await thesisStore.touchThesis(r.threadId);
             } catch (e) {
@@ -142,7 +163,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
           }
 
           // 4) 未变更时创建观察记忆（变更时由 reflect 节点创建反思记忆，这里避免重复）
-          if (out.evidenceSummary && out.evidenceSummary.length > 20 && !out.thesisChanged) {
+          if (hasUsableEvidence && out.evidenceSummary.length > 20 && !out.thesisChanged) {
             try {
               const content = `[子 agent 观察] ${subThread.title}: ${out.evidenceSummary.slice(0, 300)}`;
               const emb = await generateEmbedding(content);
@@ -357,6 +378,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     if (!result) {
       result = buildNoResultFallback("[Agent 轮询] ");
     }
+    const resultHasUsableEvidence = Boolean(result.evidenceSummary && !isNoResultFallbackEvidence(result.evidenceSummary));
 
     // 校验 investigate 输出
     if (result) {
@@ -398,20 +420,26 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     }
 
     // 添加证据
-    if (result?.evidenceSummary) {
+    if (resultHasUsableEvidence) {
       await thesisStore.addEvidence({
         threadId: thread.id,
         evidenceType: result.evidenceType ?? "neutral",
         source: "agent_reasoning",
         content: result.evidenceSummary,
         dataSnapshot: allEvidence,
+        confidence: evidenceConfidence({
+          evidenceSummary: result.evidenceSummary,
+          evidenceType: result.evidenceType ?? "neutral",
+          toolCount: allToolsCalled.length,
+          hasDataSnapshot: Object.keys(allEvidence).length > 0,
+        }),
       });
     }
 
     // 调查完成无论 thesis 是否变化都 bump updated_at，防止认知缺口天数
     // 永久增长的 bug：否则 LLM 说"无变化"时 target thesis 虽然被调查过但
     // updated_at 纹丝不动，日报里 medium thesis 永远是 "N 天未调查"。
-    if (result?.evidenceSummary || result?.thesisChanged === false) {
+    if (resultHasUsableEvidence || result?.thesisChanged) {
       try {
         await thesisStore.touchThesis(thread.id);
       } catch (e) {
@@ -422,7 +450,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     // P0-1: 创建观察记忆 — 无论 thesisChanged 与否，有效调查都留下记忆痕迹
     // thesisChanged 时由 reflectNode 创建记忆，这里只处理未变化的情况
     let observationMemCount = 0;
-    if (result?.evidenceSummary && result.evidenceSummary.length > 20 && !result?.thesisChanged) {
+    if (resultHasUsableEvidence && result.evidenceSummary.length > 20 && !result?.thesisChanged) {
       try {
         const content = `[观察] ${thread.title}: ${result.evidenceSummary.slice(0, 300)}`;
         const emb = await generateEmbedding(content);

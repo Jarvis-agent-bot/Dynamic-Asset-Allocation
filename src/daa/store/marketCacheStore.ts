@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { MARKET_INDICATOR_KEYS_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import {
   withDaaPgClient, parseJsonb, toIsoString, withPgTransaction, clampNumber, normalizeUpper, normalizeStringArray,
   isRecord,
@@ -1410,13 +1411,12 @@ export async function upsertDaaMarketIndicatorSnapshots(rows: Array<Partial<DaaS
 export async function listLatestDaaMarketIndicatorSnapshots(): Promise<DaaStoreMarketIndicatorSnapshot[]> {
   await ensureDaaMarketCacheSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const supportedKeys = ["vix", "qqq_spy_ratio", "fxi_volatility", "kweb_fxi_ratio", "btc_eth_ratio", "btc_volatility", "gold_silver_ratio"];
     const result = await query(
       `SELECT DISTINCT ON (indicator_key) ${MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_}
        FROM daa_market_indicator_snapshot_v1
        WHERE indicator_key = ANY($1::text[])
        ORDER BY indicator_key, generated_at DESC`,
-      [supportedKeys],
+      [MARKET_INDICATOR_KEYS_],
     );
     return result.rows.map((row) => mapMarketIndicatorSnapshotRow(row as Record<string, unknown>));
   });

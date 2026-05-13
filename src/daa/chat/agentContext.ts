@@ -3,6 +3,7 @@ import { normalizeSystemConfig, type DaaSystemConfig } from "@/src/daa/config/sy
 import { resolveLlmConfig, type LlmRuntimeConfig, type LlmTaskType } from "@/src/daa/llm/llmClient";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
+import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { normalizeText } from "@/src/daa/utils/normalize";
@@ -135,7 +136,7 @@ export function buildContextDigest(readModel: Awaited<ReturnType<typeof buildWor
   const topSignals = (readModel.signals || []).slice(0, 4).map((item) => item.text).join("；");
   const marketScopes = (readModel.bootstrap.marketContext?.scopes || [])
     .slice(0, 5)
-    .map((item) => `${item.label}:${item.regime}(buyScale=${item.buyScale})`)
+    .map((item) => `${item.label}:${marketRegimeActionLabelZh(item.regime)}(买入预算系数=${item.buyScale})`)
     .join("；");
   // 展示 top 8 市场指标的具体数值
   const marketIndicators = (readModel.bootstrap.marketContext?.indicators || [])

@@ -8,11 +8,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Shield, Target, Clock, CheckCircle, XCircle, MinusCircle } from "lucide-react";
 
+import { deriveEvidenceQuality, normalizeAgentEvidenceContent } from "@/src/daa/agent/evidenceText";
+
 interface EvidenceItem {
   id: string;
   evidenceType: string;
   source: string;
   content: string;
+  dataSnapshot?: Record<string, unknown> | null;
   confidence: number;
   createdAt: string;
 }
@@ -146,6 +149,12 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
                   e.evidenceType === "contradicting" ? "text-red-400" : "text-[var(--faint)]";
                 const typeBg = e.evidenceType === "supporting" ? "bg-emerald-500/10 text-emerald-400" :
                   e.evidenceType === "contradicting" ? "bg-red-500/10 text-red-400" : "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
+                const quality = deriveEvidenceQuality(e);
+                const qualityBg = quality.level === "high"
+                  ? "bg-emerald-500/10 text-emerald-300"
+                  : quality.level === "medium"
+                    ? "bg-sky-500/10 text-sky-300"
+                    : "bg-amber-500/10 text-amber-300";
                 return (
                   <div key={e.id} className="relative pb-4">
                     <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg)] bg-[rgba(255,255,255,0.15)]" />
@@ -154,13 +163,14 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
                         <div className="flex items-center gap-2">
                           <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
                           <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${typeBg}`}>{e.evidenceType}</span>
+                          <span title={quality.reason} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${qualityBg}`}>{quality.label}</span>
                           <span className="text-[10px] text-[var(--faint)]">{e.source}</span>
                         </div>
                         <span className="text-[10px] text-[var(--faint)]">
                           {new Date(e.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
-                      <p className="mt-1.5 text-xs text-[var(--muted)] leading-relaxed">{e.content}</p>
+                      <p className="mt-1.5 text-xs text-[var(--muted)] leading-relaxed">{normalizeAgentEvidenceContent(e.content)}</p>
                     </div>
                   </div>
                 );

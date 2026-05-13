@@ -1,5 +1,6 @@
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 /**
@@ -224,12 +225,7 @@ function indicatorShortLabel(key: string): string {
 }
 
 function regimeLabel(regime: string): string {
-  const map: Record<string, string> = {
-    risk_on: "偏进攻",
-    transitional: "过渡期",
-    risk_off: "防守",
-  };
-  return map[regime] || regime;
+  return marketRegimeActionLabelZh(regime);
 }
 
 function regimeEmoji(regime: string): string {

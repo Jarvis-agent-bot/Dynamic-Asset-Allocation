@@ -225,7 +225,7 @@ export function SettingsMarketContextBlock(props: {
             </div>
 
             <div>
-              <FieldLabel>偏防守环境买入执行系数</FieldLabel>
+              <FieldLabel>减仓/回避环境买入执行系数</FieldLabel>
               <NumberInput
                 value={config.dataSources.marketIndicators.overlays.riskOffBuyScale}
                 min={0.2}

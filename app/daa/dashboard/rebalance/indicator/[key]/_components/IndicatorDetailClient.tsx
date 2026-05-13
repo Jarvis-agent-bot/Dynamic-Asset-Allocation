@@ -8,6 +8,11 @@ import { cn } from "@/lib/utils";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { marketRegimeTone } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
+import {
+  isActionableMarketScope,
+  marketActionByRiskOffScoreLabelZh,
+  marketScopePrimaryLabelZh,
+} from "@/src/daa/modules/marketContext/marketContextLabels";
 import type { DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 import { IndicatorChart } from "./IndicatorChart";
@@ -113,7 +118,9 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
           <>
             <span className="text-xs text-[var(--faint)]">百分位 {snapshot.percentile252?.toFixed(0) ?? "—"}%</span>
             <DaaSurfaceStatusPill tone={marketRegimeTone(snapshot.stance)}>
-              {snapshot.stance === "risk_off" ? "偏防守" : snapshot.stance === "risk_on" ? "偏进攻" : "中性"}
+              {isActionableMarketScope(snapshot.scope)
+                ? marketActionByRiskOffScoreLabelZh(snapshot.riskOffScorePct)
+                : marketScopePrimaryLabelZh(snapshot)}
             </DaaSurfaceStatusPill>
           </>
         ) : null}

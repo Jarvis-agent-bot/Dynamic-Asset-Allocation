@@ -10,6 +10,12 @@ import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPa
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfaceStatusPill, type DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
+import {
+  isActionableMarketScope,
+  marketActionByRiskOffScoreLabelZh,
+  marketRegimeEnvironmentLabelZh,
+  marketScopePrimaryLabelZh,
+} from "@/src/daa/modules/marketContext/marketContextLabels";
 import type { DaaMarketContext, DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { PolicyDecision } from "@/src/daa/modules/policy-engine/policyTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
@@ -97,17 +103,19 @@ function formatIndicatorValue(indicator: DaaMarketIndicatorSnapshot): string {
   return `${value}${indicator.unit ? ` ${indicator.unit}` : ""}`;
 }
 
-function stanceTone(stance: DaaMarketIndicatorSnapshot["stance"]): DaaSurfaceTone {
-  if (stance === "risk_on") return "green";
-  if (stance === "risk_off") return "amber";
+function riskScoreTone(scorePct: number | null | undefined): DaaSurfaceTone {
+  const score = Number.isFinite(scorePct) ? Number(scorePct) : 50;
+  if (score >= 80) return "red";
+  if (score >= 65) return "amber";
+  if (score <= 35) return "green";
   return "slate";
 }
 
-function stanceLabel(stance: DaaMarketIndicatorSnapshot["stance"]): string {
-  if (stance === "risk_on") return "偏进攻";
-  if (stance === "risk_off") return "偏防守";
-  if (stance === "neutral") return "中性";
-  return marketRegimeLabel(stance);
+function indicatorSignalLabel(indicator: DaaMarketIndicatorSnapshot): string {
+  if (isActionableMarketScope(indicator.scope)) {
+    return marketActionByRiskOffScoreLabelZh(indicator.riskOffScorePct);
+  }
+  return marketScopePrimaryLabelZh(indicator);
 }
 
 function totalProposalNotional(cycle: RebalanceCycle | null): number {
@@ -263,7 +271,7 @@ function MarketEvidenceStrip({ marketContext }: { marketContext: DaaMarketContex
           <span className="text-sm font-semibold text-[var(--text)]">市场证据摘要</span>
         </div>
         <DaaSurfaceStatusPill tone={marketRegimeTone(marketContext.regime)}>
-          {marketRegimeLabel(marketContext.regime)} · 风险分 {marketContext.riskOffScorePct.toFixed(0)}
+          {marketRegimeLabel(marketContext.regime)} · {marketRegimeEnvironmentLabelZh(marketContext.regime)} · 风险分 {marketContext.riskOffScorePct.toFixed(0)}
         </DaaSurfaceStatusPill>
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -271,8 +279,8 @@ function MarketEvidenceStrip({ marketContext }: { marketContext: DaaMarketContex
           <div key={indicator.key} className="min-w-0 border-t border-[var(--border)] pt-3">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-sm font-semibold text-[var(--text)]">{indicator.label}</span>
-              <DaaSurfaceStatusPill tone={stanceTone(indicator.stance)} className="shrink-0">
-                {stanceLabel(indicator.stance)}
+              <DaaSurfaceStatusPill tone={riskScoreTone(indicator.riskOffScorePct)} className="shrink-0">
+                {indicatorSignalLabel(indicator)}
               </DaaSurfaceStatusPill>
             </div>
             <div className="mt-2 font-[var(--font-mono)] text-lg text-[var(--text)]">{formatIndicatorValue(indicator)}</div>

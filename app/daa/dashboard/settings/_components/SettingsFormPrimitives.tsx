@@ -25,7 +25,7 @@ export const MARKET_INDICATOR_ITEMS_: Array<{
   hint: string;
   dependencies: string;
 }> = [
-  { key: "vix", label: "美股恐慌指数 (VIX)", hint: "衡量美股隐含波动，越高通常代表美股更偏防守。", dependencies: "^VIX" },
+  { key: "vix", label: "美股恐慌指数 (VIX)", hint: "衡量美股隐含波动，越高通常代表美股风险压力越高。", dependencies: "^VIX" },
   { key: "qqqSpyRatio", label: "美股成长/大盘比 (QQQ/SPY)", hint: "观察美股成长风格相对宽基大盘的强弱切换。", dependencies: "QQQ, SPY" },
   { key: "fxiVolatility", label: "港中概波动率 (FXI)", hint: "衡量港股 / 中概代表指数的波动压力。", dependencies: "FXI" },
   { key: "kwebFxiRatio", label: "中概互联/大盘比 (KWEB/FXI)", hint: "观察中概互联网相对中国大盘的风险偏好。", dependencies: "KWEB, FXI" },

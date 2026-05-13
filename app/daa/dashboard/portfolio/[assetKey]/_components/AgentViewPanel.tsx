@@ -10,6 +10,7 @@ import Link from "next/link";
 import { Brain, Loader2, AlertCircle, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { deriveEvidenceQuality, normalizeAgentEvidenceContent, type EvidenceQualityLevel } from "@/src/daa/agent/evidenceText";
 
 type ConvictionLevel = "high" | "medium" | "low" | "uncertain";
 type EvidenceType = "supporting" | "contradicting" | "neutral";
@@ -20,6 +21,8 @@ interface Evidence {
   evidenceType: EvidenceType;
   source: string;
   content: string;
+  dataSnapshot?: Record<string, unknown> | null;
+  confidence?: number | null;
   createdAt: string;
 }
 
@@ -44,7 +47,7 @@ function convictionBadge(conviction: ConvictionLevel): { label: string; color: s
     case "high":     return { label: "高信心", color: "bg-emerald-500/15 text-emerald-300" };
     case "medium":   return { label: "中信心", color: "bg-indigo-500/15 text-indigo-300" };
     case "low":      return { label: "低信心", color: "bg-amber-500/15 text-amber-300" };
-    default:         return { label: "待确认", color: "bg-[rgba(255,255,255,0.06)] text-[var(--muted)]" };
+    default:         return { label: "证据不足", color: "bg-[rgba(255,255,255,0.06)] text-[var(--muted)]" };
   }
 }
 
@@ -52,6 +55,12 @@ function evidenceTone(type: EvidenceType): string {
   if (type === "supporting") return "text-emerald-300";
   if (type === "contradicting") return "text-red-300";
   return "text-[var(--muted)]";
+}
+
+function evidenceQualityClass(level: EvidenceQualityLevel): string {
+  if (level === "high") return "bg-emerald-500/10 text-emerald-300";
+  if (level === "medium") return "bg-sky-500/10 text-sky-300";
+  return "bg-amber-500/10 text-amber-300";
 }
 
 function daysSince(iso: string): string {
@@ -124,6 +133,7 @@ export function AgentViewPanel({ assetKey }: { assetKey: string }) {
         <ul className="space-y-3">
           {data.theses.map((t) => {
             const badge = convictionBadge(t.conviction);
+            const latestEvidence = (t.latestEvidence ?? []).slice(0, 2);
             return (
               <li key={t.id} className="space-y-1.5">
                 <Link
@@ -146,18 +156,31 @@ export function AgentViewPanel({ assetKey }: { assetKey: string }) {
                 </Link>
 
                 {/* 最新证据片段 */}
-                {t.latestEvidence && t.latestEvidence.length > 0 && (
+                {latestEvidence.length > 0 ? (
                   <ul className="ml-2 border-l border-[rgba(255,255,255,0.06)] pl-3 space-y-1">
-                    {t.latestEvidence.slice(0, 2).map((e) => (
-                      <li key={e.id} className="text-[11px] text-[var(--muted)] line-clamp-2">
-                        <span className={cn("font-medium mr-1", evidenceTone(e.evidenceType))}>
-                          {e.evidenceType === "supporting" ? "↑" : e.evidenceType === "contradicting" ? "↓" : "·"}
-                        </span>
-                        {e.content}
-                      </li>
-                    ))}
+                    {latestEvidence.map((e) => {
+                      const quality = deriveEvidenceQuality(e);
+                      return (
+                        <li key={e.id} className="text-[11px] text-[var(--muted)] line-clamp-2">
+                          <span className={cn("font-medium mr-1", evidenceTone(e.evidenceType))}>
+                            {e.evidenceType === "supporting" ? "↑" : e.evidenceType === "contradicting" ? "↓" : "·"}
+                          </span>
+                          <span
+                            title={quality.reason}
+                            className={cn("mr-1 rounded px-1 py-0.5 text-[10px] font-medium", evidenceQualityClass(quality.level))}
+                          >
+                            {quality.label.replace("证据质量 ", "")}
+                          </span>
+                          {normalizeAgentEvidenceContent(e.content)}
+                        </li>
+                      );
+                    })}
                   </ul>
-                )}
+                ) : t.conviction === "uncertain" ? (
+                  <div className="ml-2 border-l border-[rgba(255,255,255,0.06)] pl-3 text-[11px] text-[var(--faint)]">
+                    暂无可用证据，等待下一轮调查确认。
+                  </div>
+                ) : null}
               </li>
             );
           })}

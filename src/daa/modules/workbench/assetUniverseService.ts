@@ -7,6 +7,7 @@ import {
 import type { DaaStoreAssetUniverseRow, DaaStoreFxRate } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { toFinite } from "@/src/daa/utils/normalize";
+import { getAssetDisplayName } from "@/src/daa/assetRegistry";
 
 import type { AssetUniverseView, WorkbenchPriceStatus } from "./workbenchTypes";
 
@@ -85,7 +86,7 @@ export function buildAssetUniverseViewRows(input: {
       assetKey: row.assetKey,
       symbol: row.symbol,
       name: row.name,
-      displayNameZh: row.displayNameZh,
+      displayNameZh: row.displayNameZh || getAssetDisplayName(row.symbol),
       market: row.market,
       currency: row.currency,
       assetClass: row.assetClass,

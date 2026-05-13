@@ -548,7 +548,7 @@ function buildMarketFacts(marketContext: DaaMarketContext | null | undefined): s
         const lead = scope.indicators[0] || null;
         const value = lead?.rawValue == null ? "N/A" : `${lead.rawValue}${lead.unit || ""}`;
         const percentile = lead?.percentile252 == null ? "N/A" : `${lead.percentile252.toFixed(1)}%`;
-        return `${scope.label} ${marketRegimeLabelZh(scope.regime)} / 买入 ${Math.round(scope.buyScale * 100)}% / ${lead?.label || "指标"} ${value} / 近一年位置 ${percentile}`;
+        return `${scope.label} ${marketRegimeLabelZh(scope.regime)} / 买入预算系数 ${Math.round(scope.buyScale * 100)}% / ${lead?.label || "指标"} ${value} / 近一年位置 ${percentile}`;
     });
 }
 

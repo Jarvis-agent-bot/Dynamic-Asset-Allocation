@@ -14,6 +14,8 @@ import type { ToolCategory, ToolExecutionContext, ToolResultV2 } from "@/src/daa
 import { getToolsByCategory, executeToolCallV2, formatToolDefinitionsV2ForPrompt } from "@/src/daa/agent/tools/registry";
 import { ContextManager } from "@/src/daa/agent/context/contextEngine";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { callDeepSeekJson } from "@/src/daa/agent/helpers/llm";
+import { parseReactResponse, type ReactAction } from "@/src/daa/agent/helpers/reactParser";
 
 // ── 类型 ──
 
@@ -127,37 +129,26 @@ export async function runSubAgentInvestigation(
       const contextResult = cm.build(cfg.tokenBudget!);
       const prompt = contextResult.prompt;
 
-      // 调 LLM
-      const { callLlm, resolveLlmConfig } = await import("@/src/daa/llm/llmClient");
-      const llmConfig = await resolveLlmConfig("research");
-      if (!llmConfig) {
-        errors.push("子 agent: LLM 配置不可用");
-        break;
-      }
-
-      let parsed: Record<string, unknown> | null = null;
-      try {
-        const { text } = await callLlm(llmConfig, prompt);
-        tokensUsed += Math.ceil((prompt.length + text.length) * 0.5);
-        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[1].trim());
-        }
-      } catch (e) {
-        errors.push(`子 agent round ${round}: ${e instanceof Error ? e.message : String(e)}`);
-        break;
-      }
-
-      if (!parsed) break;
+      const { data: reactData, tokensUsed: roundTokens } = await callDeepSeekJson<ReactAction>(
+        prompt,
+        `subAgent.react.r${round}`,
+      );
+      tokensUsed += roundTokens;
 
       // 判断 action
-      if (parsed.action === "result" && parsed.result) {
-        investigateOutput = parsed.result as InvestigateOutput;
+      const parsed = reactData ? parseReactResponse(reactData) : null;
+      if (!parsed) {
+        errors.push(`子 agent round ${round}: 模型未返回可解析的 ReAct JSON`);
+        break;
+      }
+
+      if (parsed.action === "result") {
+        investigateOutput = parsed.result;
         break;
       }
 
       if (parsed.action === "tool_calls" && Array.isArray(parsed.tool_calls)) {
-        const calls = (parsed.tool_calls as Array<{ name: string; params?: Record<string, unknown> }>).slice(0, 3);
+        const calls = parsed.tool_calls.slice(0, 3);
         const execPromises = calls.map(async (tc) => {
           const r = await executeToolCallV2(tc.name, tc.params ?? {}, toolExecCtx, allResultsV2);
           return { call: tc, result: r };
@@ -182,6 +173,22 @@ export async function runSubAgentInvestigation(
         }
 
         cm.addToolResultRound(`第${round}轮结果:\n${roundSummaryParts.join("\n")}`);
+      }
+    }
+
+    if (!investigateOutput && toolsCalled.length > 0) {
+      cm.addToolResultRound("所有工具轮次已结束。请立即基于已收集的证据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。");
+      const forceContext = cm.build(cfg.tokenBudget!);
+      const { data: forceData, tokensUsed: forceTokens } = await callDeepSeekJson<ReactAction>(
+        forceContext.prompt,
+        "subAgent.react.force",
+      );
+      tokensUsed += forceTokens;
+      const forceParsed = forceData ? parseReactResponse(forceData) : null;
+      if (forceParsed?.action === "result") {
+        investigateOutput = forceParsed.result;
+      } else {
+        errors.push("子 agent force: 模型未返回最终结论 JSON");
       }
     }
 

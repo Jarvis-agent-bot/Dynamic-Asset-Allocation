@@ -9,6 +9,7 @@ import {
   MARKET_INDICATOR_META_CATALOG_,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import { buildMarketContextFromIndicators } from "@/src/daa/modules/marketContext/marketContextOverlay";
+import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import type {
   DaaMarketContext,
   DaaMarketIndicatorKey,
@@ -365,7 +366,7 @@ async function computeEnabledIndicators(config: DaaMarketIndicatorsConfig): Prom
       leftSymbol: "QQQ",
       rightSymbol: "SPY",
       riskDirection: "low_is_risk_off",
-      highReason: "QQQ 相对 SPY 偏强，美股风格更偏进攻",
+      highReason: "QQQ 相对 SPY 偏强，美股成长风格占优，可提高美股买入预算",
       lowReason: "QQQ 相对 SPY 走弱，美股风格转向防守",
       getBars,
     }));
@@ -396,7 +397,7 @@ async function computeEnabledIndicators(config: DaaMarketIndicatorsConfig): Prom
       leftSymbol: "BTC-USD",
       rightSymbol: "ETH-USD",
       riskDirection: "high_is_risk_off",
-      highReason: "BTC 相对 ETH 偏强，加密市场更偏防守",
+      highReason: "BTC 相对 ETH 偏强，加密市场风险偏好收缩，应降低高 beta 加密配置",
       lowReason: "ETH 相对 BTC 偏强，加密市场风险偏好回升",
       getBars,
     }));
@@ -466,7 +467,7 @@ async function computeEnabledIndicators(config: DaaMarketIndicatorsConfig): Prom
       leftSymbol: "TIP",
       rightSymbol: "IEF",
       riskDirection: "high_is_risk_off",
-      highReason: "通胀预期升温，实物资产受益",
+      highReason: "通胀预期升温，名义债承压，组合应提高通胀对冲和现金缓冲权重",
       lowReason: "通胀预期回落，名义债券相对占优",
       getBars,
     }));
@@ -519,10 +520,7 @@ function buildContextFromStoredSnapshots(input: {
 }
 
 export function marketRegimeLabelZh(regime: DaaMarketRegime | null | undefined): string {
-  if (regime === "risk_on") return "偏进攻";
-  if (regime === "risk_off") return "偏防守";
-  if (regime === "transitional") return "中性过渡";
-  return "未知";
+  return marketRegimeActionLabelZh(regime);
 }
 
 export async function refreshMarketIndicators(): Promise<RefreshMarketIndicatorsResult> {

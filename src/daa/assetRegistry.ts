@@ -34,6 +34,7 @@ const ASSET_NAME_ZH_OVERRIDES: Record<string, string> = {
   ARM: "Arm",
   WDC: "西部数据",
   "0700.HK": "腾讯控股",
+  "9988.HK": "阿里巴巴-W",
   "1810.HK": "小米集团",
   "0388.HK": "香港交易所",
   "000660.KS": "SK 海力士",
