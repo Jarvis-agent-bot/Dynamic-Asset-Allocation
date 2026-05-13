@@ -18,6 +18,8 @@ export type BacktestAttribution = {
   rebalanceEvents: Array<{
     date: string;
     turnover: number;
+    turnoverPct: number;
+    turnoverNotional: number;
     driftBefore: number;
   }>;
   metrics: {
@@ -180,6 +182,16 @@ function computeRealizedStatsBySymbol(input: {
   );
 }
 
+function findPortfolioEquityAbsOnDate(input: {
+  backtest: DriftRebalanceBacktestResult;
+  date: string;
+}): number {
+  const exact = input.backtest.portfolioByDate.find((point) => point.date === input.date);
+  if (exact && Number.isFinite(exact.equityAbs) && exact.equityAbs > 0) return exact.equityAbs;
+  const fallback = input.backtest.portfolioByDate.find((point) => Number.isFinite(point.equityAbs) && point.equityAbs > 0);
+  return fallback?.equityAbs && fallback.equityAbs > 0 ? fallback.equityAbs : 0;
+}
+
 export function computeBacktestAttribution(input: {
   backtest: DriftRebalanceBacktestResult;
   seriesBySymbol: Record<string, Array<{ date: string; close: number }>>;
@@ -238,11 +250,19 @@ export function computeBacktestAttribution(input: {
 
   const rebalanceEvents = input.backtest.events
     .filter((event) => event.kind === "rebalance")
-    .map((event) => ({
-      date: event.date,
-      turnover: event.turnoverNotional,
-      driftBefore: Math.max(0, toFinite(event.trigger.stats?.maxAbsDriftPct)),
-    }));
+    .map((event) => {
+      const denominator = event.before?.equityAbs && event.before.equityAbs > 0
+        ? event.before.equityAbs
+        : findPortfolioEquityAbsOnDate({ backtest: input.backtest, date: event.date });
+      const turnoverPct = denominator > 0 ? Math.max(0, toFinite(event.turnoverNotional) / denominator) : 0;
+      return {
+        date: event.date,
+        turnover: turnoverPct,
+        turnoverPct,
+        turnoverNotional: Math.max(0, toFinite(event.turnoverNotional)),
+        driftBefore: Math.max(0, toFinite(event.trigger.stats?.maxAbsDriftPct)),
+      };
+    });
 
   return {
     totalReturn,

@@ -18,6 +18,8 @@ export type StrategyLabRunParams = {
   rebalanceFrequency: string;
   /** 初始资金 */
   initialCapital: number;
+  /** 基准货币（默认 USD） */
+  baseCurrency?: string;
   /** 基准 symbol（默认 SPY） */
   benchmarkSymbol?: string;
   /** 手续费 bps */
@@ -35,13 +37,26 @@ export type StrategyLabEquityPoint = {
   equity: number;
 };
 
-export type StrategyLabRunResult = {
-  runId: string;
-  createdAt: string;
-  params: StrategyLabRunParams;
+export type StrategyLabStrategyResult = {
+  strategy: string;
   equityCurve: StrategyLabEquityPoint[];
   metrics: BacktestMetrics;
   attribution: BacktestAttribution;
+  targetWeights: Record<string, number>;
+  warnings: string[];
+};
+
+export type StrategyLabRunResult = {
+  runId: string;
+  createdAt: string;
+  baseCurrency: string;
+  params: StrategyLabRunParams;
+  strategyResults: StrategyLabStrategyResult[];
+  primaryStrategy: string;
+  equityCurve: StrategyLabEquityPoint[];
+  metrics: BacktestMetrics;
+  attribution: BacktestAttribution;
+  targetWeights: Record<string, number>;
   warnings: string[];
 };
 

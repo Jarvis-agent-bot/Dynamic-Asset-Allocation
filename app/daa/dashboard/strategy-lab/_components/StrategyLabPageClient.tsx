@@ -57,6 +57,8 @@ const FREQUENCY_OPTIONS = [
   { value: "annual", label: "年度" },
 ] as const;
 
+const BASE_CURRENCY_OPTIONS = ["USD", "HKD", "CNY"] as const;
+
 const CHART_COLORS = {
   muted: "hsl(215 16% 57%)",
   tooltipBg: "hsl(222 47% 11%)",
@@ -93,6 +95,7 @@ type ConfigState = {
   endDate: string;
   rebalanceFrequency: string;
   initialCapital: number;
+  baseCurrency: string;
 };
 
 const DEFAULT_CONFIG: ConfigState = {
@@ -102,6 +105,7 @@ const DEFAULT_CONFIG: ConfigState = {
   endDate: defaultEndDate(),
   rebalanceFrequency: "monthly",
   initialCapital: 100_000,
+  baseCurrency: "USD",
 };
 
 // ---------------------------------------------------------------------------
@@ -143,9 +147,11 @@ export default function StrategyLabPageClient() {
           const defaultSelection = model.bootstrap.assetUniverse
             .filter((a) => a.holdingQty > 0 || a.watchEnabled)
             .map((a) => a.assetKey);
-          if (defaultSelection.length > 0) {
-            setConfig((prev) => ({ ...prev, selectedAssets: defaultSelection }));
-          }
+          setConfig((prev) => ({
+            ...prev,
+            selectedAssets: defaultSelection.length > 0 ? defaultSelection : prev.selectedAssets,
+            baseCurrency: model.bootstrap.baseCurrency || prev.baseCurrency,
+          }));
         }
       } catch {
         // 静默处理，用户可手动输入资产
@@ -195,6 +201,7 @@ export default function StrategyLabPageClient() {
         endDate: config.endDate,
         rebalanceFrequency: config.rebalanceFrequency,
         initialCapital: config.initialCapital,
+        baseCurrency: config.baseCurrency,
       };
       const res = await runBacktest(params);
       setResult(res);
@@ -238,14 +245,36 @@ export default function StrategyLabPageClient() {
   }, [assets, assetFilter]);
 
   // ---------- 图表数据 ----------
-  const chartData = useMemo(() => {
-    if (!result?.equityCurve?.length) return [];
-    return result.equityCurve.map((p) => ({
-      date: p.date.slice(5, 10),
-      fullDate: p.date,
-      equity: +p.equity.toFixed(2),
-    }));
+  const strategyResults = useMemo(() => {
+    if (!result) return [];
+    if (result.strategyResults?.length) return result.strategyResults;
+    return [{
+      strategy: result.params.strategies[0] || "equalWeight",
+      equityCurve: result.equityCurve,
+      metrics: result.metrics,
+      attribution: result.attribution,
+      targetWeights: result.targetWeights || {},
+      warnings: [],
+    }];
   }, [result]);
+
+  const chartData = useMemo(() => {
+    if (!strategyResults.length) return [];
+    const rows = new Map<string, Record<string, string | number>>();
+    for (const strategyResult of strategyResults) {
+      for (const point of strategyResult.equityCurve || []) {
+        const row = rows.get(point.date) || {
+          date: point.date.slice(5, 10),
+          fullDate: point.date,
+        };
+        row[strategyResult.strategy] = +point.equity.toFixed(2);
+        rows.set(point.date, row);
+      }
+    }
+    return [...rows.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, row]) => row);
+  }, [strategyResults]);
 
   return (
     <div className="space-y-6 lg:space-y-7">
@@ -379,7 +408,19 @@ export default function StrategyLabPageClient() {
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">初始资金 (USD)</label>
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">基准货币</label>
+                <select
+                  value={config.baseCurrency}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, baseCurrency: e.target.value }))}
+                  className={daaSurfaceFieldClassName}
+                >
+                  {BASE_CURRENCY_OPTIONS.map((currency) => (
+                    <option key={currency} value={currency}>{currency}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">初始资金 ({config.baseCurrency})</label>
                 <input
                   type="number"
                   min={1000}
@@ -444,6 +485,46 @@ export default function StrategyLabPageClient() {
                 />
               </div>
 
+              {strategyResults.length > 1 ? (
+                <DaaSurfacePanel accent="slate" title="策略对比" subtitle="同一资产池、同一区间下的多策略回测结果。">
+                  <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)]">
+                    <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
+                      <thead>
+                        <tr>
+                          <th className={daaSurfaceTableHeadClassName}>策略</th>
+                          <th className={`${daaSurfaceTableHeadClassName} text-right`}>总收益</th>
+                          <th className={`${daaSurfaceTableHeadClassName} text-right`}>夏普</th>
+                          <th className={`${daaSurfaceTableHeadClassName} text-right`}>最大回撤</th>
+                          <th className={`${daaSurfaceTableHeadClassName} text-right`}>胜率</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {strategyResults.map((item) => (
+                          <tr key={item.strategy}>
+                            <td className={`${daaSurfaceTableCellClassName} text-[var(--text)]`}>{strategyLabel(item.strategy)}</td>
+                            <td
+                              className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)]`}
+                              style={{ color: item.metrics.totalReturn >= 0 ? "var(--success)" : "var(--danger)" }}
+                            >
+                              {item.metrics.totalReturn >= 0 ? "+" : ""}{(item.metrics.totalReturn * 100).toFixed(2)}%
+                            </td>
+                            <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--text)]`}>
+                              {item.metrics.sharpe.toFixed(2)}
+                            </td>
+                            <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--muted)]`}>
+                              {(item.metrics.maxDrawdown * 100).toFixed(2)}%
+                            </td>
+                            <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--muted)]`}>
+                              {(item.metrics.winRate * 100).toFixed(1)}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </DaaSurfacePanel>
+              ) : null}
+
               {/* 权益曲线 */}
               <DaaSurfacePanel accent="cyan" title="权益曲线" subtitle="回测期间的资产净值走势。">
                 {chartData.length >= 2 ? (
@@ -478,15 +559,18 @@ export default function StrategyLabPageClient() {
                           labelFormatter={(label: unknown) => `${String(label)}`}
                         />
                         <Legend verticalAlign="bottom" height={28} iconType="line" wrapperStyle={{ fontSize: 11 }} />
-                        <Line
-                          type="monotone"
-                          dataKey="equity"
-                          name={strategyLabel(result.params.strategies[0] || "equalWeight")}
-                          stroke={STRATEGY_LINE_COLORS[result.params.strategies[0]] || STRATEGY_LINE_COLORS.equalWeight}
-                          strokeWidth={2.2}
-                          dot={false}
-                          activeDot={{ r: 4 }}
-                        />
+                        {strategyResults.map((item) => (
+                          <Line
+                            key={item.strategy}
+                            type="monotone"
+                            dataKey={item.strategy}
+                            name={strategyLabel(item.strategy)}
+                            stroke={STRATEGY_LINE_COLORS[item.strategy] || STRATEGY_LINE_COLORS.equalWeight}
+                            strokeWidth={2.2}
+                            dot={false}
+                            activeDot={{ r: 4 }}
+                          />
+                        ))}
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -551,27 +635,22 @@ export default function StrategyLabPageClient() {
               ) : null}
 
               {/* 应用回测权重为目标配置 */}
-              {result?.attribution?.perAsset && result.attribution.perAsset.length > 0 && (
+              {result?.targetWeights && Object.keys(result.targetWeights).length > 0 && (
                 <div className="flex items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-[var(--text)]">应用回测权重</div>
+                    <div className="text-sm font-medium text-[var(--text)]">应用 {strategyLabel(result.primaryStrategy || result.params.strategies[0] || "equalWeight")} 权重</div>
                     <div className="mt-0.5 text-xs text-[var(--muted)]">
-                      将本次回测的平均权重作为目标配置，覆盖当前设置
+                      将本次回测末期的策略目标权重作为当前目标配置
                     </div>
                   </div>
                   <DaaSurfaceActionButton
                     tone="primary"
                     disabled={applying}
                     onClick={async () => {
-                      if (!result?.attribution?.perAsset) return;
+                      if (!result?.targetWeights) return;
                       setApplying(true);
                       try {
-                        const weights: Record<string, number> = {};
-                        for (const item of result.attribution.perAsset) {
-                          const key = item.symbol.includes("::") ? item.symbol : `US::${item.symbol}`;
-                          weights[key] = Number((item.avgWeight * 100).toFixed(2));
-                        }
-                        await applyWorkbenchTargetWeights(weights);
+                        await applyWorkbenchTargetWeights(result.targetWeights);
                         const nextModel = await getWorkbenchReadModel({ syncPrices: false });
                         setAssets(nextModel.bootstrap.assetUniverse);
                         toast.success("已将回测权重应用为目标配置");
@@ -603,7 +682,7 @@ export default function StrategyLabPageClient() {
                         {result.attribution.rebalanceEvents.map((evt, i) => (
                           <tr key={i}>
                             <td className={`${daaSurfaceTableCellClassName} font-[var(--font-mono)] text-[var(--text)]`}>{evt.date}</td>
-                            <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--muted)]`}>{(evt.turnover * 100).toFixed(2)}%</td>
+                            <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--muted)]`}>{(evt.turnoverPct * 100).toFixed(2)}%</td>
                             <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--muted)]`}>{(evt.driftBefore * 100).toFixed(2)}%</td>
                           </tr>
                         ))}

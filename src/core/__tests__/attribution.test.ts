@@ -160,6 +160,62 @@ describe("computeBacktestAttribution", () => {
     expect(attribution.activeReturn).toBeCloseTo(0.01, 8);
   });
 
+  it("再平衡换手率按组合净值归一化，同时保留名义金额", () => {
+    const backtest = buildBacktestResult({
+      events: [
+        {
+          date: "2026-01-02",
+          kind: "rebalance",
+          trigger: {
+            shouldRebalance: true,
+            reasons: ["trigger: ok"],
+            stats: {
+              equity: 100,
+              driftThresholdPct: 0,
+              minOrderNotional: 0,
+              minRebalanceIntervalSeconds: 0,
+              maxAbsDriftPct: 0.2,
+              maxAbsDriftSymbol: "AAA",
+              orderCount: 1,
+              eligibleOrderCount: 1,
+              eligibleNotionalSum: 25,
+            },
+          },
+          orders: [],
+          executed: [],
+          turnoverNotional: 25,
+          feeNotional: 0,
+          before: {
+            equityAbs: 100,
+            cashAbs: 0,
+            cashPct01: 0,
+            weightsBySymbolPct01: { AAA: 1 },
+          },
+          after: {
+            equityAbs: 100,
+            cashAbs: 25,
+            cashPct01: 0.25,
+            weightsBySymbolPct01: { AAA: 0.75 },
+          },
+        },
+      ],
+    });
+
+    const attribution = computeBacktestAttribution({
+      backtest,
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 100 },
+        ],
+      },
+    });
+
+    expect(attribution.rebalanceEvents[0].turnoverPct).toBeCloseTo(0.25, 8);
+    expect(attribution.rebalanceEvents[0].turnover).toBeCloseTo(0.25, 8);
+    expect(attribution.rebalanceEvents[0].turnoverNotional).toBeCloseTo(25, 8);
+    expect(attribution.rebalanceEvents[0].driftBefore).toBeCloseTo(0.2, 8);
+  });
 
   it("hides active benchmark comparison when benchmark does not fully cover the backtest horizon", () => {
     const backtest = buildBacktestResult({

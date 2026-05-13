@@ -102,6 +102,38 @@ describe("backtestDriftRebalance", () => {
     expect(rebalanceEvents[0].executionTiming).toBe("t_plus_1_close");
   });
 
+  it("传入计划调仓日后只在这些日期打开新的再平衡信号", () => {
+    const seriesBySymbol = {
+      AAA: [
+        { date: "2026-01-01", close: 1 },
+        { date: "2026-01-02", close: 2 },
+        { date: "2026-01-03", close: 2 },
+        { date: "2026-01-04", close: 2 },
+      ],
+      BBB: [
+        { date: "2026-01-01", close: 1 },
+        { date: "2026-01-02", close: 1 },
+        { date: "2026-01-03", close: 1 },
+        { date: "2026-01-04", close: 1 },
+      ],
+    };
+
+    const res = backtestDriftRebalance({
+      seriesBySymbol,
+      targetWeights: { AAA: 0.5, BBB: 0.5 },
+      rebalanceDates: ["2026-01-03"],
+      initialEquity: 100,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      trigger: { driftThresholdPct: 0.1, minOrderNotional: 0 },
+      execution: { timing: "t_plus_1_close" },
+    });
+
+    const rebalanceEvents = res.events.filter((event) => event.kind === "rebalance");
+    expect(rebalanceEvents).toHaveLength(1);
+    expect(rebalanceEvents[0].signalDate).toBe("2026-01-03");
+    expect(rebalanceEvents[0].date).toBe("2026-01-04");
+  });
+
   it("applies fee and slippage costs into turnover summary", () => {
     const res = backtestDriftRebalance({
       seriesBySymbol: {

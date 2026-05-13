@@ -12,7 +12,7 @@ import { assertValidSeriesDates } from "./seriesContracts";
 import { toFinite } from "@/src/core/utils/number";
 
 export type DriftRebalanceBacktestRequest = {
-  /** Historical close series per symbol. All series must share the same dates. */
+  /** 每个资产的历史收盘价；所有序列必须共享同一组估值日期。 */
   seriesBySymbol: Record<string, PriceBar[]>;
 
   /** Static target weights. Sum may be < 1 (cash left) or > 1 (normalized by rebalanceCore). */
@@ -31,6 +31,9 @@ export type DriftRebalanceBacktestRequest = {
 
   /** Rebalance trigger config. lastRebalanceAt/now are managed by the simulator. */
   trigger?: Omit<RebalanceTriggerConfig, "lastRebalanceAt" | "now">;
+
+  /** 可选的计划调仓信号日期；传入后只允许这些日期打开新的再平衡信号。 */
+  rebalanceDates?: string[];
 
   /** When starting from cash-only, buy into day-0 target weights. Default: true. */
   bootstrapToTarget?: boolean;
@@ -314,6 +317,11 @@ function buildExecutableDateSetsBySymbol(
   return Object.fromEntries(entries);
 }
 
+function buildRebalanceDateSet(input: DriftRebalanceBacktestRequest["rebalanceDates"] | undefined): Set<string> | null {
+  if (!Array.isArray(input)) return null;
+  return new Set(input.map((date) => String(date || "").trim()).filter(Boolean));
+}
+
 function partitionOrdersByExecutableDate(input: {
   date: string;
   orders: SuggestedOrder[];
@@ -444,6 +452,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   const includeEventStates = req.includeEventStates === true;
   const includeTimeline = req.includeTimeline !== false;
   const execution = normalizeExecutionConfig(req.execution);
+  const rebalanceDateSet = buildRebalanceDateSet(req.rebalanceDates);
 
   let holdings = cloneHoldings(req.initialHoldings || {});
   let cash = Math.max(0, toFinite(req.initialCash, 0));
@@ -644,7 +653,8 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       });
     }
 
-    if (!pendingFill?.orders?.length && res.trigger.shouldRebalance) {
+    const canOpenRebalanceSignal = rebalanceDateSet === null || rebalanceDateSet.has(dates[i]);
+    if (!pendingFill?.orders?.length && canOpenRebalanceSignal && res.trigger.shouldRebalance) {
       if (i >= dates.length - 1) {
         warnings.push(`warning: rebalance signal on ${dates[i]} skipped because no next bar for T+1 execution`);
       } else {
