@@ -2,8 +2,8 @@ import { clamp, meanOrNaN } from "@/src/core/math";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { toFinite } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { getYahooProvider } from "@/src/market/yahooProvider";
 
 type DaaValuationMetricStatus = "bullish" | "bearish" | "neutral" | "unavailable";
 
@@ -101,20 +101,17 @@ async function fetchFundamentals(symbolRaw: string): Promise<FundamentalStats> {
   const symbol = normalizeYfinanceSymbol(symbolRaw);
   if (!symbol) return { pe: null, pb: null, dividendYieldPct: null };
 
-  const upstream = new URL(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`);
-  upstream.searchParams.set("modules", "summaryDetail,defaultKeyStatistics,financialData");
-
   try {
-    const response = await fetch(upstream, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-        "user-agent": MARKET_DATA_USER_AGENT,
+    const yahooResult = await getYahooProvider().fetchQuoteSummary({
+      symbol,
+      modules: "summaryDetail,defaultKeyStatistics,financialData",
+      timeoutMs: 8_000,
+      context: {
+        caller: "valuationSignal.fetchFundamentals",
+        cacheStatus: "cache_bypass",
       },
     });
-    if (!response.ok) return { pe: null, pb: null, dividendYieldPct: null };
-    const payload = await response.json() as unknown;
+    const payload = yahooResult.payloadJson;
     const payloadRoot = isRecord(payload) ? payload : {};
     const quoteSummary = isRecord(payloadRoot.quoteSummary) ? payloadRoot.quoteSummary : {};
     const resultRows = Array.isArray(quoteSummary.result) ? quoteSummary.result : [];

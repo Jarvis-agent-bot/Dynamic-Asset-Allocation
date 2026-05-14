@@ -4,6 +4,7 @@ import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_compon
 import { SettingsSecretsSection } from "@/app/daa/dashboard/settings/_components/SettingsSecretsSection";
 import type { SettingsConfigSetter } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import type { StoreExternalRequestLogsResult } from "@/src/daa/modules/store/dashboardStoreApiClient";
 
 export type SettingsDataHealthAsset = {
   assetKey: string;
@@ -18,11 +19,14 @@ export function SettingsDataTab(props: {
   config: DaaSystemConfig;
   setConfig: SettingsConfigSetter;
   dataHealthAssets: SettingsDataHealthAsset[];
+  externalHealth: StoreExternalRequestLogsResult | null;
 }) {
   return (
     <section id="settings-data" className="scroll-mt-28 space-y-5">
       <SettingsDataSourcesSection config={props.config} setConfig={props.setConfig} />
-      {props.dataHealthAssets.length > 0 ? <DataHealthPanel assets={props.dataHealthAssets} /> : null}
+      {props.dataHealthAssets.length > 0 || props.externalHealth ? (
+        <DataHealthPanel assets={props.dataHealthAssets} externalHealth={props.externalHealth} />
+      ) : null}
       <SettingsDataInitSection />
       <SettingsSecretsSection />
     </section>

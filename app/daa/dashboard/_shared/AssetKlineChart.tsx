@@ -74,12 +74,12 @@ const COLORS = {
 
 function toCandlestickData(bars: PriceBar[]): CandlestickData[] {
   return bars
-    .filter((b) => b.open != null && b.high != null && b.low != null)
+    .filter((b) => Number.isFinite(b.close) && b.close > 0)
     .map((b) => ({
       time: b.date as Time,
-      open: b.open!,
-      high: b.high!,
-      low: b.low!,
+      open: b.open ?? b.close,
+      high: b.high ?? Math.max(b.open ?? b.close, b.close),
+      low: b.low ?? Math.min(b.open ?? b.close, b.close),
       close: b.close,
     }));
 }

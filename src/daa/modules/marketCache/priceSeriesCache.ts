@@ -15,7 +15,7 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
+import { getYahooProvider } from "@/src/market/yahooProvider";
 
 export type CachedPricePoint = { date: string; close: number };
 
@@ -167,23 +167,21 @@ async function queryPriceHistory(symbolUpper: string, start: string): Promise<Ca
 
 async function fetchFromYahoo(normalizedSymbol: string, start: string, timeoutMs: number): Promise<CachedPricePoint[]> {
   const period1 = Math.floor(new Date(start).getTime() / 1000);
-  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalizedSymbol)}`);
-  url.searchParams.set("interval", "1d");
-  url.searchParams.set("period1", String(period1));
-  // Yahoo 在部分环境下省略 period2 会把 endDate 解析为 -1。
-  // 显式给出结束时间，避免历史缓存被清空后无法重新补齐指标日线。
-  url.searchParams.set("period2", String(Math.floor((Date.now() + 86_400_000) / 1000)));
-
-  const res = await fetch(url.toString(), {
-    headers: { "User-Agent": MARKET_DATA_USER_AGENT },
-    signal: AbortSignal.timeout(timeoutMs),
+  const result = await getYahooProvider().fetchChart({
+    symbol: normalizedSymbol,
+    interval: "1d",
+    period1,
+    // Yahoo 在部分环境下省略 period2 会把 endDate 解析为 -1。
+    // 显式给出结束时间，避免历史缓存被清空后无法重新补齐指标日线。
+    period2: Math.floor((Date.now() + 86_400_000) / 1000),
+    timeoutMs,
+    context: {
+      caller: "priceSeriesCache.fetchFromYahoo",
+      cacheStatus: "external_fetch",
+    },
   });
 
-  if (!res.ok) {
-    throw new Error(`Yahoo HTTP ${res.status}`);
-  }
-
-  const json = await res.json() as { chart?: { result?: Array<{
+  const json = result.payloadJson as { chart?: { result?: Array<{
     timestamp?: number[];
     indicators?: { adjclose?: Array<{ adjclose?: number[] }>; quote?: Array<{ close?: number[] }> };
   }> } };

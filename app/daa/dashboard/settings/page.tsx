@@ -19,7 +19,13 @@ import { SettingsStrategyTab } from "@/app/daa/dashboard/settings/_components/ta
 import { ApiClientError } from "@/src/daa/api/client";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
-import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
+import {
+  getSystemConfig,
+  listExternalRequestLogs,
+  refreshMarketIndicators,
+  saveSystemConfig,
+  type StoreExternalRequestLogsResult,
+} from "@/src/daa/modules/store/dashboardStoreApiClient";
 
 function resolveSectionFromHash(hash: string): SettingsNavItemId | null {
   const id = hash.replace(/^#settings-/, "").trim();
@@ -55,6 +61,7 @@ export default function SettingsPage() {
   ));
   const [marketRefreshing, setMarketRefreshing] = useState(false);
   const [dataHealthAssets, setDataHealthAssets] = useState<SettingsDataHealthAsset[]>([]);
+  const [externalHealth, setExternalHealth] = useState<StoreExternalRequestLogsResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +93,11 @@ export default function SettingsPage() {
       );
     } catch {
       /* 静默失败 — 数据质量面板非关键 */
+    }
+    try {
+      setExternalHealth(await listExternalRequestLogs({ provider: "yahoo", sinceHours: 24, limit: 60 }));
+    } catch {
+      /* 静默失败 — 外部源健康面板非关键 */
     }
   }, []);
 
@@ -218,13 +230,20 @@ export default function SettingsPage() {
       return <SettingsBrainTab config={config} setConfig={setConfig} />;
     }
     if (activeSection === "data") {
-      return <SettingsDataTab config={config} setConfig={setConfig} dataHealthAssets={dataHealthAssets} />;
+      return (
+        <SettingsDataTab
+          config={config}
+          setConfig={setConfig}
+          dataHealthAssets={dataHealthAssets}
+          externalHealth={externalHealth}
+        />
+      );
     }
     if (activeSection === "notification") {
       return <SettingsNotificationTab config={config} setConfig={setConfig} />;
     }
     return <SettingsStrategyTab config={config} setConfig={setConfig} />;
-  }, [activeSection, config, dataHealthAssets]);
+  }, [activeSection, config, dataHealthAssets, externalHealth]);
 
   if (loading) {
     return (

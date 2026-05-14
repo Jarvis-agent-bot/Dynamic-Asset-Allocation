@@ -158,6 +158,13 @@ export type DaaSystemConfig = {
       /** 是否要求技术面 momentumRegime=strong */
       requireStrongMomentum: boolean;
     };
+    /** AI 自动维护观察列表目标权重池：只在开关开启后允许 Agent 写入 watchlist 目标权重 */
+    aiTargetWeightPool: {
+      enabled: boolean;
+      minConfidence: number;
+      /** 写入目标权重时同步打开该资产的 auto-entry，让信号/风控链路继续接管买入 */
+      autoEnableEntry: boolean;
+    };
     /** 单次建仓金额上限（以可用现金的百分比为上限，0-1） */
     notionalCashCapPct: number;
   };
@@ -359,6 +366,11 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       minValuationScore: 60,
       minFusionScore: 62,
       requireStrongMomentum: false,
+    },
+    aiTargetWeightPool: {
+      enabled: false,
+      minConfidence: 70,
+      autoEnableEntry: true,
     },
     notionalCashCapPct: 0.3,
   },
@@ -811,9 +823,11 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         enabled: false,
         maxPerCycle: 2,
         defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+        aiTargetWeightPool: { enabled: false, minConfidence: 70, autoEnableEntry: true },
         notionalCashCapPct: 0.3,
       };
       const rules = isRecord(we.defaultRules) ? we.defaultRules : {};
+      const aiTargetWeightPool = isRecord(we.aiTargetWeightPool) ? we.aiTargetWeightPool : {};
       return {
         enabled: toBool(we.enabled, fb.enabled),
         maxPerCycle: clamp(Math.trunc(Number(we.maxPerCycle) || fb.maxPerCycle), 1, 10),
@@ -822,6 +836,11 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
           minValuationScore: clamp(Number(rules.minValuationScore) || fb.defaultRules.minValuationScore, 0, 100),
           minFusionScore: clamp(Number(rules.minFusionScore) || fb.defaultRules.minFusionScore, 0, 100),
           requireStrongMomentum: toBool(rules.requireStrongMomentum, fb.defaultRules.requireStrongMomentum),
+        },
+        aiTargetWeightPool: {
+          enabled: toBool(aiTargetWeightPool.enabled, fb.aiTargetWeightPool.enabled),
+          minConfidence: clamp(Number(aiTargetWeightPool.minConfidence) || fb.aiTargetWeightPool.minConfidence, 0, 100),
+          autoEnableEntry: toBool(aiTargetWeightPool.autoEnableEntry, fb.aiTargetWeightPool.autoEnableEntry),
         },
         notionalCashCapPct: clamp(Number(we.notionalCashCapPct) || fb.notionalCashCapPct, 0.05, 1.0),
       };

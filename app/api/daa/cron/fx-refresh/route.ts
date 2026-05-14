@@ -10,7 +10,7 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
+import { getYahooProvider } from "@/src/market/yahooProvider";
 
 export const runtime = "nodejs";
 
@@ -29,6 +29,7 @@ type FxFetchResult = {
   payloadJson: Record<string, unknown> | null;
   payloadText: string;
   responseHeadersJson: Record<string, string>;
+  requestUrl: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -138,14 +139,6 @@ function pickLatestPositive(values: unknown[]): number {
   return 0;
 }
 
-function extractHeaders(headers: Headers): Record<string, string> {
-  const out: Record<string, string> = {};
-  headers.forEach((value, key) => {
-    out[key] = value;
-  });
-  return out;
-}
-
 async function fetchYfinanceFxRate(baseCcy: string, quoteCcy: string): Promise<FxFetchResult> {
   if (baseCcy === quoteCcy) {
     return {
@@ -157,94 +150,88 @@ async function fetchYfinanceFxRate(baseCcy: string, quoteCcy: string): Promise<F
       payloadJson: null,
       payloadText: "",
       responseHeadersJson: {},
+      requestUrl: "",
     };
   }
 
   const symbol = `${baseCcy}${quoteCcy}=X`;
-  const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-  upstream.searchParams.set("interval", "1d");
-  upstream.searchParams.set("range", "5d");
-
-  const response = await fetch(upstream, {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-      "user-agent": MARKET_DATA_USER_AGENT,
-    },
-    cache: "no-store",
-  });
-
-  const raw = await response.text();
-  let payloadJson: Record<string, unknown> | null = null;
   try {
-    payloadJson = JSON.parse(raw) as Record<string, unknown>;
+    const yahooResult = await getYahooProvider().fetchChart({
+      symbol,
+      interval: "1d",
+      range: "5d",
+      timeoutMs: 8_000,
+      context: {
+        caller: "fxRefreshRoute.fetchFxRate",
+        cacheStatus: "cache_bypass",
+      },
+    });
+    const payloadJson = yahooResult.payloadJson as Record<string, unknown>;
+    const chart = payloadJson && isRecord(payloadJson.chart) ? payloadJson.chart : {};
+    const chartError = isRecord(chart.error) ? chart.error : null;
+    if (chartError) {
+      return {
+        ok: false,
+        rate: 0,
+        status: 200,
+        errorCode: String(chartError?.code || "chart_error"),
+        errorMessage: `FX chart error for ${baseCcy}/${quoteCcy}`,
+        payloadJson,
+        payloadText: yahooResult.payloadText,
+        responseHeadersJson: yahooResult.responseHeaders,
+        requestUrl: yahooResult.url,
+      };
+    }
+
+    const resultRows = Array.isArray(chart.result) ? chart.result : [];
+    const result = isRecord(resultRows[0]) ? resultRows[0] : {};
+    const meta = isRecord(result.meta) ? result.meta : {};
+    const indicators = isRecord(result.indicators) ? result.indicators : {};
+    const quoteRows = Array.isArray(indicators.quote) ? indicators.quote : [];
+    const firstQuote = isRecord(quoteRows[0]) ? quoteRows[0] : {};
+    const metaPrice = Number(meta.regularMarketPrice);
+    const closes = Array.isArray(firstQuote.close) ? firstQuote.close : [];
+    const closePrice = pickLatestPositive(closes);
+    const rate = metaPrice > 0 ? metaPrice : closePrice;
+
+    if (!Number.isFinite(rate) || rate <= 0) {
+      return {
+        ok: false,
+        rate: 0,
+        status: 200,
+        errorCode: "rate_missing",
+        errorMessage: `FX rate missing for ${baseCcy}/${quoteCcy}`,
+        payloadJson,
+        payloadText: yahooResult.payloadText,
+        responseHeadersJson: yahooResult.responseHeaders,
+        requestUrl: yahooResult.url,
+      };
+    }
+
+    return {
+      ok: true,
+      rate,
+      status: yahooResult.status,
+      errorCode: null,
+      errorMessage: null,
+      payloadJson,
+      payloadText: yahooResult.payloadText,
+      responseHeadersJson: yahooResult.responseHeaders,
+      requestUrl: yahooResult.url,
+    };
   } catch (err) {
-  logSwallowed("fxRefreshRoute.parsePayload", err);
-    payloadJson = null;
-  }
-
-  if (!response.ok) {
     return {
       ok: false,
       rate: 0,
-      status: response.status,
-      errorCode: `http_${response.status}`,
-      errorMessage: `FX upstream error(${response.status}) for ${baseCcy}/${quoteCcy}`,
-      payloadJson,
-      payloadText: raw,
-      responseHeadersJson: extractHeaders(response.headers),
+      status: err instanceof Error && "status" in err ? Number((err as { status?: unknown }).status) || 0 : 0,
+      errorCode: err instanceof Error && "errorCode" in err ? String((err as { errorCode?: unknown }).errorCode || "fetch_failed") : "fetch_failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      payloadJson: null,
+      payloadText: err instanceof Error && "bodyPreview" in err ? String((err as { bodyPreview?: unknown }).bodyPreview || "") : "",
+      responseHeadersJson: {},
+      requestUrl: err instanceof Error && "url" in err ? String((err as { url?: unknown }).url || "") : "",
     };
   }
-
-  const chart = payloadJson && isRecord(payloadJson.chart) ? payloadJson.chart : {};
-  const chartError = isRecord(chart.error) ? chart.error : null;
-  if (chartError) {
-    return {
-      ok: false,
-      rate: 0,
-      status: 200,
-      errorCode: String(chartError?.code || "chart_error"),
-      errorMessage: `FX chart error for ${baseCcy}/${quoteCcy}`,
-      payloadJson,
-      payloadText: raw,
-      responseHeadersJson: extractHeaders(response.headers),
-    };
-  }
-
-  const resultRows = Array.isArray(chart.result) ? chart.result : [];
-  const result = isRecord(resultRows[0]) ? resultRows[0] : {};
-  const meta = isRecord(result.meta) ? result.meta : {};
-  const indicators = isRecord(result.indicators) ? result.indicators : {};
-  const quoteRows = Array.isArray(indicators.quote) ? indicators.quote : [];
-  const firstQuote = isRecord(quoteRows[0]) ? quoteRows[0] : {};
-  const metaPrice = Number(meta.regularMarketPrice);
-  const closes = Array.isArray(firstQuote.close) ? firstQuote.close : [];
-  const closePrice = pickLatestPositive(closes);
-  const rate = metaPrice > 0 ? metaPrice : closePrice;
-
-  if (!Number.isFinite(rate) || rate <= 0) {
-    return {
-      ok: false,
-      rate: 0,
-      status: 200,
-      errorCode: "rate_missing",
-      errorMessage: `FX rate missing for ${baseCcy}/${quoteCcy}`,
-      payloadJson,
-      payloadText: raw,
-      responseHeadersJson: extractHeaders(response.headers),
-    };
-  }
-
-  return {
-    ok: true,
-    rate,
-    status: response.status,
-    errorCode: null,
-    errorMessage: null,
-    payloadJson,
-    payloadText: raw,
-    responseHeadersJson: extractHeaders(response.headers),
-  };
 }
 
 export async function POST(req: Request) {
@@ -319,7 +306,7 @@ export async function POST(req: Request) {
               provider: "yfinance",
               resource: "yfinance.fx.chart",
               subjectKey: pair.pair,
-              requestUrl: `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(`${pair.baseCcy}${pair.quoteCcy}=X`)}`,
+              requestUrl: fetchResult.requestUrl || `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(`${pair.baseCcy}${pair.quoteCcy}=X`)}`,
               requestJson: {
                 baseCcy: pair.baseCcy,
                 quoteCcy: pair.quoteCcy,

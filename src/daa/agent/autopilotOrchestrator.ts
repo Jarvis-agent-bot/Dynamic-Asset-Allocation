@@ -11,6 +11,10 @@ import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/wor
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildAgentTargetWeightOverrides } from "@/src/daa/automation/automationGuards";
+import {
+  persistAgentTargetWeightPool,
+  resolveAiTargetWeightPoolConfig,
+} from "@/src/daa/automation/agentTargetWeightPool";
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
 import {
   getDaaSystemConfig,
@@ -218,17 +222,25 @@ async function maybeRunAgentDrivenRebalance(input: {
       Math.max(0, Number(row.targetWeightPct || 0) || 0) / 100,
     ]),
   );
+  const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(input.row.config);
   const targetPlan = buildAgentTargetWeightOverrides({
     overlay: input.overlay,
     knownAssetKeys: bootstrap.assetUniverse.map((row) => row.assetKey),
     currentTargetWeights,
     supportedIncreaseAssetKeys,
     maxPositionPct: input.row.config.strategy.constraints.maxPositionPct,
-    minConfidence: 70,
+    minConfidence: aiTargetWeightPool.minConfidence,
   });
   const prerequisites = validateAutopilotPrerequisites(input.row.config);
   if (!prerequisites.ready) {
     return { ...empty, reason: prerequisites.reason };
+  }
+
+  if (targetPlan && aiTargetWeightPool.enabled) {
+    await persistAgentTargetWeightPool({
+      targetWeightOverrides: targetPlan.targetWeightOverrides,
+      autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
+    });
   }
 
   const affectedSymbols = (input.affectedSymbols || [])

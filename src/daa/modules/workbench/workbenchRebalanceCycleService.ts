@@ -677,7 +677,11 @@ export async function generateWorkbenchRebalanceCycle(
     marketRegime: agentResult.marketRegime,
     tokensUsed: agentResult.tokensUsed,
     targetWeightOverrides: normalizedAgentTargetWeightOverrides,
-    targetWeightLifecycle: normalizedAgentTargetWeightOverrides ? "persist_after_successful_execution" : null,
+    targetWeightLifecycle: normalizedAgentTargetWeightOverrides
+      ? (systemRow.config.watchlistEntry?.aiTargetWeightPool.enabled
+        ? "persisted_to_watchlist_target_pool"
+        : "persist_after_successful_execution")
+      : null,
   };
 
   const created = await createDaaRebalanceCycle({

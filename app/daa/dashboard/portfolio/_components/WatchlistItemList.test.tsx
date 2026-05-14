@@ -15,6 +15,24 @@ vi.mock("@/app/daa/dashboard/_hooks/useSparklines", () => ({
   useSparklines: () => ({}),
 }));
 
+vi.mock("@/app/daa/dashboard/_hooks/useFundamentals", () => ({
+  useFundamentals: () => ({}),
+}));
+
+vi.mock("@/app/daa/dashboard/_hooks/useTechnicalSignals", () => ({
+  useTechnicalSignals: () => ({
+    AAPL: {
+      symbol: "AAPL",
+      scorePct: 62,
+      confidencePct: 70,
+      momentumRegime: "neutral",
+      metrics: {},
+      specific: [],
+      reasons: [],
+    },
+  }),
+}));
+
 afterEach(() => {
   cleanup();
   pushMock.mockClear();
@@ -35,6 +53,8 @@ describe("WatchlistItemList", () => {
 
     expect(screen.getByText("苹果")).toBeTruthy();
     expect(screen.getByText("AAPL")).toBeTruthy();
+    expect(screen.getByText("评分 62")).toBeTruthy();
+    expect(screen.getByText("中性动量")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "移出观察列表 苹果" }));
 

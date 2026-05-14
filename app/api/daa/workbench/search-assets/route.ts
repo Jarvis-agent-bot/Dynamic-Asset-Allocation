@@ -13,9 +13,9 @@ import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, toPositive } from "@/src/daa/utils/normalize";
-import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { getAssetDisplayName } from "@/src/daa/assetRegistry";
+import { getYahooProvider } from "@/src/market/yahooProvider";
 
 type LookupMarket = "US" | "HK" | "CN" | "CRYPTO" | "COMMODITY" | "OTHER";
 
@@ -202,47 +202,26 @@ export async function GET(req: Request) {
       rawRetentionDays: 90,
     };
 
-    const upstream = new URL("https://query1.finance.yahoo.com/v1/finance/search");
-    upstream.searchParams.set("q", q);
-    upstream.searchParams.set("quotesCount", String(Math.min(80, limit * 4)));
-    upstream.searchParams.set("newsCount", "0");
-    upstream.searchParams.set("enableFuzzyQuery", "true");
-
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 8_000);
-    let response: Response;
-    try {
-      response = await fetch(upstream, {
-        method: "GET",
-        headers: {
-          accept: "application/json",
-          "user-agent": MARKET_DATA_USER_AGENT,
-        },
-        cache: "no-store",
-        signal: abortController.signal,
-      });
-    } catch (err) {
-      clearTimeout(timeoutId);
-      const message = err instanceof Error && err.name === "AbortError" ? "yfinance search timeout (8s)" : "yfinance search network error";
-      return fail("ROUTE_DENIED", message, { status: 502 });
-    }
-    clearTimeout(timeoutId);
-
-    const text = await response.text();
-    if (!response.ok) {
-      return fail("ROUTE_DENIED", "yfinance search upstream error", {
-        status: 502,
-        details: { status: response.status, body: text.slice(0, 1000) },
-      });
-    }
-
     let payload: unknown;
     try {
-      payload = JSON.parse(text);
-    } catch {
-      return fail("ROUTE_DENIED", "yfinance search 返回非 JSON 响应", {
+      const yahooResult = await getYahooProvider().fetchSearch({
+        query: q,
+        quotesCount: Math.min(80, limit * 4),
+        newsCount: 0,
+        enableFuzzyQuery: true,
+        timeoutMs: 8_000,
+        context: {
+          caller: "searchAssetsRoute",
+          cacheStatus: "cache_bypass",
+        },
+      });
+      payload = yahooResult.payloadJson;
+    } catch (err) {
+      return fail("ROUTE_DENIED", "yfinance search upstream error", {
         status: 502,
-        details: { body: text.slice(0, 500) },
+        details: {
+          message: err instanceof Error ? err.message : String(err),
+        },
       });
     }
     const quotes = safeQuotesArray(payload);
@@ -319,7 +298,7 @@ export async function GET(req: Request) {
         rawRetentionDays: cacheConfig.rawRetentionDays,
       });
     } catch (err) {
-  logSwallowed("searchAssetsRoute.enrichItems", err);
+      logSwallowed("searchAssetsRoute.enrichItems", err);
       items = out;
     }
 

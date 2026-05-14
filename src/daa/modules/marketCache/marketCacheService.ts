@@ -11,7 +11,7 @@ import {
 import { addDaysIsoUtc } from "@/src/market/yfinance";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, normalizeUpper, toFinite } from "@/src/daa/utils/normalize";
-import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
+import { getYahooProvider } from "@/src/market/yahooProvider";
 
 type MarketCachePriceStatus = "fresh" | "stale" | "missing";
 
@@ -47,6 +47,7 @@ type FetchResult = {
   payloadJson: Record<string, unknown> | null;
   payloadText: string;
   responseHeaders: Record<string, string>;
+  requestUrl: string;
   errorCode: string | null;
   errorMessage: string | null;
   retryable: boolean;
@@ -67,10 +68,6 @@ type YfinanceChartPayload = {
     error?: { code?: string; description?: string } | null;
   };
 };
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function toAgeSec(iso: string | null): number | null {
   const text = normalizeText(iso);
@@ -142,14 +139,6 @@ function resolveHistoryFallback(input: {
   };
 }
 
-function extractHeaders(headers: Headers): Record<string, string> {
-  const out: Record<string, string> = {};
-  headers.forEach((value, key) => {
-    out[key] = value;
-  });
-  return out;
-}
-
 function pickLatestClose(payload: YfinanceChartPayload | null): number {
   const closes = Array.isArray(payload?.chart?.result?.[0]?.indicators?.quote?.[0]?.close)
     ? payload.chart.result[0].indicators.quote[0].close
@@ -171,48 +160,21 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
   const period1 = Math.floor(Date.parse(`${start}T00:00:00.000Z`) / 1000);
   const period2 = Math.floor(Date.parse(`${endExclusive}T00:00:00.000Z`) / 1000);
 
-  const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-  upstream.searchParams.set("interval", "1d");
-  upstream.searchParams.set("events", "div%7Csplit");
-  upstream.searchParams.set("period1", String(period1));
-  upstream.searchParams.set("period2", String(period2));
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(upstream, {
-      method: "GET",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: {
-        accept: "application/json",
-        "user-agent": MARKET_DATA_USER_AGENT,
+    const yahooResult = await getYahooProvider().fetchChart({
+      symbol,
+      interval: "1d",
+      events: "div|split",
+      period1,
+      period2,
+      timeoutMs,
+      context: {
+        caller: "marketCacheService.latestClose",
+        cacheStatus: "external_fetch",
       },
     });
-    const payloadText = await response.text();
-    let payloadJson: Record<string, unknown> | null = null;
-    try {
-      payloadJson = JSON.parse(payloadText) as Record<string, unknown>;
-    } catch (err) {
-      logSwallowed("marketCacheService.parsePayload", err);
-      payloadJson = null;
-    }
 
-    if (!response.ok) {
-      const retryable = response.status === 429 || response.status >= 500;
-      return {
-        ok: false,
-        status: response.status,
-        price: 0,
-        payloadJson,
-        payloadText,
-        responseHeaders: extractHeaders(response.headers),
-        errorCode: `http_${response.status}`,
-        errorMessage: "yfinance upstream error",
-        retryable,
-      };
-    }
-
+    const payloadJson = yahooResult.payloadJson as Record<string, unknown>;
     const typedPayload = payloadJson as YfinanceChartPayload | null;
     const chartError = typedPayload?.chart?.error;
     if (chartError) {
@@ -221,8 +183,9 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
         status: 200,
         price: 0,
         payloadJson,
-        payloadText,
-        responseHeaders: extractHeaders(response.headers),
+        payloadText: yahooResult.payloadText,
+        responseHeaders: yahooResult.responseHeaders,
+        requestUrl: yahooResult.url,
         errorCode: normalizeText(chartError?.code, "chart_error"),
         errorMessage: normalizeText(chartError?.description, "yfinance chart error"),
         retryable: false,
@@ -236,8 +199,9 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
         status: 200,
         price: 0,
         payloadJson,
-        payloadText,
-        responseHeaders: extractHeaders(response.headers),
+        payloadText: yahooResult.payloadText,
+        responseHeaders: yahooResult.responseHeaders,
+        requestUrl: yahooResult.url,
         errorCode: "price_missing",
         errorMessage: "latest close missing",
         retryable: false,
@@ -246,38 +210,36 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
 
     return {
       ok: true,
-      status: response.status,
+      status: yahooResult.status,
       price: latest,
       payloadJson,
-      payloadText,
-      responseHeaders: extractHeaders(response.headers),
+      payloadText: yahooResult.payloadText,
+      responseHeaders: yahooResult.responseHeaders,
+      requestUrl: yahooResult.url,
       errorCode: null,
       errorMessage: null,
       retryable: false,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const isAbort = error instanceof Error && error.name === "AbortError";
     return {
       ok: false,
-      status: 0,
+      status: error instanceof Error && "status" in error ? Number((error as { status?: unknown }).status) || 0 : 0,
       price: 0,
       payloadJson: null,
       payloadText: "",
       responseHeaders: {},
-      errorCode: isAbort ? "timeout" : "fetch_failed",
+      requestUrl: error instanceof Error && "url" in error ? String((error as { url?: unknown }).url || "") : "",
+      errorCode: error instanceof Error && "errorCode" in error ? String((error as { errorCode?: unknown }).errorCode || "fetch_failed") : "fetch_failed",
       errorMessage: message,
-      retryable: true,
+      retryable: error instanceof Error && "retryable" in error ? Boolean((error as { retryable?: unknown }).retryable) : true,
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 async function fetchWithRetry(symbol: string, timeoutMs: number): Promise<FetchResult> {
   const first = await fetchYfinanceLatestCloseWithRaw(symbol, timeoutMs);
   if (first.ok || !first.retryable) return first;
-  await sleep(350);
   return fetchYfinanceLatestCloseWithRaw(symbol, timeoutMs);
 }
 
@@ -426,7 +388,7 @@ export async function getMarketPricesWithCache(input: {
               provider,
               resource: "yfinance.chart.latest",
               subjectKey: `${current.market}::${current.symbol}`,
-              requestUrl: `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfinanceSymbol)}`,
+              requestUrl: fetchResult.requestUrl || `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfinanceSymbol)}`,
               requestJson: {
                 market: current.market,
                 symbol: current.symbol,

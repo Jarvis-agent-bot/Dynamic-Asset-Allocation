@@ -82,9 +82,9 @@ function byHistoricalPercentile(input: {
 }
 
 function byAbsoluteFallback(input: { metricLabel: string; value: number; cheap: number; fair: number; expensive: number }): ValuationBadge {
-  const reason = `${input.metricLabel} ${input.value.toFixed(2)}，历史样本不足`;
+  const reason = `${input.metricLabel} ${input.value.toFixed(2)}，自身历史样本不足`;
   if (input.value <= input.cheap) {
-    return { label: "偏便宜", tone: "cheap", reason, description: `${reason}；暂时用绝对阈值辅助判断，后续拿到更多历史样本后会切换为历史分位。` };
+    return { label: "偏便宜", tone: "cheap", reason, description: `${reason}；暂时用绝对阈值辅助判断。` };
   }
   if (input.value <= input.fair) {
     return { label: "合理", tone: "fair", reason, description: `${reason}；暂时用绝对阈值辅助判断。` };
@@ -95,50 +95,154 @@ function byAbsoluteFallback(input: { metricLabel: string; value: number; cheap: 
   return { label: "昂贵", tone: "danger", reason, description: `${reason}；暂时用绝对阈值辅助判断。` };
 }
 
+function historyStatsText(stats: AssetFundamentals["peHistory"]): string | null {
+  if (!stats) return null;
+  const span = stats.spanDays == null ? "跨度未知" : `跨度 ${stats.spanDays} 天`;
+  const range = stats.min != null && stats.max != null
+    ? `区间 ${stats.min.toFixed(2)}-${stats.max.toFixed(2)}`
+    : "区间不足";
+  return `样本 ${stats.sampleCount}/${stats.minSampleCount}，${span}/${stats.minSpanDays} 天，${range}`;
+}
+
+function withHistoryStatsDescription(badge: ValuationBadge, stats: AssetFundamentals["peHistory"]): ValuationBadge {
+  const text = historyStatsText(stats);
+  if (!text) return badge;
+  return {
+    ...badge,
+    description: `${badge.description} 当前不展示历史百分位：${text}。`,
+  };
+}
+
+function formatPct(value: number | null | undefined): string | null {
+  return Number.isFinite(value) ? `${Number(value).toFixed(1)}%` : null;
+}
+
+function appendSecondaryMetrics(description: string, fundamentals: AssetFundamentals | null | undefined): string {
+  const parts: string[] = [];
+  if (Number.isFinite(fundamentals?.pbRatio) && Number(fundamentals?.pbRatio) > 0) {
+    parts.push(`PB ${Number(fundamentals?.pbRatio).toFixed(2)}`);
+  }
+  const dividend = formatPct(fundamentals?.dividendYieldPct);
+  if (dividend) parts.push(`股息率 ${dividend}`);
+  const margin = formatPct(fundamentals?.profitMarginsPct);
+  if (margin) parts.push(`净利率 ${margin}`);
+  if (parts.length === 0) return description;
+  return `${description} 辅助指标：${parts.join("，")}。`;
+}
+
 export function deriveValuationBadge(row: AssetUniverseView, fundamentals: AssetFundamentals | null | undefined): ValuationBadge {
   if (!isStock(row)) {
     return {
       label: "不适用",
       tone: "muted",
-      reason: "PE / PEG 不适用于此类资产",
-      description: "PE / PEG 主要适合个股，ETF、债券、商品和加密资产需要看不同指标。",
+      reason: "基本面估值不适用于此类资产",
+      description: "PE、PB、股息率主要适合个股，ETF、债券、商品和加密资产需要看不同指标。",
     };
-  }
-
-  const peg = fundamentals?.pegRatio ?? null;
-  if (Number.isFinite(peg) && Number(peg) > 0) {
-    const percentile = fundamentals?.pegPercentile ?? null;
-    const sampleCount = fundamentals?.pegSampleCount ?? 0;
-    if (Number.isFinite(percentile) && sampleCount >= 3) {
-      return byHistoricalPercentile({
-        metricLabel: "PEG",
-        value: Number(peg),
-        percentile: Number(percentile),
-        sampleCount,
-      });
-    }
-    return byAbsoluteFallback({ metricLabel: "PEG", value: Number(peg), cheap: 1, fair: 1.5, expensive: 2.5 });
   }
 
   const pe = fundamentals?.trailingPE ?? null;
   if (Number.isFinite(pe) && Number(pe) > 0) {
     const percentile = fundamentals?.pePercentile ?? null;
-    const sampleCount = fundamentals?.peSampleCount ?? 0;
-    if (Number.isFinite(percentile) && sampleCount >= 3) {
-      return byHistoricalPercentile({
+    if (Number.isFinite(percentile) && fundamentals?.peHistory?.eligible) {
+      return appendBadgeDescription(byHistoricalPercentile({
         metricLabel: "PE(TTM)",
         value: Number(pe),
         percentile: Number(percentile),
-        sampleCount,
-      });
+        sampleCount: fundamentals.peSampleCount,
+      }), fundamentals);
     }
-    return byAbsoluteFallback({ metricLabel: "PE(TTM)", value: Number(pe), cheap: 15, fair: 30, expensive: 45 });
+    return appendBadgeDescription(withHistoryStatsDescription(
+      byAbsoluteFallback({ metricLabel: "PE(TTM)", value: Number(pe), cheap: 15, fair: 30, expensive: 45 }),
+      fundamentals?.peHistory,
+    ), fundamentals);
+  }
+
+  const pb = fundamentals?.pbRatio ?? null;
+  if (Number.isFinite(pb) && Number(pb) > 0) {
+    return appendBadgeDescription(
+      byAbsoluteFallback({ metricLabel: "PB", value: Number(pb), cheap: 1.5, fair: 3.5, expensive: 6 }),
+      fundamentals,
+    );
   }
 
   return {
     label: "数据不足",
     tone: "muted",
-    reason: "暂未拿到 PE / PEG 数据",
-    description: "暂未拿到可用的 PE / PEG 数据。",
+    reason: "暂未拿到 PE / PB 数据",
+    description: "暂未拿到可用的 PE / PB 数据。",
   };
+}
+
+function appendBadgeDescription(badge: ValuationBadge, fundamentals: AssetFundamentals | null | undefined): ValuationBadge {
+  return {
+    ...badge,
+    description: appendSecondaryMetrics(badge.description, fundamentals),
+  };
+}
+
+function preferredGrowthMetric(fundamentals: AssetFundamentals | null | undefined): { label: string; value: number } | null {
+  const earningsGrowth = fundamentals?.earningsGrowthPct;
+  if (Number.isFinite(earningsGrowth)) return { label: "盈利增速", value: Number(earningsGrowth) };
+  const revenueGrowth = fundamentals?.revenueGrowthPct;
+  if (Number.isFinite(revenueGrowth)) return { label: "收入增速", value: Number(revenueGrowth) };
+  return null;
+}
+
+function growthRequirementFromPeOnly(pe: number): ValuationBadge {
+  if (pe <= 15) {
+    return { label: "要求较低", tone: "cheap", reason: `PE ${pe.toFixed(2)}，缺少增长数据`, description: "当前 PE 不高，即使暂未拿到增长字段，未来增长兑现压力也相对低。" };
+  }
+  if (pe <= 25) {
+    return { label: "要求适中", tone: "fair", reason: `PE ${pe.toFixed(2)}，缺少增长数据`, description: "当前 PE 处于中等区间，需要基本面维持稳健。" };
+  }
+  if (pe <= 40) {
+    return { label: "要求较高", tone: "expensive", reason: `PE ${pe.toFixed(2)}，缺少增长数据`, description: "当前 PE 已经偏高，需要后续收入或盈利继续兑现。" };
+  }
+  return { label: "要求极高", tone: "danger", reason: `PE ${pe.toFixed(2)}，缺少增长数据`, description: "当前 PE 很高，在缺少增长支撑数据时容错率较低。" };
+}
+
+export function deriveGrowthRequirementBadge(row: AssetUniverseView, fundamentals: AssetFundamentals | null | undefined): ValuationBadge {
+  if (!isStock(row)) {
+    return {
+      label: "不适用",
+      tone: "muted",
+      reason: "增长兑现要求不适用于此类资产",
+      description: "该标签主要用 PE 与 Yahoo 增长字段衡量个股当前估值对未来增长的要求。",
+    };
+  }
+
+  const pe = fundamentals?.trailingPE ?? null;
+  if (!Number.isFinite(pe) || Number(pe) <= 0) {
+    return {
+      label: "数据不足",
+      tone: "muted",
+      reason: "缺少 PE 数据",
+      description: "缺少 PE，无法判断当前估值需要多强的增长兑现。",
+    };
+  }
+
+  const growth = preferredGrowthMetric(fundamentals);
+  if (!growth) return growthRequirementFromPeOnly(Number(pe));
+
+  if (growth.value <= 0) {
+    return {
+      label: Number(pe) <= 18 ? "要求适中" : "要求极高",
+      tone: Number(pe) <= 18 ? "fair" : "danger",
+      reason: `PE ${Number(pe).toFixed(2)}，${growth.label} ${growth.value.toFixed(1)}%`,
+      description: "Yahoo 当前增长字段未显示正增长，若业务不能重新提速，估值兑现压力会明显上升。",
+    };
+  }
+
+  const coverage = Number(pe) / growth.value;
+  const reason = `PE ${Number(pe).toFixed(2)}，Yahoo ${growth.label} ${growth.value.toFixed(1)}%`;
+  if (coverage <= 0.8) {
+    return { label: "要求较低", tone: "cheap", reason, description: `${reason}。以当前增长字段观察，估值对后续增长兑现要求不高。` };
+  }
+  if (coverage <= 1.5) {
+    return { label: "要求适中", tone: "fair", reason, description: `${reason}。估值需要增长延续，但不属于特别激进的兑现要求。` };
+  }
+  if (coverage <= 2.5) {
+    return { label: "要求较高", tone: "expensive", reason, description: `${reason}。当前估值需要较强增长继续兑现。` };
+  }
+  return { label: "要求极高", tone: "danger", reason, description: `${reason}。当前估值隐含的增长兑现压力很高。` };
 }

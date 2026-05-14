@@ -4,8 +4,9 @@ import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/route
 import { assertIsoDateString } from "@/src/core/isoDate";
 import { addDaysIsoUtc, normalizeYfinanceHistoricalQuotes, normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
-import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { getYahooProvider } from "@/src/market/yahooProvider";
 
 export const runtime = "nodejs";
 
@@ -59,6 +60,34 @@ export async function GET(req: Request) {
         return fail("VALIDATION_FAILED", "invalid symbol", { status: 400 });
       }
 
+      if (useAdjustedClose) {
+        const today = new Date().toISOString().slice(0, 10);
+        const effectiveStart = start ?? addDaysIsoUtc(today, -365 * 5);
+        const cacheResult = await fetchPriceSeriesWithCache(symbol, effectiveStart, {
+          minDbDays: start ? 15 : 100,
+          maxStaleDays: 2,
+          timeoutMs: 8_000,
+        });
+        if (cacheResult.error && cacheResult.data.length <= 0) {
+          return fail("INTERNAL_ERROR", "yfinance price-series fetch failed", {
+            status: 502,
+            details: { message: cacheResult.error },
+          });
+        }
+        const normalized = normalizeYfinanceHistoricalQuotes(cacheResult.data, { start, end });
+        return ok({
+          source: cacheResult.source,
+          interval: "1d",
+          priceMode: "adjclose",
+          symbol: symbolRaw,
+          normalizedSymbol: symbol,
+          upstream: cacheResult.source === "db" ? "daa_market_price_history_v1" : "yahoo_provider",
+          rawCount: cacheResult.data.length,
+          series: normalized.series,
+          issues: normalized.issues,
+        });
+      }
+
       const period1 = start ? epochSecondsUtcStart(start) : NaN;
       // 当有 start 但没 end 时，默认用明天作为 end（避免 Yahoo Finance 400 错误）
       const effectiveEnd = end
@@ -68,38 +97,25 @@ export async function GET(req: Request) {
           : "";
       const period2 = effectiveEnd ? epochSecondsUtcStart(effectiveEnd) : NaN;
 
-      const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-      upstream.searchParams.set("interval", "1d");
-      upstream.searchParams.set("events", "div|split");
-      if (start) upstream.searchParams.set("period1", String(period1));
-      if (effectiveEnd) upstream.searchParams.set("period2", String(period2));
-
-      const response = await fetch(upstream, {
-        method: "GET",
-        headers: {
-          accept: "application/json",
-          "user-agent": MARKET_DATA_USER_AGENT,
+      const yahooResult = await getYahooProvider().fetchChart({
+        symbol,
+        interval: "1d",
+        events: "div|split",
+        ...(start ? { period1 } : {}),
+        ...(effectiveEnd ? { period2 } : {}),
+        timeoutMs: 8_000,
+        context: {
+          caller: "priceSeriesRoute",
+          cacheStatus: "cache_bypass",
         },
-        cache: "no-store",
       });
-
-      const text = await response.text();
-      if (!response.ok) {
-        return fail("INTERNAL_ERROR", "yfinance upstream error", {
-          status: 502,
-          details: {
-            status: response.status,
-            body: text.slice(0, 2000),
-          },
-        });
-      }
 
       let payload: unknown;
       try {
-        payload = JSON.parse(text) as unknown;
+        payload = yahooResult.payloadJson;
       } catch (err) {
         logSwallowed("priceSeriesRoute.parsePayload", err);
-        payload = { raw: text };
+        payload = { raw: yahooResult.payloadText };
       }
 
       const payloadRoot = isRecord(payload) ? payload : {};
@@ -156,7 +172,7 @@ export async function GET(req: Request) {
         priceMode: useAdjustedClose ? "adjclose" : "close",
         symbol: symbolRaw,
         normalizedSymbol: symbol,
-        upstream: upstream.toString(),
+        upstream: yahooResult.url,
         rawCount: rows.length,
         series: normalized.series,
         issues: normalized.issues,

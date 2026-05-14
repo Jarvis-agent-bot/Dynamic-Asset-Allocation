@@ -1,9 +1,32 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { normalizeYfinanceFundamentalsPayload } from "./yfinanceFundamentals";
+import { fetchYfinanceFundamentals, normalizeYfinanceFundamentalsPayload } from "./yfinanceFundamentals";
+
+vi.mock("@/src/daa/store/jobStore", () => ({
+  appendDaaExternalRequestLog: vi.fn(async () => ({
+    id: "log",
+    provider: "yahoo",
+    resource: "test",
+    subjectKey: "",
+    endpointHost: "",
+    httpStatus: 0,
+    errorCode: "",
+    errorMessage: "",
+    latencyMs: 0,
+    retryCount: 0,
+    cacheStatus: "",
+    caller: "",
+    rawRefId: null,
+    createdAt: new Date().toISOString(),
+  })),
+}));
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("market/yfinanceFundamentals", () => {
-  it("normalizes latest PE, PEG and market cap from Yahoo timeseries payload", () => {
+  it("normalizes PE and transparent market cap from Yahoo timeseries + quoteSummary payload", () => {
     const payload = {
       timeseries: {
         result: [
@@ -16,13 +39,6 @@ describe("market/yfinanceFundamentals", () => {
           },
           {
             timestamp: [1717977600, 1778198400],
-            trailingPegRatio: [
-              { asOfDate: "2024-06-10", reportedValue: { raw: 2.04 } },
-              { asOfDate: "2026-05-08", reportedValue: { raw: 2.57 } },
-            ],
-          },
-          {
-            timestamp: [1717977600, 1778198400],
             trailingMarketCap: [
               { asOfDate: "2024-06-10", currencyCode: "USD", reportedValue: { raw: 2_960_000_000_000 } },
               { asOfDate: "2026-05-08", currencyCode: "USD", reportedValue: { raw: 4_310_000_000_000 } },
@@ -31,23 +47,57 @@ describe("market/yfinanceFundamentals", () => {
         ],
       },
     };
+    const quoteSummaryPayload = {
+      quoteSummary: {
+        result: [{
+          price: {
+            currency: "USD",
+            regularMarketPrice: { raw: 172.4 },
+            marketCap: { raw: 2_700_000_000_000 },
+          },
+          summaryDetail: {
+            trailingPE: { raw: 28.2 },
+            dividendYield: { raw: 0.005 },
+          },
+          defaultKeyStatistics: {
+            sharesOutstanding: { raw: 15_000_000_000 },
+            priceToBook: { raw: 44.2 },
+            enterpriseValue: { raw: 2_650_000_000_000 },
+          },
+          financialData: {
+            revenueGrowth: { raw: 0.08 },
+            earningsGrowth: { raw: 0.11 },
+            grossMargins: { raw: 0.46 },
+            profitMargins: { raw: 0.24 },
+            totalRevenue: { raw: 410_000_000_000 },
+            freeCashflow: { raw: 88_000_000_000 },
+          },
+        }],
+      },
+    };
 
     const result = normalizeYfinanceFundamentalsPayload({
       symbol: "AAPL",
       payload,
+      quoteSummaryPayload,
       updatedAt: "2026-05-13T00:00:00.000Z",
     });
 
-    expect(result.trailingPE).toBe(35.51);
-    expect(result.pegRatio).toBe(2.57);
-    expect(result.marketCap).toBe(4_310_000_000_000);
+    expect(result.trailingPE).toBe(28.2);
+    expect(result.pbRatio).toBe(44.2);
+    expect(result.dividendYieldPct).toBe(0.5);
+    expect(result.revenueGrowthPct).toBe(8);
+    expect(result.earningsGrowthPct).toBe(11);
+    expect(result.marketPrice).toBe(172.4);
+    expect(result.sharesOutstanding).toBe(15_000_000_000);
+    expect(result.marketCap).toBe(2_586_000_000_000);
     expect(result.marketCapCurrency).toBe("USD");
+    expect(result.marketCapSource).toBe("price_x_shares_outstanding");
     expect(result.pePercentile).toBe(null);
-    expect(result.pegPercentile).toBe(null);
     expect(result.peSampleCount).toBe(2);
-    expect(result.pegSampleCount).toBe(2);
-    expect(result.issues).toContain("insufficient trailingPeRatio history");
-    expect(result.issues).toContain("insufficient trailingPegRatio history");
+    expect(result.peHistory.eligible).toBe(false);
+    expect(result.peHistory.reason).toBe("insufficient_sample_count:2/36");
+    expect(result.issues.some((item) => item.includes("insufficient trailingPeRatio history"))).toBe(true);
   });
 
   it("falls back to quarterly market cap when trailing market cap is empty", () => {
@@ -68,13 +118,12 @@ describe("market/yfinanceFundamentals", () => {
 
     expect(result.marketCap).toBe(3_000_000_000_000);
     expect(result.marketCapCurrency).toBe("HKD");
+    expect(result.marketCapSource).toBe("fundamentals_timeseries_market_cap");
     expect(result.pePercentile).toBe(null);
-    expect(result.pegPercentile).toBe(null);
     expect(result.issues).toContain("missing trailingPeRatio");
-    expect(result.issues).toContain("missing trailingPegRatio");
   });
 
-  it("calculates historical percentile with enough valuation samples", () => {
+  it("does not calculate historical percentile from tiny valuation samples", () => {
     const payload = {
       timeseries: {
         result: [
@@ -93,7 +142,38 @@ describe("market/yfinanceFundamentals", () => {
     const result = normalizeYfinanceFundamentalsPayload({ symbol: "MSFT", payload });
 
     expect(result.trailingPE).toBe(20);
-    expect(result.pePercentile).toBe(75);
+    expect(result.pePercentile).toBe(null);
     expect(result.peSampleCount).toBe(4);
+    expect(result.peHistory.latestRank).toBe(3);
+    expect(result.peHistory.reason).toBe("insufficient_sample_count:4/36");
+  });
+
+  it("calculates historical percentile only with enough samples and span", () => {
+    const trailingPeRatio = Array.from({ length: 36 }, (_, index) => {
+      const year = 2021 + Math.floor(index / 12);
+      const month = (index % 12) + 1;
+      return {
+        asOfDate: `${year}-${String(month).padStart(2, "0")}-01`,
+        reportedValue: { raw: index + 1 },
+      };
+    });
+    trailingPeRatio[35] = { asOfDate: "2024-12-01", reportedValue: { raw: 17 } };
+    const payload = { timeseries: { result: [{ trailingPeRatio }] } };
+
+    const result = normalizeYfinanceFundamentalsPayload({ symbol: "MSFT", payload });
+
+    expect(result.trailingPE).toBe(17);
+    expect(result.peHistory.eligible).toBe(true);
+    expect(result.peSampleCount).toBe(36);
+    expect(result.pePercentile).toBe(50);
+  });
+
+  it("throws when all Yahoo fundamentals endpoints fail, so empty snapshots are not cached", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("blocked", { status: 403 })) as unknown as typeof fetch);
+
+    await expect(fetchYfinanceFundamentals("AAPL", {
+      now: new Date("2026-05-14T00:00:00.000Z"),
+      timeoutMs: 100,
+    })).rejects.toThrow("all yfinance fundamentals requests failed");
   });
 });

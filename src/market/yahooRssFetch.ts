@@ -1,5 +1,6 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
+import { appendDaaExternalRequestLog } from "@/src/daa/store/jobStore";
 type YahooRssItem = {
   title: string;
   link?: string;
@@ -56,6 +57,32 @@ function extractHeaders(headers: Headers): Record<string, string> {
   return out;
 }
 
+async function recordYahooRssRequest(input: {
+  symbol: string;
+  status: number;
+  errorCode?: string;
+  errorMessage?: string;
+  latencyMs: number;
+}): Promise<void> {
+  try {
+    await appendDaaExternalRequestLog({
+      provider: "yahoo",
+      resource: "yahoo.rss",
+      subjectKey: input.symbol,
+      endpointHost: "feeds.finance.yahoo.com",
+      httpStatus: input.status,
+      errorCode: input.errorCode ?? "",
+      errorMessage: input.errorMessage ?? "",
+      latencyMs: input.latencyMs,
+      retryCount: 0,
+      cacheStatus: "cache_bypass",
+      caller: "fetchYahooRssFeedBySymbol",
+    });
+  } catch (err) {
+    logSwallowed("yahooRssFetch.recordRequest", err);
+  }
+}
+
 export async function fetchYahooRssFeedBySymbol(symbolRaw: string, limit = 20): Promise<YahooRssFetchResult> {
   const symbol = String(symbolRaw || "").trim().toUpperCase();
   if (!symbol) {
@@ -75,6 +102,7 @@ export async function fetchYahooRssFeedBySymbol(symbolRaw: string, limit = 20): 
   rss.searchParams.set("lang", "en-US");
 
   try {
+    const startedAt = Date.now();
     const response = await fetch(rss, {
       method: "GET",
       cache: "no-store",
@@ -86,6 +114,13 @@ export async function fetchYahooRssFeedBySymbol(symbolRaw: string, limit = 20): 
     });
 
     const xml = await response.text();
+    await recordYahooRssRequest({
+      symbol,
+      status: response.status,
+      errorCode: response.ok ? "" : `http_${response.status}`,
+      errorMessage: response.ok ? "" : "Yahoo RSS upstream error",
+      latencyMs: Math.max(0, Date.now() - startedAt),
+    });
     if (!response.ok) {
       return {
         symbol,
@@ -106,7 +141,14 @@ export async function fetchYahooRssFeedBySymbol(symbolRaw: string, limit = 20): 
       items: parseYahooRssXml(xml, limit),
     };
   } catch (err) {
-  logSwallowed("yahooRssFetch.fetchFeed", err);
+    logSwallowed("yahooRssFetch.fetchFeed", err);
+    await recordYahooRssRequest({
+      symbol,
+      status: 0,
+      errorCode: err instanceof Error && err.name === "TimeoutError" ? "timeout" : "network_error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      latencyMs: 0,
+    });
     return {
       symbol,
       requestUrl: rss.toString(),

@@ -13,6 +13,10 @@ import type {
   DaaNotificationChannel,
   DaaNotificationDeliveryLog,
 } from "@/src/daa/store/notificationDeliveryLogRepo";
+import type {
+  DaaExternalRequestLogSummaryItem,
+  DaaStoreExternalRequestLog,
+} from "@/src/daa/store/storeTypes";
 
 type StoreCashLedgerEntry = {
   id: string;
@@ -72,6 +76,14 @@ type StoreMarketIndicatorRefreshResult = {
   indicators: DaaMarketIndicatorSnapshot[];
   refreshedCount: number;
   at: string;
+};
+
+export type StoreExternalRequestLogsResult = {
+  provider: string;
+  sinceHours: number;
+  limit: number;
+  items: DaaStoreExternalRequestLog[];
+  summary: DaaExternalRequestLogSummaryItem[];
 };
 
 export async function getSystemConfig(): Promise<StoreSystemConfigEnvelope> {
@@ -158,6 +170,21 @@ export async function refreshMarketIndicators(): Promise<StoreMarketIndicatorRef
   return requestData<StoreMarketIndicatorRefreshResult>("/api/daa/store/market-indicators/refresh", {
     method: "POST",
     headers: { "content-type": "application/json" },
+  });
+}
+
+export async function listExternalRequestLogs(input: {
+  provider?: string;
+  sinceHours?: number;
+  limit?: number;
+} = {}): Promise<StoreExternalRequestLogsResult> {
+  const qs = new URLSearchParams();
+  qs.set("sinceHours", String(Math.max(1, Math.min(720, Math.trunc(Number(input.sinceHours) || 24)))));
+  qs.set("limit", String(Math.max(1, Math.min(200, Math.trunc(Number(input.limit) || 50)))));
+  if (input.provider) qs.set("provider", input.provider);
+  return requestData<StoreExternalRequestLogsResult>(`/api/daa/store/external-request-logs?${qs.toString()}`, {
+    method: "GET",
+    cache: "no-store",
   });
 }
 

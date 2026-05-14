@@ -11,6 +11,23 @@ import {
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
+const DEFAULT_WATCHLIST_ENTRY_CONFIG: NonNullable<DaaSystemConfig["watchlistEntry"]> = {
+  enabled: false,
+  maxPerCycle: 2,
+  defaultRules: {
+    minTechnicalScore: 65,
+    minValuationScore: 60,
+    minFusionScore: 62,
+    requireStrongMomentum: false,
+  },
+  aiTargetWeightPool: {
+    enabled: false,
+    minConfidence: 70,
+    autoEnableEntry: true,
+  },
+  notionalCashCapPct: 0.3,
+};
+
 export function SettingsStrategySection(props: {
   config: DaaSystemConfig;
   setConfig: SettingsConfigSetter;
@@ -451,12 +468,7 @@ export function SettingsStrategySection(props: {
                   ? {
                       ...prev,
                       watchlistEntry: {
-                        ...(prev.watchlistEntry ?? {
-                          enabled: false,
-                          maxPerCycle: 2,
-                          defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-                          notionalCashCapPct: 0.3,
-                        }),
+                        ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
                         enabled: value,
                       },
                     }
@@ -466,6 +478,80 @@ export function SettingsStrategySection(props: {
           >
             启用观察列表自动建仓
           </CheckboxRow>
+
+          <CheckboxRow
+            checked={config.watchlistEntry?.aiTargetWeightPool.enabled ?? false}
+            onChange={(value) =>
+              setConfig((prev) => {
+                if (!prev) return prev;
+                const current = prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG;
+                return {
+                  ...prev,
+                  watchlistEntry: {
+                    ...current,
+                    enabled: value ? true : current.enabled,
+                    aiTargetWeightPool: {
+                      ...(current.aiTargetWeightPool ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.aiTargetWeightPool),
+                      enabled: value,
+                    },
+                  },
+                };
+              })
+            }
+          >
+            AI 全自动维护观察列表目标权重池
+          </CheckboxRow>
+
+          <CheckboxRow
+            checked={config.watchlistEntry?.aiTargetWeightPool.autoEnableEntry ?? true}
+            onChange={(value) =>
+              setConfig((prev) => {
+                if (!prev) return prev;
+                const current = prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG;
+                return {
+                  ...prev,
+                  watchlistEntry: {
+                    ...current,
+                    aiTargetWeightPool: {
+                      ...(current.aiTargetWeightPool ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.aiTargetWeightPool),
+                      autoEnableEntry: value,
+                    },
+                  },
+                };
+              })
+            }
+          >
+            AI 写入权重后自动打开单资产 auto-entry
+          </CheckboxRow>
+
+          <div>
+            <FieldLabel>AI 写入目标权重最低置信度</FieldLabel>
+            <NumberInput
+              value={config.watchlistEntry?.aiTargetWeightPool.minConfidence ?? 70}
+              min={0}
+              max={100}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) => {
+                  if (!prev) return prev;
+                  const current = prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG;
+                  return {
+                    ...prev,
+                    watchlistEntry: {
+                      ...current,
+                      aiTargetWeightPool: {
+                        ...(current.aiTargetWeightPool ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.aiTargetWeightPool),
+                        minConfidence: Math.max(0, Math.min(100, value || 70)),
+                      },
+                    },
+                  };
+                })
+              }
+            />
+            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
+              开启后，Agent 的高置信目标权重计划会先写入观察池；买入仍需通过技术 / 估值阈值、价格 / FX、冷静期和统一风控。
+            </div>
+          </div>
 
           <div>
             <FieldLabel>单次 cron 最多触发 (个)</FieldLabel>
@@ -480,12 +566,7 @@ export function SettingsStrategySection(props: {
                     ? {
                         ...prev,
                         watchlistEntry: {
-                          ...(prev.watchlistEntry ?? {
-                            enabled: false,
-                            maxPerCycle: 2,
-                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-                            notionalCashCapPct: 0.3,
-                          }),
+                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
                           maxPerCycle: Math.max(1, Math.min(10, value || 2)),
                         },
                       }
@@ -511,12 +592,7 @@ export function SettingsStrategySection(props: {
                     ? {
                         ...prev,
                         watchlistEntry: {
-                          ...(prev.watchlistEntry ?? {
-                            enabled: false,
-                            maxPerCycle: 2,
-                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-                            notionalCashCapPct: 0.3,
-                          }),
+                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
                           notionalCashCapPct: Math.max(0.05, Math.min(1, (value || 30) / 100)),
                         },
                       }
@@ -539,14 +615,9 @@ export function SettingsStrategySection(props: {
                     ? {
                         ...prev,
                         watchlistEntry: {
-                          ...(prev.watchlistEntry ?? {
-                            enabled: false,
-                            maxPerCycle: 2,
-                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-                            notionalCashCapPct: 0.3,
-                          }),
+                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
                           defaultRules: {
-                            ...(prev.watchlistEntry?.defaultRules ?? { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false }),
+                            ...(prev.watchlistEntry?.defaultRules ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.defaultRules),
                             minTechnicalScore: Math.max(0, Math.min(100, value || 65)),
                           },
                         },
@@ -570,14 +641,9 @@ export function SettingsStrategySection(props: {
                     ? {
                         ...prev,
                         watchlistEntry: {
-                          ...(prev.watchlistEntry ?? {
-                            enabled: false,
-                            maxPerCycle: 2,
-                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-                            notionalCashCapPct: 0.3,
-                          }),
+                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
                           defaultRules: {
-                            ...(prev.watchlistEntry?.defaultRules ?? { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false }),
+                            ...(prev.watchlistEntry?.defaultRules ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.defaultRules),
                             minValuationScore: Math.max(0, Math.min(100, value || 60)),
                           },
                         },
@@ -601,14 +667,9 @@ export function SettingsStrategySection(props: {
                     ? {
                         ...prev,
                         watchlistEntry: {
-                          ...(prev.watchlistEntry ?? {
-                            enabled: false,
-                            maxPerCycle: 2,
-                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-                            notionalCashCapPct: 0.3,
-                          }),
+                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
                           defaultRules: {
-                            ...(prev.watchlistEntry?.defaultRules ?? { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false }),
+                            ...(prev.watchlistEntry?.defaultRules ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.defaultRules),
                             minFusionScore: Math.max(0, Math.min(100, value || 62)),
                           },
                         },

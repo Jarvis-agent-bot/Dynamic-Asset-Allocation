@@ -1134,6 +1134,29 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_daa_external_payload_raw_v1_expire_at
           ON daa_external_payload_raw_v1(expire_at);
 
+        CREATE TABLE IF NOT EXISTS daa_external_request_log_v1 (
+          id TEXT PRIMARY KEY,
+          provider TEXT NOT NULL,
+          resource TEXT NOT NULL,
+          subject_key TEXT NOT NULL DEFAULT '',
+          endpoint_host TEXT NOT NULL DEFAULT '',
+          http_status INTEGER NOT NULL DEFAULT 0,
+          error_code TEXT NOT NULL DEFAULT '',
+          error_message TEXT NOT NULL DEFAULT '',
+          latency_ms INTEGER NOT NULL DEFAULT 0,
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          cache_status TEXT NOT NULL DEFAULT '',
+          caller TEXT NOT NULL DEFAULT '',
+          raw_ref_id TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_external_request_log_v1_created_desc
+          ON daa_external_request_log_v1(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_external_request_log_v1_provider_resource_created
+          ON daa_external_request_log_v1(provider, resource, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_external_request_log_v1_subject_created
+          ON daa_external_request_log_v1(subject_key, created_at DESC);
+
       `);
       await query("COMMIT");
     } catch (error) {

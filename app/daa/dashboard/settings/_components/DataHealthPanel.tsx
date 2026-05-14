@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock, ShieldAlert, XCircle } from "lucide-react";
 
 import {
   DaaSurfacePanel,
@@ -28,7 +28,59 @@ type MarketHealth = {
   healthPct: number;
 };
 
-export function DataHealthPanel(props: { assets: AssetHealthRow[] }) {
+type ExternalRequestLogItem = {
+  id: string;
+  provider: string;
+  resource: string;
+  subjectKey: string;
+  endpointHost: string;
+  httpStatus: number;
+  errorCode: string;
+  errorMessage: string;
+  latencyMs: number;
+  retryCount: number;
+  cacheStatus: string;
+  caller: string;
+  createdAt: string;
+};
+
+type ExternalRequestSummaryItem = {
+  provider: string;
+  resource: string;
+  endpointHost: string;
+  totalCount: number;
+  successCount: number;
+  errorCount: number;
+  rateLimitedCount: number;
+  unauthorizedCount: number;
+  latestAt: string | null;
+  latestStatus: number;
+  latestErrorCode: string;
+};
+
+type ExternalDataHealth = {
+  sinceHours: number;
+  items: ExternalRequestLogItem[];
+  summary: ExternalRequestSummaryItem[];
+};
+
+function formatPct(value: number): string {
+  return `${Math.max(0, Math.min(100, value)).toFixed(0)}%`;
+}
+
+function formatWhen(iso: string | null): string {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "-";
+  return d.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealth?: ExternalDataHealth | null }) {
   const marketHealth = useMemo(() => {
     const groups = new Map<string, AssetHealthRow[]>();
     for (const a of props.assets) {
@@ -75,6 +127,30 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[] }) {
 
   const healthTone = overallHealth >= 90 ? "green" : overallHealth >= 70 ? "amber" : "red";
   const HealthIcon = overallHealth >= 90 ? CheckCircle2 : overallHealth >= 70 ? AlertTriangle : XCircle;
+  const externalSummary = props.externalHealth?.summary ?? [];
+  const externalItems = props.externalHealth?.items ?? [];
+  const externalTotals = useMemo(() => {
+    const total = externalSummary.reduce((sum, item) => sum + item.totalCount, 0);
+    const success = externalSummary.reduce((sum, item) => sum + item.successCount, 0);
+    const errors = externalSummary.reduce((sum, item) => sum + item.errorCount, 0);
+    const rateLimited = externalSummary.reduce((sum, item) => sum + item.rateLimitedCount, 0);
+    const unauthorized = externalSummary.reduce((sum, item) => sum + item.unauthorizedCount, 0);
+    return {
+      total,
+      success,
+      errors,
+      rateLimited,
+      unauthorized,
+      successRate: total > 0 ? (success / total) * 100 : 100,
+    };
+  }, [externalSummary]);
+  const externalErrors = useMemo(
+    () => externalItems.filter((item) => item.httpStatus === 0 || item.httpStatus >= 400 || item.errorCode).slice(0, 8),
+    [externalItems],
+  );
+  const externalTone = externalTotals.rateLimited > 0 || externalTotals.unauthorized > 0 || externalTotals.successRate < 80
+    ? "amber"
+    : "green";
 
   return (
     <DaaSurfacePanel
@@ -175,6 +251,98 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[] }) {
           </div>
         </div>
       )}
+
+      <div className="mt-5 border-t border-[var(--border)] pt-4">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+              <Activity className="h-4 w-4 text-[var(--primary)]" />
+              外部数据源健康
+            </div>
+            <div className="mt-1 text-xs text-[var(--muted)]">
+              最近 {props.externalHealth?.sinceHours ?? 24} 小时 · {externalTotals.total} 次外部请求
+            </div>
+          </div>
+          <DaaSurfaceStatusPill tone={externalTone}>
+            {externalTotals.total <= 0
+              ? "暂无请求记录"
+              : `成功率 ${formatPct(externalTotals.successRate)}`}
+          </DaaSurfaceStatusPill>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+            <div className="text-xs text-[var(--muted)]">成功 / 总请求</div>
+            <div className="mt-1 text-lg font-semibold text-[var(--text)]">{externalTotals.success}/{externalTotals.total}</div>
+          </div>
+          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+            <div className="text-xs text-[var(--muted)]">错误请求</div>
+            <div className="mt-1 text-lg font-semibold text-[var(--text)]">{externalTotals.errors}</div>
+          </div>
+          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+            <div className="text-xs text-[var(--muted)]">429 限速</div>
+            <div className="mt-1 text-lg font-semibold text-amber-300">{externalTotals.rateLimited}</div>
+          </div>
+          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+            <div className="text-xs text-[var(--muted)]">401/403/crumb</div>
+            <div className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-[var(--text)]">
+              <ShieldAlert className="h-4 w-4 text-[var(--faint)]" />
+              {externalTotals.unauthorized}
+            </div>
+          </div>
+        </div>
+
+        {externalSummary.length > 0 ? (
+          <div className="mt-3 overflow-hidden rounded-[8px] border border-[var(--border)]">
+            <div className="grid grid-cols-[1.4fr_0.9fr_0.8fr_0.8fr] gap-2 border-b border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--faint)]">
+              <span>数据源 / 资源</span>
+              <span>Host</span>
+              <span>成功率</span>
+              <span>最新状态</span>
+            </div>
+            {externalSummary.slice(0, 8).map((item) => {
+              const rate = item.totalCount > 0 ? (item.successCount / item.totalCount) * 100 : 100;
+              return (
+                <div
+                  key={`${item.provider}:${item.resource}:${item.endpointHost}`}
+                  className="grid grid-cols-[1.4fr_0.9fr_0.8fr_0.8fr] gap-2 border-b border-[var(--border)] px-3 py-2 text-xs last:border-b-0"
+                >
+                  <span className="min-w-0 truncate font-medium text-[var(--text)]">{item.provider} · {item.resource}</span>
+                  <span className="min-w-0 truncate text-[var(--muted)]">{item.endpointHost || "-"}</span>
+                  <span className={rate >= 90 ? "text-emerald-300" : "text-amber-300"}>
+                    {formatPct(rate)} ({item.successCount}/{item.totalCount})
+                  </span>
+                  <span className="min-w-0 truncate text-[var(--muted)]">
+                    {item.latestStatus || "-"} · {formatWhen(item.latestAt)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-[8px] border border-dashed border-[var(--border)] px-3 py-3 text-sm text-[var(--muted)]">
+            还没有外部请求记录。下一次刷新行情或基础面数据后，这里会显示 Yahoo 请求状态、限速与 crumb 错误。
+          </div>
+        )}
+
+        {externalErrors.length > 0 ? (
+          <div className="mt-3 rounded-[8px] border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+            <div className="mb-2 text-xs font-semibold text-amber-300">最近错误</div>
+            <div className="space-y-1.5">
+              {externalErrors.map((item) => (
+                <div key={item.id} className="flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0 truncate text-[var(--text)]">
+                    {item.provider} · {item.resource} · {item.subjectKey || "-"}
+                  </span>
+                  <span className="text-[var(--muted)]">
+                    {item.httpStatus || "network"} {item.errorCode || "error"} · {formatWhen(item.createdAt)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </DaaSurfacePanel>
   );
 }

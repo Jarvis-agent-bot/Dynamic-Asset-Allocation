@@ -57,6 +57,37 @@ export type DaaStoreOpLogEntry = {
   contextJson: Record<string, unknown>;
 };
 
+export type DaaStoreExternalRequestLog = {
+  id: string;
+  provider: string;
+  resource: string;
+  subjectKey: string;
+  endpointHost: string;
+  httpStatus: number;
+  errorCode: string;
+  errorMessage: string;
+  latencyMs: number;
+  retryCount: number;
+  cacheStatus: string;
+  caller: string;
+  rawRefId: string | null;
+  createdAt: string;
+};
+
+export type DaaExternalRequestLogSummaryItem = {
+  provider: string;
+  resource: string;
+  endpointHost: string;
+  totalCount: number;
+  successCount: number;
+  errorCount: number;
+  rateLimitedCount: number;
+  unauthorizedCount: number;
+  latestAt: string | null;
+  latestStatus: number;
+  latestErrorCode: string;
+};
+
 export type DaaStoreCandidateAsset = {
   id: string;
   symbol: string;

@@ -14,6 +14,7 @@ import { useFundamentals, type AssetFundamentals } from "@/app/daa/dashboard/_ho
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 import {
+  deriveGrowthRequirementBadge,
   deriveValuationBadge,
   formatCompanyMarketCap,
   formatFundamentalRatio,
@@ -54,6 +55,7 @@ function HoldingRow(props: {
   const isUp = priceChangePercent != null ? priceChangePercent >= 0 : null;
   const sparkColor = isUp === true ? "hsl(142 71% 45%)" : isUp === false ? "hsl(0 84% 60%)" : "hsl(188 95% 60%)";
   const valuation = deriveValuationBadge(row, props.fundamentals);
+  const growthRequirement = deriveGrowthRequirementBadge(row, props.fundamentals);
   const companyMarketCap = formatCompanyMarketCap(
     props.fundamentals?.marketCap,
     props.fundamentals?.marketCapCurrency || row.currency,
@@ -76,8 +78,8 @@ function HoldingRow(props: {
         <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
           {row.market} · {row.currency}
         </div>
-        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={valuation.description}>
-          估值依据：{valuation.reason}
+        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={`${valuation.description} ${growthRequirement.description}`}>
+          估值依据：{valuation.reason}；增长要求：{growthRequirement.reason}
         </div>
       </div>
 
@@ -131,13 +133,13 @@ function HoldingRow(props: {
         </div>
       </div>
 
-      {/* PE / PEG */}
+      {/* PE / PB */}
       <div className="hidden w-[82px] text-right 2xl:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PE / PEG</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PE / PB</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {formatFundamentalRatio(props.fundamentals?.trailingPE)}
           <span className="mx-0.5 text-[var(--faint)]">/</span>
-          {formatFundamentalRatio(props.fundamentals?.pegRatio)}
+          {formatFundamentalRatio(props.fundamentals?.pbRatio)}
         </div>
       </div>
 
@@ -173,13 +175,19 @@ function HoldingRow(props: {
       </div>
 
       {/* 估值状态 */}
-      <div className="hidden w-[82px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值</div>
+      <div className="hidden w-[96px] text-right md:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值 / 增长</div>
         <span
           title={valuation.description}
           className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}
         >
           {valuation.label}
+        </span>
+        <span
+          title={growthRequirement.description}
+          className={cn("mt-0.5 inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(growthRequirement.tone))}
+        >
+          {growthRequirement.label}
         </span>
       </div>
 

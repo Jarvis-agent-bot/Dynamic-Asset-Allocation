@@ -1,8 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { listDaaFxRates, upsertDaaFxRates } from "@/src/daa/store/daaStorePg";
-import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getYahooProvider } from "@/src/market/yahooProvider";
 
 export const runtime = "nodejs";
 
@@ -101,31 +100,17 @@ async function fetchFxRateFromYfinance(baseCcy: string, quoteCcy: string): Promi
   if (baseCcy === quoteCcy) return 1;
 
   const symbol = `${baseCcy}${quoteCcy}=X`;
-  const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-  upstream.searchParams.set("interval", "1d");
-  upstream.searchParams.set("range", "5d");
-
-  const response = await fetch(upstream, {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-      "user-agent": MARKET_DATA_USER_AGENT,
+  const yahooResult = await getYahooProvider().fetchChart({
+    symbol,
+    interval: "1d",
+    range: "5d",
+    timeoutMs: 8_000,
+    context: {
+      caller: "fxSnapshotRoute.fetchFxRate",
+      cacheStatus: "cache_bypass",
     },
-    cache: "no-store",
   });
-
-  const raw = await response.text();
-  if (!response.ok) {
-    throw new Error(`FX upstream error(${response.status}) for ${baseCcy}/${quoteCcy}`);
-  }
-
-  let payload: unknown = null;
-  try {
-    payload = JSON.parse(raw) as unknown;
-  } catch (err) {
-    logSwallowed("fxSnapshotRoute.parsePayload", err);
-    throw new Error(`FX upstream payload invalid for ${baseCcy}/${quoteCcy}`);
-  }
+  const payload = yahooResult.payloadJson;
 
   const payloadRoot = isRecord(payload) ? payload : {};
   const chart = isRecord(payloadRoot.chart) ? payloadRoot.chart : {};

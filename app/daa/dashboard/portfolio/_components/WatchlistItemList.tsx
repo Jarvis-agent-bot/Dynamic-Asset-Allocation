@@ -11,8 +11,11 @@ import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPri
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
 import { useFundamentals, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
+import { useTechnicalSignals } from "@/app/daa/dashboard/_hooks/useTechnicalSignals";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { DaaTechnicalSignal } from "@/src/daa/signals/technicalSignal";
 import {
+  deriveGrowthRequirementBadge,
   deriveValuationBadge,
   formatCompanyMarketCap,
   formatFundamentalRatio,
@@ -35,10 +38,23 @@ function badgeClass(tone: ValuationTone): string {
   return "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
 }
 
+function momentumLabel(value: DaaTechnicalSignal["momentumRegime"]): string {
+  if (value === "strong") return "强动量";
+  if (value === "weak") return "弱动量";
+  return "中性动量";
+}
+
+function technicalBadgeClass(signal: DaaTechnicalSignal): string {
+  if (signal.momentumRegime === "strong" || signal.scorePct >= 68) return "bg-emerald-500/12 text-emerald-300";
+  if (signal.momentumRegime === "weak" || signal.scorePct <= 42) return "bg-red-500/12 text-red-300";
+  return "bg-sky-500/12 text-sky-300";
+}
+
 function WatchlistRow(props: {
   row: AssetUniverseView;
   sparkData: number[] | null;
   fundamentals?: AssetFundamentals;
+  technicalSignal?: DaaTechnicalSignal;
   onClick: () => void;
   onRemove?: (row: AssetUniverseView) => Promise<void> | void;
   removing?: boolean;
@@ -56,10 +72,12 @@ function WatchlistRow(props: {
   const actualPct = row.actualWeightPct ?? 0;
   const gap = row.gapPct;
   const valuation = deriveValuationBadge(row, props.fundamentals);
+  const growthRequirement = deriveGrowthRequirementBadge(row, props.fundamentals);
   const marketCap = formatCompanyMarketCap(
     props.fundamentals?.marketCap,
     props.fundamentals?.marketCapCurrency || row.currency,
   );
+  const technicalSignal = props.technicalSignal;
 
   return (
     <div
@@ -78,8 +96,8 @@ function WatchlistRow(props: {
         <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
           {row.market} · {row.currency}
         </div>
-        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={valuation.description}>
-          估值依据：{valuation.reason}
+        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={`${valuation.description} ${growthRequirement.description}`}>
+          估值依据：{valuation.reason}；增长要求：{growthRequirement.reason}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--faint)]">
           {targetPct > 0 ? <span>目标 {targetPct.toFixed(1)}%</span> : null}
@@ -88,6 +106,16 @@ function WatchlistRow(props: {
             <span className={Math.abs(gap) > 3 ? "text-amber-400/80" : ""}>
               偏离 {gap >= 0 ? "+" : ""}{gap.toFixed(1)}%
             </span>
+          ) : null}
+          {technicalSignal ? (
+            <>
+              <span className={cn("rounded px-1.5 py-0.5 font-medium", technicalBadgeClass(technicalSignal))}>
+                评分 {technicalSignal.scorePct.toFixed(0)}
+              </span>
+              <span className={cn("rounded px-1.5 py-0.5 font-medium", technicalBadgeClass(technicalSignal))}>
+                {momentumLabel(technicalSignal.momentumRegime)}
+              </span>
+            </>
           ) : null}
         </div>
         {row.holdingQty > 0 ? (
@@ -140,22 +168,28 @@ function WatchlistRow(props: {
         </div>
       </div>
 
-      {/* PEG */}
+      {/* PB */}
       <div className="hidden w-[64px] text-right xl:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PEG</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PB</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
-          {formatFundamentalRatio(props.fundamentals?.pegRatio)}
+          {formatFundamentalRatio(props.fundamentals?.pbRatio)}
         </div>
       </div>
 
       {/* 估值状态 */}
-      <div className="hidden w-[82px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值</div>
+      <div className="hidden w-[96px] text-right md:block">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值 / 增长</div>
         <span
           title={valuation.description}
           className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}
         >
           {valuation.label}
+        </span>
+        <span
+          title={growthRequirement.description}
+          className={cn("mt-0.5 inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(growthRequirement.tone))}
+        >
+          {growthRequirement.label}
         </span>
       </div>
 
@@ -202,6 +236,7 @@ export function WatchlistItemList(props: {
   const sparklineSymbols = useMemo(() => watchRows.map((r) => r.yfinanceSymbol || r.symbol), [watchRows]);
   const sparklines = useSparklines(sparklineSymbols);
   const fundamentals = useFundamentals(sparklineSymbols);
+  const technicalSignals = useTechnicalSignals(sparklineSymbols);
 
   const availableCategories = useMemo(() => {
     const keys = new Set(watchRows.map((r) => holdingCategoryKey(r.market, r.assetClass)));
@@ -252,6 +287,7 @@ export function WatchlistItemList(props: {
             row={row}
             sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
             fundamentals={fundamentals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? fundamentals[row.symbol.toUpperCase()]}
+            technicalSignal={technicalSignals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? technicalSignals[row.symbol.toUpperCase()]}
             onClick={() => handleRowClick(row)}
             onRemove={props.onRemoveFromWatchlist}
             removing={props.actioningAssetKey === row.assetKey}

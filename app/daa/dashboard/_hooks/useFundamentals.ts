@@ -7,18 +7,50 @@ export type AssetFundamentals = {
   normalizedSymbol: string;
   marketCap: number | null;
   marketCapCurrency: string | null;
+  marketCapSource?: "price_x_shares_outstanding" | "quote_summary_market_cap" | "fundamentals_timeseries_market_cap" | null;
+  marketPrice?: number | null;
+  marketPriceCurrency?: string | null;
+  sharesOutstanding?: number | null;
+  sharesSource?: "shares_outstanding" | "implied_shares_outstanding" | null;
   trailingPE: number | null;
-  pegRatio: number | null;
+  pbRatio?: number | null;
+  dividendYieldPct?: number | null;
+  revenueGrowthPct?: number | null;
+  earningsGrowthPct?: number | null;
+  grossMarginsPct?: number | null;
+  operatingMarginsPct?: number | null;
+  profitMarginsPct?: number | null;
+  totalRevenue?: number | null;
+  freeCashflow?: number | null;
+  operatingCashflow?: number | null;
+  totalCash?: number | null;
+  totalDebt?: number | null;
+  enterpriseValue?: number | null;
   pePercentile: number | null;
-  pegPercentile: number | null;
   peSampleCount: number;
-  pegSampleCount: number;
   peAsOfDate: string | null;
-  pegAsOfDate: string | null;
+  peHistory?: FundamentalHistoryStats;
   marketCapAsOfDate: string | null;
   source: string;
   updatedAt: string;
   issues: string[];
+};
+
+export type FundamentalHistoryStats = {
+  sampleCount: number;
+  minSampleCount: number;
+  spanDays: number | null;
+  minSpanDays: number;
+  percentile: number | null;
+  latestRank: number | null;
+  latestValue: number | null;
+  min: number | null;
+  median: number | null;
+  max: number | null;
+  firstAsOfDate: string | null;
+  latestAsOfDate: string | null;
+  eligible: boolean;
+  reason: string | null;
 };
 
 type FundamentalsResponse = {
