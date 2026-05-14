@@ -88,6 +88,7 @@ export async function runAssistantCognitiveCycle(runtimeContext?: DaaAssistantRu
     return [
       "已手动触发一轮 Autopilot 大脑闭环。",
       result.skipped ? `状态：已跳过，原因：${result.reason || "未知"}` : `runId: ${result.cognitiveRun.runId || "-"}`,
+      `目标权重池：${result.targetWeightPool.persistedCount > 0 ? `已写入 ${result.targetWeightPool.persistedCount} 个` : result.targetWeightPool.reason || "未写入"}`,
       `主动调仓：${result.rebalance.created ? `已生成周期 ${result.rebalance.cycleId}` : result.rebalance.reason || "未触发"}`,
       `模拟执行：${result.rebalance.autoExecute.executed ? `已执行 ${result.rebalance.autoExecute.ordersCount} 笔` : result.rebalance.autoExecute.blockedReason || result.rebalance.autoExecute.error || "未执行"}`,
       `Tokens：${result.cognitiveRun.totalTokens}`,

@@ -277,6 +277,19 @@ function buildAutopilotLoopResult(): Awaited<ReturnType<typeof runAutopilotLoop>
       },
       reason: null,
     },
+    targetWeightPool: {
+      attempted: false,
+      enabled: false,
+      targetPlanAvailable: false,
+      acceptedCount: 0,
+      skippedCount: 0,
+      attemptedCount: 0,
+      persistedCount: 0,
+      failedCount: 0,
+      minConfidence: 70,
+      autoEnableEntry: true,
+      reason: null,
+    },
   };
 }
 

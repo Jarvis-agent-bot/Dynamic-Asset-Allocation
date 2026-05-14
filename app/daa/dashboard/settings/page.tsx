@@ -95,7 +95,7 @@ export default function SettingsPage() {
       /* 静默失败 — 数据质量面板非关键 */
     }
     try {
-      setExternalHealth(await listExternalRequestLogs({ provider: "yahoo", sinceHours: 24, limit: 60 }));
+      setExternalHealth(await listExternalRequestLogs({ sinceHours: 24, limit: 60 }));
     } catch {
       /* 静默失败 — 外部源健康面板非关键 */
     }

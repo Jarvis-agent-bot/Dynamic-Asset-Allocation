@@ -171,6 +171,8 @@ async function runCognitiveAgentJob(req: Request, scope: DaaActiveAccountScope):
           totalTokens: result.cognitiveRun.totalTokens,
           rebalanceCycleId: result.rebalance.cycleId,
           autoExecutedOrders: result.rebalance.autoExecute.ordersCount,
+          targetWeightPoolPersisted: result.targetWeightPool.persistedCount,
+          targetWeightPoolFailed: result.targetWeightPool.failedCount,
           errorsCount: result.cognitiveRun.errors.length,
         }),
         handler: async () => {

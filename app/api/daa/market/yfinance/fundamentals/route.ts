@@ -1,7 +1,10 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import type { YfinanceFundamentalSnapshot } from "@/src/market/yfinanceFundamentals";
-import { fetchYfinanceFundamentalsCached } from "@/src/market/yfinanceFundamentalsCache";
+import {
+  fetchYfinanceFundamentalsCached,
+  type YfinanceFundamentalsCacheStatus,
+} from "@/src/market/yfinanceFundamentalsCache";
 import {
   enrichYfinanceFundamentalSnapshotsWithPeers,
   getYfinanceFundamentalPeerCandidates,
@@ -49,8 +52,8 @@ export async function GET(req: Request) {
     ]);
     const items: Record<string, YfinanceFundamentalSnapshot> = {};
     const peerItems: Record<string, YfinanceFundamentalSnapshot> = {};
-    const cache: Record<string, "hit" | "miss" | "refresh_failed_stale"> = {};
-    const peerCache: Record<string, "hit" | "miss" | "refresh_failed_stale"> = {};
+    const cache: Record<string, YfinanceFundamentalsCacheStatus> = {};
+    const peerCache: Record<string, YfinanceFundamentalsCacheStatus> = {};
     const errors: Record<string, string> = {};
     const peerErrors: Record<string, string> = {};
 

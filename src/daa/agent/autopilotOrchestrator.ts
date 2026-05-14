@@ -59,6 +59,19 @@ type AutopilotLoopResult = {
     };
     reason: string | null;
   };
+  targetWeightPool: {
+    attempted: boolean;
+    enabled: boolean;
+    targetPlanAvailable: boolean;
+    acceptedCount: number;
+    skippedCount: number;
+    attemptedCount: number;
+    persistedCount: number;
+    failedCount: number;
+    minConfidence: number;
+    autoEnableEntry: boolean;
+    reason: string | null;
+  };
 };
 
 type RunAutopilotLoopInput = {
@@ -71,6 +84,7 @@ function buildSkippedResult(input: {
   source: AutopilotEventSource;
   brainMode: string;
   reason: string;
+  config?: DaaSystemConfig;
 }): AutopilotLoopResult {
   return {
     skipped: true,
@@ -101,6 +115,7 @@ function buildSkippedResult(input: {
       },
       reason: null,
     },
+    targetWeightPool: buildSkippedTargetWeightPool(null, input.config),
   };
 }
 
@@ -117,6 +132,26 @@ function buildSkippedRebalance(reason: string): AutopilotLoopResult["rebalance"]
       blockedReason: null,
       error: null,
     },
+    reason,
+  };
+}
+
+function buildSkippedTargetWeightPool(
+  reason: string | null,
+  config?: DaaSystemConfig,
+): AutopilotLoopResult["targetWeightPool"] {
+  const aiTargetWeightPool = config ? resolveAiTargetWeightPoolConfig(config) : null;
+  return {
+    attempted: false,
+    enabled: aiTargetWeightPool?.enabled ?? false,
+    targetPlanAvailable: false,
+    acceptedCount: 0,
+    skippedCount: 0,
+    attemptedCount: 0,
+    persistedCount: 0,
+    failedCount: 0,
+    minConfidence: aiTargetWeightPool?.minConfidence ?? 70,
+    autoEnableEntry: aiTargetWeightPool?.autoEnableEntry ?? true,
     reason,
   };
 }
@@ -175,6 +210,80 @@ async function ensureThesisCoverage(): Promise<AutopilotLoopResult["bootstrapped
   return { attempted: true, created: result.created, errors: result.errors };
 }
 
+type AgentTargetWeightPlan = ReturnType<typeof buildAgentTargetWeightOverrides>;
+
+async function buildAgentTargetWeightPlan(input: {
+  row: DaaStoreSystemConfigRow;
+  overlay: AgentStrategyOverlay | null;
+}): Promise<AgentTargetWeightPlan> {
+  const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+  const activeTheses = await thesisStore.getActiveTheses().catch(() => []);
+  const supportedIncreaseAssetKeys = Array.from(new Set(
+    activeTheses
+      .filter((thesis) => thesis.conviction === "high" || thesis.conviction === "medium")
+      .flatMap((thesis) => thesis.assetKeys)
+      .map((assetKey) => String(assetKey || "").trim().toUpperCase())
+      .filter(Boolean),
+  ));
+  const currentTargetWeights = Object.fromEntries(
+    bootstrap.assetUniverse.map((row) => [
+      row.assetKey.toUpperCase(),
+      Math.max(0, Number(row.targetWeightPct || 0) || 0) / 100,
+    ]),
+  );
+  const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(input.row.config);
+  return buildAgentTargetWeightOverrides({
+    overlay: input.overlay,
+    knownAssetKeys: bootstrap.assetUniverse.map((row) => row.assetKey),
+    currentTargetWeights,
+    supportedIncreaseAssetKeys,
+    maxPositionPct: input.row.config.strategy.constraints.maxPositionPct,
+    minConfidence: aiTargetWeightPool.minConfidence,
+  });
+}
+
+async function maybePersistAgentTargetWeightPool(input: {
+  row: DaaStoreSystemConfigRow;
+  targetPlan: AgentTargetWeightPlan;
+}): Promise<AutopilotLoopResult["targetWeightPool"]> {
+  const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(input.row.config);
+  const base: AutopilotLoopResult["targetWeightPool"] = {
+    attempted: false,
+    enabled: aiTargetWeightPool.enabled,
+    targetPlanAvailable: input.targetPlan != null,
+    acceptedCount: input.targetPlan?.acceptedCount ?? 0,
+    skippedCount: input.targetPlan?.skippedCount ?? 0,
+    attemptedCount: 0,
+    persistedCount: 0,
+    failedCount: 0,
+    minConfidence: aiTargetWeightPool.minConfidence,
+    autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
+    reason: null,
+  };
+
+  if (!aiTargetWeightPool.enabled) {
+    return { ...base, reason: "AI 目标权重池开关未开启。" };
+  }
+  if (!input.targetPlan) {
+    return { ...base, reason: "本轮未形成满足置信度、资产范围和论点支持条件的目标权重计划。" };
+  }
+
+  const persisted = await persistAgentTargetWeightPool({
+    targetWeightOverrides: input.targetPlan.targetWeightOverrides,
+    autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
+  });
+  return {
+    ...base,
+    attempted: true,
+    attemptedCount: persisted.attemptedCount,
+    persistedCount: persisted.persistedCount,
+    failedCount: persisted.failedCount,
+    reason: persisted.failedCount > 0
+      ? `目标权重池部分写入失败：${persisted.persistedCount}/${persisted.attemptedCount} 已持久化。`
+      : null,
+  };
+}
+
 async function executeAutopilotRebalance(input: {
   cycle: RebalanceCycle;
   systemConfig: DaaSystemConfig;
@@ -188,7 +297,7 @@ async function executeAutopilotRebalance(input: {
 
 async function maybeRunAgentDrivenRebalance(input: {
   row: DaaStoreSystemConfigRow;
-  overlay: AgentStrategyOverlay | null;
+  targetPlan: AgentTargetWeightPlan;
   reason: string;
   affectedSymbols?: string[];
 }): Promise<AutopilotLoopResult["rebalance"]> {
@@ -207,40 +316,9 @@ async function maybeRunAgentDrivenRebalance(input: {
     reason: null,
   };
 
-  const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
-  const activeTheses = await thesisStore.getActiveTheses().catch(() => []);
-  const supportedIncreaseAssetKeys = Array.from(new Set(
-    activeTheses
-      .filter((thesis) => thesis.conviction === "high" || thesis.conviction === "medium")
-      .flatMap((thesis) => thesis.assetKeys)
-      .map((assetKey) => String(assetKey || "").trim().toUpperCase())
-      .filter(Boolean),
-  ));
-  const currentTargetWeights = Object.fromEntries(
-    bootstrap.assetUniverse.map((row) => [
-      row.assetKey.toUpperCase(),
-      Math.max(0, Number(row.targetWeightPct || 0) || 0) / 100,
-    ]),
-  );
-  const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(input.row.config);
-  const targetPlan = buildAgentTargetWeightOverrides({
-    overlay: input.overlay,
-    knownAssetKeys: bootstrap.assetUniverse.map((row) => row.assetKey),
-    currentTargetWeights,
-    supportedIncreaseAssetKeys,
-    maxPositionPct: input.row.config.strategy.constraints.maxPositionPct,
-    minConfidence: aiTargetWeightPool.minConfidence,
-  });
   const prerequisites = validateAutopilotPrerequisites(input.row.config);
   if (!prerequisites.ready) {
     return { ...empty, reason: prerequisites.reason };
-  }
-
-  if (targetPlan && aiTargetWeightPool.enabled) {
-    await persistAgentTargetWeightPool({
-      targetWeightOverrides: targetPlan.targetWeightOverrides,
-      autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
-    });
   }
 
   const affectedSymbols = (input.affectedSymbols || [])
@@ -253,11 +331,11 @@ async function maybeRunAgentDrivenRebalance(input: {
 
   const generated = await generateWorkbenchRebalanceCycle({
     triggerSource: "agent_trigger",
-    triggerReason: targetPlan
-      ? `Agent 目标权重调仓: ${targetPlan.reason}；${targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
+    triggerReason: input.targetPlan
+      ? `Agent 目标权重调仓: ${input.targetPlan.reason}；${input.targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
       : `Agent 自动驾驶检查${eventContext ? `: ${eventContext}` : ""}`,
     manual: false,
-    targetWeightOverrides: targetPlan?.targetWeightOverrides,
+    targetWeightOverrides: input.targetPlan?.targetWeightOverrides,
   });
   const cycle = generated.cycle;
   if (!generated.created || !cycle) {
@@ -290,6 +368,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
       source: input.source,
       brainMode: brain.mode,
       reason: "当前不是自动驾驶模式。",
+      config: row.config,
     });
   }
   if (row.config.cognitiveAgent?.enabled === false) {
@@ -297,6 +376,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
       source: input.source,
       brainMode: brain.mode,
       reason: "认知 Agent 已关闭。",
+      config: row.config,
     });
   }
   const permission = evaluateBrainActionAuthority({
@@ -308,6 +388,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
       source: input.source,
       brainMode: brain.mode,
       reason: permission.reason,
+      config: row.config,
     });
   }
 
@@ -334,11 +415,63 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
   cognitiveRun.errors = run.errors;
 
   const rebalanceBlockedReason = getAutopilotRebalanceBlockedReasonAfterRun(run.errors);
+  const overlay = await getAgentStrategyOverlayForRun(run.runId).catch((error) => {
+    logSwallowed("autopilot.overlay", error);
+    return null;
+  });
+  let targetPlan: AgentTargetWeightPlan = null;
+  let targetWeightPool: AutopilotLoopResult["targetWeightPool"] = rebalanceBlockedReason
+    ? buildSkippedTargetWeightPool(rebalanceBlockedReason, row.config)
+    : buildSkippedTargetWeightPool(null, row.config);
+
+  if (!rebalanceBlockedReason) {
+    let targetPlanError: string | null = null;
+    targetPlan = await buildAgentTargetWeightPlan({ row, overlay }).catch((error) => {
+      logSwallowed("autopilot.targetWeightPlan", error);
+      targetPlanError = error instanceof Error ? error.message : String(error || "");
+      return null;
+    });
+    if (targetPlanError) {
+      const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(row.config);
+      targetWeightPool = {
+        attempted: true,
+        enabled: aiTargetWeightPool.enabled,
+        targetPlanAvailable: false,
+        acceptedCount: 0,
+        skippedCount: 0,
+        attemptedCount: 0,
+        persistedCount: 0,
+        failedCount: 0,
+        minConfidence: aiTargetWeightPool.minConfidence,
+        autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
+        reason: `AI 目标权重计划构建失败：${targetPlanError}`,
+      };
+    } else {
+      targetWeightPool = await maybePersistAgentTargetWeightPool({ row, targetPlan }).catch((error) => {
+        logSwallowed("autopilot.targetWeightPool", error);
+        const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(row.config);
+        return {
+          attempted: true,
+          enabled: aiTargetWeightPool.enabled,
+          targetPlanAvailable: targetPlan != null,
+          acceptedCount: targetPlan?.acceptedCount ?? 0,
+          skippedCount: targetPlan?.skippedCount ?? 0,
+          attemptedCount: 0,
+          persistedCount: 0,
+          failedCount: 0,
+          minConfidence: aiTargetWeightPool.minConfidence,
+          autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
+          reason: "AI 目标权重池写入失败。",
+        };
+      });
+    }
+  }
+
   const rebalance = rebalanceBlockedReason
     ? buildSkippedRebalance(rebalanceBlockedReason)
     : await maybeRunAgentDrivenRebalance({
       row,
-      overlay: await getAgentStrategyOverlayForRun(run.runId),
+      targetPlan,
       reason: input.reason,
       affectedSymbols: input.affectedSymbols,
     }).catch((error) => {
@@ -367,5 +500,6 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     bootstrapped,
     cognitiveRun,
     rebalance,
+    targetWeightPool,
   };
 }

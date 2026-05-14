@@ -193,16 +193,34 @@ export function createYahooProvider(opts: YahooProviderOptions = {}): MarketData
   };
   let nextGlobalRequestAt = 0;
   const nextRequestAtByHost = new Map<string, number>();
+  let rateLimitQueue: Promise<void> = Promise.resolve();
 
   async function applyRateLimit(endpointHost: string): Promise<void> {
-    const hostNextRequestAt = nextRequestAtByHost.get(endpointHost) ?? 0;
-    const waitMs = Math.max(nextGlobalRequestAt, hostNextRequestAt) - now();
+    const previous = rateLimitQueue;
+    let releaseQueue: () => void = () => {};
+    rateLimitQueue = previous.then(() => new Promise<void>((resolve) => {
+      releaseQueue = resolve;
+    }));
+
+    let waitMs = 0;
+    await previous;
+    try {
+      const currentTime = now();
+      const hostNextRequestAt = nextRequestAtByHost.get(endpointHost) ?? 0;
+      const reservedAt = Math.max(currentTime, nextGlobalRequestAt, hostNextRequestAt);
+      waitMs = Math.max(0, reservedAt - currentTime);
+      nextGlobalRequestAt = Math.max(nextGlobalRequestAt, reservedAt + minRequestGapMs);
+    } finally {
+      releaseQueue();
+    }
+
     if (waitMs > 0) await sleep(waitMs);
+
+    const cooldownWaitMs = (nextRequestAtByHost.get(endpointHost) ?? 0) - now();
+    if (cooldownWaitMs > 0) await sleep(cooldownWaitMs);
   }
 
   function markRequest(endpointHost: string, status: number): void {
-    const baseNext = now() + minRequestGapMs;
-    nextGlobalRequestAt = Math.max(nextGlobalRequestAt, baseNext);
     if (status === 429) {
       nextRequestAtByHost.set(
         endpointHost,
