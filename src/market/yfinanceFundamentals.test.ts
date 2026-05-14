@@ -72,6 +72,12 @@ describe("market/yfinanceFundamentals", () => {
             totalRevenue: { raw: 410_000_000_000 },
             freeCashflow: { raw: 88_000_000_000 },
           },
+          assetProfile: {
+            sector: "Technology",
+            sectorKey: "technology",
+            industry: "Consumer Electronics",
+            industryKey: "consumer-electronics",
+          },
         }],
       },
     };
@@ -88,6 +94,9 @@ describe("market/yfinanceFundamentals", () => {
     expect(result.dividendYieldPct).toBe(0.5);
     expect(result.revenueGrowthPct).toBe(8);
     expect(result.earningsGrowthPct).toBe(11);
+    expect(result.sector).toBe("Technology");
+    expect(result.industry).toBe("Consumer Electronics");
+    expect(result.industryKey).toBe("consumer-electronics");
     expect(result.marketPrice).toBe(172.4);
     expect(result.sharesOutstanding).toBe(15_000_000_000);
     expect(result.marketCap).toBe(2_586_000_000_000);

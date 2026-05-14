@@ -8,7 +8,7 @@ import {
   type YfinanceFundamentalSnapshot,
 } from "@/src/market/yfinanceFundamentals";
 
-export const YFINANCE_FUNDAMENTALS_CACHE_RESOURCE = "fundamentals_yahoo_valuation_v3";
+export const YFINANCE_FUNDAMENTALS_CACHE_RESOURCE = "fundamentals_yahoo_valuation_v4";
 const FUNDAMENTALS_CACHE_TTL_MS_ = 24 * 60 * 60 * 1000;
 
 function isSnapshot(value: unknown): value is YfinanceFundamentalSnapshot {

@@ -81,6 +81,49 @@ function byHistoricalPercentile(input: {
   };
 }
 
+function byPeerPercentile(input: {
+  metricLabel: string;
+  value: number;
+  percentile: number;
+  sampleCount: number;
+  groupLabel: string;
+  median: number | null | undefined;
+}): ValuationBadge {
+  const ratioText = `${input.metricLabel} ${input.value.toFixed(2)}`;
+  const medianText = Number.isFinite(input.median) ? `，同业中位 ${Number(input.median).toFixed(2)}` : "";
+  const reason = `${ratioText}，${input.groupLabel} ${formatPercentile(input.percentile)} 分位`;
+  if (input.percentile <= 25) {
+    return {
+      label: "偏便宜",
+      tone: "cheap",
+      reason,
+      description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个。`,
+    };
+  }
+  if (input.percentile <= 65) {
+    return {
+      label: "合理",
+      tone: "fair",
+      reason,
+      description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业处于中部区域，仍需结合增长和行业景气度。`,
+    };
+  }
+  if (input.percentile <= 85) {
+    return {
+      label: "偏贵",
+      tone: "expensive",
+      reason,
+      description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业估值已经偏高，买入需要更强基本面证据。`,
+    };
+  }
+  return {
+    label: "昂贵",
+    tone: "danger",
+    reason,
+    description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业处于高位，容错率较低。`,
+  };
+}
+
 function byAbsoluteFallback(input: { metricLabel: string; value: number; cheap: number; fair: number; expensive: number }): ValuationBadge {
   const reason = `${input.metricLabel} ${input.value.toFixed(2)}，自身历史样本不足`;
   if (input.value <= input.cheap) {
@@ -110,6 +153,28 @@ function withHistoryStatsDescription(badge: ValuationBadge, stats: AssetFundamen
   return {
     ...badge,
     description: `${badge.description} 当前不展示历史百分位：${text}。`,
+  };
+}
+
+function peerStatsText(fundamentals: AssetFundamentals | null | undefined, metric: "pe" | "pb"): string | null {
+  const sampleCount = metric === "pe" ? fundamentals?.pePeerSampleCount : fundamentals?.pbPeerSampleCount;
+  const percentile = metric === "pe" ? fundamentals?.pePeerPercentile : fundamentals?.pbPeerPercentile;
+  const median = metric === "pe" ? fundamentals?.pePeerMedian : fundamentals?.pbPeerMedian;
+  const groupLabel = fundamentals?.peerGroupLabel;
+  const minSampleCount = fundamentals?.peerMinSampleCount ?? 5;
+  if (!groupLabel || !Number.isFinite(sampleCount)) return null;
+  const parts = [`${groupLabel} 样本 ${Number(sampleCount)}/${minSampleCount}`];
+  if (Number.isFinite(percentile)) parts.push(`分位 ${formatPercentile(percentile)}`);
+  if (Number.isFinite(median)) parts.push(`中位 ${Number(median).toFixed(2)}`);
+  return parts.join("，");
+}
+
+function withPeerStatsDescription(badge: ValuationBadge, fundamentals: AssetFundamentals | null | undefined, metric: "pe" | "pb"): ValuationBadge {
+  const text = peerStatsText(fundamentals, metric);
+  if (!text) return badge;
+  return {
+    ...badge,
+    description: `${badge.description} 同业横截面：${text}。`,
   };
 }
 
@@ -151,18 +216,45 @@ export function deriveValuationBadge(row: AssetUniverseView, fundamentals: Asset
         sampleCount: fundamentals.peSampleCount,
       }), fundamentals);
     }
-    return appendBadgeDescription(withHistoryStatsDescription(
+    const peerPercentile = fundamentals?.pePeerPercentile ?? null;
+    const peerSampleCount = fundamentals?.pePeerSampleCount ?? 0;
+    const peerMinSampleCount = fundamentals?.peerMinSampleCount ?? 5;
+    if (Number.isFinite(peerPercentile) && peerSampleCount >= peerMinSampleCount) {
+      return appendBadgeDescription(byPeerPercentile({
+        metricLabel: "PE(TTM)",
+        value: Number(pe),
+        percentile: Number(peerPercentile),
+        sampleCount: peerSampleCount,
+        groupLabel: fundamentals?.peerGroupLabel || "同业",
+        median: fundamentals?.pePeerMedian,
+      }), fundamentals);
+    }
+    return appendBadgeDescription(withPeerStatsDescription(withHistoryStatsDescription(
       byAbsoluteFallback({ metricLabel: "PE(TTM)", value: Number(pe), cheap: 15, fair: 30, expensive: 45 }),
       fundamentals?.peHistory,
-    ), fundamentals);
+    ), fundamentals, "pe"), fundamentals);
   }
 
   const pb = fundamentals?.pbRatio ?? null;
   if (Number.isFinite(pb) && Number(pb) > 0) {
-    return appendBadgeDescription(
+    const peerPercentile = fundamentals?.pbPeerPercentile ?? null;
+    const peerSampleCount = fundamentals?.pbPeerSampleCount ?? 0;
+    const peerMinSampleCount = fundamentals?.peerMinSampleCount ?? 5;
+    if (Number.isFinite(peerPercentile) && peerSampleCount >= peerMinSampleCount) {
+      return appendBadgeDescription(byPeerPercentile({
+        metricLabel: "PB",
+        value: Number(pb),
+        percentile: Number(peerPercentile),
+        sampleCount: peerSampleCount,
+        groupLabel: fundamentals?.peerGroupLabel || "同业",
+        median: fundamentals?.pbPeerMedian,
+      }), fundamentals);
+    }
+    return appendBadgeDescription(withPeerStatsDescription(
       byAbsoluteFallback({ metricLabel: "PB", value: Number(pb), cheap: 1.5, fair: 3.5, expensive: 6 }),
       fundamentals,
-    );
+      "pb",
+    ), fundamentals);
   }
 
   return {

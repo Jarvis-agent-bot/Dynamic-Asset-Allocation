@@ -2,6 +2,10 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import type { YfinanceFundamentalSnapshot } from "@/src/market/yfinanceFundamentals";
 import { fetchYfinanceFundamentalsCached } from "@/src/market/yfinanceFundamentalsCache";
+import {
+  enrichYfinanceFundamentalSnapshotsWithPeers,
+  getYfinanceFundamentalPeerCandidates,
+} from "@/src/market/yfinanceFundamentalsPeers";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -34,16 +38,26 @@ export async function GET(req: Request) {
       return fail("VALIDATION_FAILED", "missing symbols", { status: 400 });
     }
 
-    const settled = await Promise.allSettled(
-      symbols.map((symbol) => fetchYfinanceFundamentalsCached(symbol, { forceRefresh, now, timeoutMs: 8_000 })),
-    );
+    const peerSymbols = getYfinanceFundamentalPeerCandidates(symbols);
+    const [settled, peerSettled] = await Promise.all([
+      Promise.allSettled(
+        symbols.map((symbol) => fetchYfinanceFundamentalsCached(symbol, { forceRefresh, now, timeoutMs: 8_000 })),
+      ),
+      Promise.allSettled(
+        peerSymbols.map((symbol) => fetchYfinanceFundamentalsCached(symbol, { forceRefresh: false, now, timeoutMs: 8_000 })),
+      ),
+    ]);
     const items: Record<string, YfinanceFundamentalSnapshot> = {};
+    const peerItems: Record<string, YfinanceFundamentalSnapshot> = {};
     const cache: Record<string, "hit" | "miss" | "refresh_failed_stale"> = {};
+    const peerCache: Record<string, "hit" | "miss" | "refresh_failed_stale"> = {};
     const errors: Record<string, string> = {};
+    const peerErrors: Record<string, string> = {};
 
     for (let i = 0; i < settled.length; i += 1) {
       const symbol = symbols[i];
       const result = settled[i];
+      if (!symbol || !result) continue;
       if (result.status === "fulfilled") {
         items[symbol] = result.value.snapshot;
         cache[symbol] = result.value.cacheStatus;
@@ -54,12 +68,29 @@ export async function GET(req: Request) {
       }
     }
 
+    for (let i = 0; i < peerSettled.length; i += 1) {
+      const symbol = peerSymbols[i];
+      const result = peerSettled[i];
+      if (!symbol || !result) continue;
+      if (result.status === "fulfilled") {
+        peerItems[symbol] = result.value.snapshot;
+        peerCache[symbol] = result.value.cacheStatus;
+      } else {
+        const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        peerErrors[symbol] = message;
+        logSwallowed(`yfinanceFundamentalsRoute.peerFetch(${symbol})`, result.reason);
+      }
+    }
+
     return ok({
       source: "yfinance",
       symbols,
-      items,
+      items: enrichYfinanceFundamentalSnapshotsWithPeers(items, peerItems),
       cache,
       errors,
+      peerSymbols,
+      peerCache,
+      peerErrors,
     });
   });
 }

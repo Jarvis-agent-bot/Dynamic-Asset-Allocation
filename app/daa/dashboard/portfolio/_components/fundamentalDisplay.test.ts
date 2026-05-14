@@ -80,6 +80,29 @@ describe("deriveValuationBadge", () => {
     expect(badge.reason).not.toContain("PEG");
   });
 
+  it("自身历史不足时优先使用同业横截面分位", () => {
+    const row = buildAssetUniverseView({
+      assetKey: "HK::1810",
+      symbol: "1810.HK",
+      market: "HK",
+      assetClass: "EQUITY",
+      instrumentType: "STOCK",
+    });
+
+    const badge = deriveValuationBadge(row, fundamentals({
+      peerGroupLabel: "行业：Consumer Electronics",
+      peerMinSampleCount: 5,
+      pePeerPercentile: 60,
+      pePeerSampleCount: 8,
+      pePeerMedian: 18.2,
+    }));
+
+    expect(badge.label).toBe("合理");
+    expect(badge.reason).toContain("行业：Consumer Electronics 60% 分位");
+    expect(badge.description).toContain("Yahoo 同业横截面");
+    expect(badge.description).toContain("样本 8 个");
+  });
+
   it("用 PE 和 Yahoo 增长字段给出增长兑现要求标签", () => {
     const row = buildAssetUniverseView({
       assetKey: "HK::1810",

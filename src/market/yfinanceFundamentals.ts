@@ -11,6 +11,7 @@ const FUNDAMENTAL_TYPES_ = [
 
 export const FUNDAMENTAL_PERCENTILE_MIN_SAMPLE_COUNT = 36;
 export const FUNDAMENTAL_PERCENTILE_MIN_SPAN_DAYS = 720;
+export const FUNDAMENTAL_PEER_PERCENTILE_MIN_SAMPLE_COUNT = 5;
 
 type FundamentalMetricKey = (typeof FUNDAMENTAL_TYPES_)[number];
 
@@ -18,6 +19,12 @@ export type YfinanceMarketCapSource =
   | "price_x_shares_outstanding"
   | "quote_summary_market_cap"
   | "fundamentals_timeseries_market_cap"
+  | null;
+
+export type FundamentalPeerGroupBasis =
+  | "industry"
+  | "sector"
+  | "curated_basket"
   | null;
 
 export type FundamentalHistoryStats = {
@@ -61,10 +68,26 @@ export type YfinanceFundamentalSnapshot = {
   totalCash: number | null;
   totalDebt: number | null;
   enterpriseValue: number | null;
+  sector: string | null;
+  sectorKey: string | null;
+  industry: string | null;
+  industryKey: string | null;
   pePercentile: number | null;
   peSampleCount: number;
   peAsOfDate: string | null;
   peHistory: FundamentalHistoryStats;
+  peerGroupKey: string | null;
+  peerGroupLabel: string | null;
+  peerGroupBasis: FundamentalPeerGroupBasis;
+  peerSymbols: string[];
+  peerMinSampleCount: number;
+  peerReason: string | null;
+  pePeerPercentile: number | null;
+  pePeerSampleCount: number;
+  pePeerMedian: number | null;
+  pbPeerPercentile: number | null;
+  pbPeerSampleCount: number;
+  pbPeerMedian: number | null;
   marketCapAsOfDate: string | null;
   source: "yfinance_fundamentals_timeseries_quote_summary";
   updatedAt: string;
@@ -147,6 +170,11 @@ function readStringMetric(row: Record<string, unknown>, key: string): string | n
   return typeof value === "string" && value.trim() ? value.trim().toUpperCase() : null;
 }
 
+function readTextMetric(row: Record<string, unknown>, key: string): string | null {
+  const value = row[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function readQuoteSummaryResult(payload: unknown): Record<string, unknown> {
   const root = isRecord(payload) ? payload : {};
   const quoteSummary = isRecord(root.quoteSummary) ? root.quoteSummary : {};
@@ -191,6 +219,10 @@ type QuoteSummaryStats = {
   totalCash: number | null;
   totalDebt: number | null;
   enterpriseValue: number | null;
+  sector: string | null;
+  sectorKey: string | null;
+  industry: string | null;
+  industryKey: string | null;
 };
 
 function relativeDiff(a: number, b: number): number {
@@ -242,6 +274,7 @@ function readQuoteSummaryStats(payload: unknown): QuoteSummaryStats {
   const summaryDetail = isRecord(result.summaryDetail) ? result.summaryDetail : {};
   const defaultStats = isRecord(result.defaultKeyStatistics) ? result.defaultKeyStatistics : {};
   const financialData = isRecord(result.financialData) ? result.financialData : {};
+  const assetProfile = isRecord(result.assetProfile) ? result.assetProfile : {};
 
   const sharesOutstanding = readPositiveNumber(defaultStats, "sharesOutstanding");
   const impliedSharesOutstanding = readPositiveNumber(defaultStats, "impliedSharesOutstanding");
@@ -276,6 +309,10 @@ function readQuoteSummaryStats(payload: unknown): QuoteSummaryStats {
     totalCash: readNumber(financialData, "totalCash"),
     totalDebt: readNumber(financialData, "totalDebt"),
     enterpriseValue: readNumber(defaultStats, "enterpriseValue"),
+    sector: readTextMetric(assetProfile, "sector"),
+    sectorKey: readTextMetric(assetProfile, "sectorKey"),
+    industry: readTextMetric(assetProfile, "industry"),
+    industryKey: readTextMetric(assetProfile, "industryKey"),
   };
 }
 
@@ -414,10 +451,26 @@ export function normalizeYfinanceFundamentalsPayload(input: {
     totalCash: quoteStats.totalCash,
     totalDebt: quoteStats.totalDebt,
     enterpriseValue: quoteStats.enterpriseValue,
+    sector: quoteStats.sector,
+    sectorKey: quoteStats.sectorKey,
+    industry: quoteStats.industry,
+    industryKey: quoteStats.industryKey,
     pePercentile: peHistory.percentile,
     peSampleCount: peSeries.length,
     peAsOfDate: pe.asOfDate,
     peHistory,
+    peerGroupKey: null,
+    peerGroupLabel: null,
+    peerGroupBasis: null,
+    peerSymbols: [],
+    peerMinSampleCount: FUNDAMENTAL_PEER_PERCENTILE_MIN_SAMPLE_COUNT,
+    peerReason: null,
+    pePeerPercentile: null,
+    pePeerSampleCount: 0,
+    pePeerMedian: null,
+    pbPeerPercentile: null,
+    pbPeerSampleCount: 0,
+    pbPeerMedian: null,
     marketCapAsOfDate: marketCap.asOfDate,
     source: "yfinance_fundamentals_timeseries_quote_summary",
     updatedAt,
@@ -456,7 +509,7 @@ export async function fetchYfinanceFundamentals(
     }),
     provider.fetchQuoteSummary({
       symbol: normalizedSymbol,
-      modules: "price,summaryDetail,defaultKeyStatistics,financialData",
+      modules: "price,summaryDetail,defaultKeyStatistics,financialData,assetProfile",
       timeoutMs: opts.timeoutMs ?? 8_000,
       context: {
         caller: "fetchYfinanceFundamentals",
