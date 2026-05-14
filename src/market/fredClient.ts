@@ -5,6 +5,7 @@
  * API 文档: https://fred.stlouisfed.org/docs/api/fred/
  */
 
+import { appendDaaExternalRequestLog } from "@/src/daa/store/jobStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 const FRED_BASE_URL = "https://api.stlouisfed.org/fred";
@@ -41,6 +42,32 @@ type FredMacroSnapshot = {
   fetchedAt: string;
 };
 
+async function recordFredRequest(input: {
+  seriesId: string;
+  status: number;
+  errorCode?: string;
+  errorMessage?: string;
+  latencyMs: number;
+}): Promise<void> {
+  try {
+    await appendDaaExternalRequestLog({
+      provider: "fred",
+      resource: "fred.series_observations",
+      subjectKey: input.seriesId,
+      endpointHost: "api.stlouisfed.org",
+      httpStatus: input.status,
+      errorCode: input.errorCode ?? "",
+      errorMessage: input.errorMessage ?? "",
+      latencyMs: input.latencyMs,
+      retryCount: 0,
+      cacheStatus: "cache_bypass",
+      caller: "fetchFredSeries",
+    });
+  } catch (err) {
+    logSwallowed("fredClient.recordRequest", err);
+  }
+}
+
 /**
  * 从 FRED API 获取单个序列的观测数据
  */
@@ -54,6 +81,7 @@ async function fetchFredSeries(
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
+  const startedAt = Date.now();
 
   try {
     const response = await fetch(url, {
@@ -62,13 +90,33 @@ async function fetchFredSeries(
       headers: { accept: "application/json" },
     });
     if (!response.ok) {
+      await recordFredRequest({
+        seriesId,
+        status: response.status,
+        errorCode: `http_${response.status}`,
+        errorMessage: "FRED upstream request failed",
+        latencyMs: Math.max(0, Date.now() - startedAt),
+      });
       logSwallowed("fredClient.fetchFredSeries", new Error(`FRED API 返回 ${response.status} for ${seriesId}`));
       return { seriesId, title: "", frequency: "", observations: [], latestValue: null, latestDate: null };
     }
 
-    const payload = (await response.json()) as {
-      observations?: Array<{ date?: string; value?: string }>;
-    };
+    let payload: { observations?: Array<{ date?: string; value?: string }> };
+    try {
+      payload = (await response.json()) as {
+        observations?: Array<{ date?: string; value?: string }>;
+      };
+    } catch (err) {
+      await recordFredRequest({
+        seriesId,
+        status: response.status,
+        errorCode: "bad_json",
+        errorMessage: "FRED returned non-JSON payload",
+        latencyMs: Math.max(0, Date.now() - startedAt),
+      });
+      logSwallowed("fredClient.parsePayload", err);
+      return { seriesId, title: "", frequency: "", observations: [], latestValue: null, latestDate: null };
+    }
     const rawObs = Array.isArray(payload?.observations) ? payload.observations : [];
 
     const observations: FredObservation[] = rawObs
@@ -88,6 +136,12 @@ async function fetchFredSeries(
     // observations 是降序排列，找到最新的有效值
     const latestValid = observations.find((obs) => obs.value != null);
 
+    await recordFredRequest({
+      seriesId,
+      status: response.status,
+      latencyMs: Math.max(0, Date.now() - startedAt),
+    });
+
     return {
       seriesId,
       title: "",
@@ -97,6 +151,13 @@ async function fetchFredSeries(
       latestDate: latestValid?.date ?? null,
     };
   } catch (err) {
+    await recordFredRequest({
+      seriesId,
+      status: 0,
+      errorCode: err instanceof Error && err.name === "AbortError" ? "timeout" : "network_error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      latencyMs: Math.max(0, Date.now() - startedAt),
+    });
     logSwallowed("fredClient.fetchFredSeries", err);
     return { seriesId, title: "", frequency: "", observations: [], latestValue: null, latestDate: null };
   } finally {

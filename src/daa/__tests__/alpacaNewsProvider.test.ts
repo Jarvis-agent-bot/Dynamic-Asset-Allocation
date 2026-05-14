@@ -8,7 +8,12 @@ vi.mock("@/src/daa/config/secretsManager", () => ({
   }),
 }));
 
+vi.mock("@/src/daa/store/jobStore", () => ({
+  appendDaaExternalRequestLog: vi.fn(async () => ({ id: "external_log_test" })),
+}));
+
 import { alpacaNewsProvider } from "@/src/daa/signals/providers/alpacaNews";
+import { appendDaaExternalRequestLog } from "@/src/daa/store/jobStore";
 
 describe("alpacaNewsProvider", () => {
   const originalFetch = globalThis.fetch;
@@ -87,6 +92,13 @@ describe("alpacaNewsProvider", () => {
 
     const items = await alpacaNewsProvider.fetchNews("AAPL");
     expect(items).toEqual([]);
+    expect(vi.mocked(appendDaaExternalRequestLog)).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "alpaca",
+      resource: "alpaca.news",
+      subjectKey: "AAPL",
+      httpStatus: 429,
+      errorCode: "http_429",
+    }));
   });
 
   it("returns empty on network failure (swallow)", async () => {
@@ -112,5 +124,12 @@ describe("alpacaNewsProvider", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers["APCA-API-KEY-ID"]).toBe("TEST_KEY");
     expect(headers["APCA-API-SECRET-KEY"]).toBe("TEST_SECRET");
+    expect(vi.mocked(appendDaaExternalRequestLog)).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "alpaca",
+      resource: "alpaca.news",
+      subjectKey: "TSLA",
+      httpStatus: 200,
+      errorCode: "",
+    }));
   });
 });

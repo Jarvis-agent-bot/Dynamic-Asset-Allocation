@@ -8,6 +8,7 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaExternalPayloadRaw: vi.fn(async () => ({ id: "raw_test_1" })),
   appendDaaMarketPriceHistoryRows: vi.fn(async () => 0),
   deleteExpiredDaaExternalPayloadRaw: vi.fn(async () => 0),
+  deleteOldDaaExternalRequestLogs: vi.fn(async () => 0),
   getDaaMarketCacheHealthStats: vi.fn(async () => ({
     provider: "yfinance",
     totalSnapshots: 0,
@@ -38,13 +39,20 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
   }))),
 }));
 
+vi.mock("@/src/daa/store/jobStore", () => ({
+  appendDaaExternalRequestLog: vi.fn(async () => ({ id: "external_log_test" })),
+}));
+
 import {
   appendDaaMarketPriceHistoryRows,
   listDaaMarketPriceSnapshots,
   listLatestDaaMarketPriceHistoryRows,
   upsertDaaMarketPriceSnapshots,
 } from "@/src/daa/store/daaStorePg";
-import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
+import {
+  getMarketPricesWithCache,
+  refreshMarketPrices,
+} from "@/src/daa/modules/marketCache/marketCacheService";
 
 function buildSnapshotFixture(
   overrides?: Partial<DaaStoreMarketPriceSnapshot>,
@@ -246,5 +254,28 @@ describe("market-cache-service-v1", () => {
     const latestUpsertInput = vi.mocked(upsertDaaMarketPriceSnapshots).mock.calls.at(-1)?.[0]?.[0] as Record<string, unknown> | undefined;
     expect(latestUpsertInput?.priceUpdatedAt ?? null).toBeNull();
     expect(vi.mocked(listDaaMarketPriceSnapshots)).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshMarketPrices 只把 fresh 成功计入 refreshed，stale 回退单独统计", async () => {
+    const fallbackPriceUpdatedAt = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    vi.mocked(listLatestDaaMarketPriceHistoryRows).mockResolvedValue([
+      buildHistoryFixture({
+        market: "US",
+        symbol: "NVDA",
+        ts: fallbackPriceUpdatedAt,
+        price: 700.11,
+      }),
+    ]);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
+
+    const result = await refreshMarketPrices({
+      assets: [{ market: "US", symbol: "NVDA", currency: "USD" }],
+      triggerSource: "test",
+      timeoutMs: 800,
+    });
+
+    expect(result.refreshed).toBe(0);
+    expect(result.stale).toBe(1);
+    expect(result.missing).toBe(0);
   });
 });

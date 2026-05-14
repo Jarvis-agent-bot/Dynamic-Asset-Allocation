@@ -68,8 +68,8 @@ export class YahooProviderError extends Error {
 }
 
 const DEFAULT_TIMEOUT_MS_ = 8_000;
-const DEFAULT_MIN_REQUEST_GAP_MS_ = 350;
-const DEFAULT_RATE_LIMIT_COOLDOWN_MS_ = 20_000;
+const DEFAULT_MIN_REQUEST_GAP_MS_ = process.env.NODE_ENV === "test" ? 0 : 350;
+const DEFAULT_RATE_LIMIT_COOLDOWN_MS_ = process.env.NODE_ENV === "test" ? 0 : 20_000;
 const CRUMB_TTL_MS_ = 6 * 60 * 60 * 1000;
 
 function sleep(ms: number): Promise<void> {
@@ -191,18 +191,23 @@ export function createYahooProvider(opts: YahooProviderOptions = {}): MarketData
     crumb: "",
     crumbExpiresAt: 0,
   };
-  let nextRequestAt = 0;
+  let nextGlobalRequestAt = 0;
+  const nextRequestAtByHost = new Map<string, number>();
 
-  async function applyRateLimit(): Promise<void> {
-    const waitMs = nextRequestAt - now();
+  async function applyRateLimit(endpointHost: string): Promise<void> {
+    const hostNextRequestAt = nextRequestAtByHost.get(endpointHost) ?? 0;
+    const waitMs = Math.max(nextGlobalRequestAt, hostNextRequestAt) - now();
     if (waitMs > 0) await sleep(waitMs);
   }
 
-  function markRequest(status: number): void {
+  function markRequest(endpointHost: string, status: number): void {
     const baseNext = now() + minRequestGapMs;
-    nextRequestAt = Math.max(nextRequestAt, baseNext);
+    nextGlobalRequestAt = Math.max(nextGlobalRequestAt, baseNext);
     if (status === 429) {
-      nextRequestAt = Math.max(nextRequestAt, now() + rateLimitCooldownMs);
+      nextRequestAtByHost.set(
+        endpointHost,
+        Math.max(nextRequestAtByHost.get(endpointHost) ?? 0, now() + rateLimitCooldownMs),
+      );
     }
   }
 
@@ -244,7 +249,7 @@ export function createYahooProvider(opts: YahooProviderOptions = {}): MarketData
   }> {
     const endpointHost = input.url.hostname;
     const urlText = input.url.toString();
-    await applyRateLimit();
+    await applyRateLimit(endpointHost);
 
     const startedAt = now();
     const controller = new AbortController();
@@ -313,7 +318,7 @@ export function createYahooProvider(opts: YahooProviderOptions = {}): MarketData
     } finally {
       clearTimeout(timeoutId);
       const status = response?.status ?? 0;
-      markRequest(status);
+      markRequest(endpointHost, status);
       if (shouldRecordError) {
         await recordRequest({
           context: input.context,

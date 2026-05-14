@@ -3,6 +3,7 @@ import {
   appendDaaExternalPayloadRaw,
   appendDaaMarketPriceHistoryRows,
   deleteExpiredDaaExternalPayloadRaw,
+  deleteOldDaaExternalRequestLogs,
   getDaaMarketCacheHealthStats,
   listDaaMarketPriceSnapshots,
   listLatestDaaMarketPriceHistoryRows,
@@ -559,7 +560,7 @@ export async function refreshMarketPrices(input: {
   });
 
   const rows = Object.values(results);
-  const refreshed = rows.filter((row) => row.price > 0).length;
+  const refreshed = rows.filter((row) => row.price > 0 && row.priceStatus === "fresh").length;
   const stale = rows.filter((row) => row.priceStatus === "stale").length;
   const missing = rows.filter((row) => row.priceStatus === "missing").length;
 
@@ -587,6 +588,7 @@ export async function cleanupMarketCacheRawPayload(nowIso?: string): Promise<{ r
  *
  * 保留策略：
  * - 原始 API 响应: 90 天
+ * - 外部请求健康日志: 90 天
  * - 价格快照(非 fresh): 30 天
  * - 市场指标快照: 90 天
  * - 新闻 item: 30 天
@@ -604,6 +606,9 @@ export async function runUnifiedDataCleanup(): Promise<Record<string, number>> {
   // 1. 原始 API 响应：90 天（已有逻辑）
   const rawResult = await cleanupMarketCacheRawPayload();
   results.raw_payloads = rawResult.removed;
+
+  // 1.1 外部请求健康日志：90 天，避免健康面板日志无限增长。
+  results.external_request_logs = await deleteOldDaaExternalRequestLogs({ retentionDays: 90 });
 
   // 2. 旧价格快照（非 fresh）：30 天
   try {

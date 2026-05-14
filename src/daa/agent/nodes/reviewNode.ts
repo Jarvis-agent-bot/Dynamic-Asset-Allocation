@@ -38,7 +38,9 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
             const createdDate = new Date(thread.createdAt);
             const daysSinceCreation = Math.floor((Date.now() - createdDate.getTime()) / 86400000);
             if (daysSinceCreation > 0 && sym) {
-              const cacheResult = await fetchPriceSeriesWithCache(sym, `${Math.min(daysSinceCreation + 5, 365)}d`);
+              const lookbackDays = Math.min(daysSinceCreation + 5, 365);
+              const startDate = new Date(Date.now() - lookbackDays * 86400000).toISOString().slice(0, 10);
+              const cacheResult = await fetchPriceSeriesWithCache(sym, startDate);
               const series = cacheResult?.data ?? [];
               if (series.length >= 2) {
                 const firstPrice = series[0].close;

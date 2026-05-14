@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/src/daa/store/jobStore", () => ({
+  appendDaaExternalRequestLog: vi.fn(async () => ({ id: "external_log_test" })),
+}));
+
 import {
   fetchDanjuanFundAssetPercent,
   resolveDanjuanFundRegistry,
   resolveDanjuanReportDates,
 } from "@/src/daa/hf/danjuanFundSource";
+import { appendDaaExternalRequestLog } from "@/src/daa/store/jobStore";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.clearAllMocks();
   delete process.env.DAA_HF_DANJUAN_FUNDS;
 });
 
@@ -57,5 +63,12 @@ describe("danjuan-fund-source-v1", () => {
     expect(rows[0]?.symbol).toBe("00700.HK");
     expect(rows[1]?.symbol).toBe("PDD");
     expect(rows[2]?.symbol).toBe("002916.SZ");
+    expect(vi.mocked(appendDaaExternalRequestLog)).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "danjuan",
+      resource: "danjuan.fund.asset.percent",
+      subjectKey: "100055::2024-12-31",
+      httpStatus: 200,
+      errorCode: "",
+    }));
   });
 });

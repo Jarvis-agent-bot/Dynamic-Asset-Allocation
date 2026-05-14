@@ -321,7 +321,7 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
           </div>
         ) : (
           <div className="mt-3 rounded-[8px] border border-dashed border-[var(--border)] px-3 py-3 text-sm text-[var(--muted)]">
-            还没有外部请求记录。下一次刷新行情或基础面数据后，这里会显示 Yahoo 请求状态、限速与 crumb 错误。
+            还没有外部请求记录。下一次刷新行情、宏观指标、新闻或基金持仓后，这里会显示外部数据源状态。
           </div>
         )}
 

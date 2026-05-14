@@ -18,6 +18,7 @@ vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({
   })),
   runUnifiedDataCleanup: vi.fn(async () => ({
     raw_payloads: 0,
+    external_request_logs: 0,
     price_snapshots: 0,
     indicator_snapshots: 0,
     news_items: 0,
@@ -142,6 +143,7 @@ describe("cron-market-cache-routes-v1", () => {
   it("cache-cleanup 返回删除计数", async () => {
     vi.mocked(runUnifiedDataCleanup).mockResolvedValue({
       raw_payloads: 7,
+      external_request_logs: 5,
       price_snapshots: 0,
       indicator_snapshots: 0,
       news_items: 3,
@@ -160,6 +162,7 @@ describe("cron-market-cache-routes-v1", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data.raw_payloads).toBe(7);
+    expect(json.data.external_request_logs).toBe(5);
     expect(json.data.news_items).toBe(3);
     expect(json.data.news_event_graphs).toBe(2);
     expect(json.data.news_portfolio_impacts).toBe(1);

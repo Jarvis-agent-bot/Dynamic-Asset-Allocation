@@ -293,6 +293,22 @@ export async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toI
   });
 }
 
+export async function deleteOldDaaExternalRequestLogs(input: {
+  retentionDays?: number;
+  nowIso?: string;
+} = {}): Promise<number> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const retentionDays = Math.max(1, Math.min(365, Math.trunc(toFiniteNumber(input.retentionDays, 90))));
+    const nowIso = toIsoString(input.nowIso, new Date().toISOString());
+    const result = await query(
+      "DELETE FROM daa_external_request_log_v1 WHERE created_at < ($1::timestamptz - ($2::INT * INTERVAL '1 day'))",
+      [nowIso, retentionDays],
+    );
+    return Math.max(0, Math.trunc(toFiniteNumber(result.rowCount, 0)));
+  });
+}
+
 export async function getDaaMarketCacheHealthStats(provider = "yfinance"): Promise<{
   provider: string;
   totalSnapshots: number;

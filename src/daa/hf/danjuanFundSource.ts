@@ -1,3 +1,4 @@
+import { appendDaaExternalRequestLog } from "@/src/daa/store/jobStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DanjuanFundRegistryItem = {
@@ -70,6 +71,33 @@ function extractHeaders(headers: Headers): Record<string, string> {
     out[key] = value;
   });
   return out;
+}
+
+async function recordDanjuanRequest(input: {
+  fundCode: string;
+  reportDate: string;
+  status: number;
+  errorCode?: string;
+  errorMessage?: string;
+  latencyMs: number;
+}): Promise<void> {
+  try {
+    await appendDaaExternalRequestLog({
+      provider: "danjuan",
+      resource: "danjuan.fund.asset.percent",
+      subjectKey: `${input.fundCode}::${input.reportDate}`,
+      endpointHost: "danjuanfunds.com",
+      httpStatus: input.status,
+      errorCode: input.errorCode ?? "",
+      errorMessage: input.errorMessage ?? "",
+      latencyMs: input.latencyMs,
+      retryCount: 0,
+      cacheStatus: "cache_bypass",
+      caller: "fetchDanjuanFundAssetPercentWithRaw",
+    });
+  } catch (err) {
+    logSwallowed("danjuanFundSource.recordRequest", err);
+  }
 }
 
 function normalizeReportDate(raw: string): string {
@@ -170,6 +198,7 @@ export async function fetchDanjuanFundAssetPercentWithRaw(params: {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(3000, params.timeoutMs ?? 12000));
+  const startedAt = Date.now();
 
   try {
     const response = await fetch(url, {
@@ -186,10 +215,12 @@ export async function fetchDanjuanFundAssetPercentWithRaw(params: {
 
     const text = await response.text();
     let payload: unknown = null;
+    let parseErrorMessage = "";
     try {
       payload = JSON.parse(text) as unknown;
     } catch (err) {
       logSwallowed("danjuanFundSource.parsePayload", err);
+      parseErrorMessage = err instanceof Error ? err.message : String(err);
       payload = null;
     }
 
@@ -202,7 +233,29 @@ export async function fetchDanjuanFundAssetPercentWithRaw(params: {
       payloadText: text,
     };
 
-    if (!response.ok) return { rows: [], raw };
+    if (!response.ok) {
+      await recordDanjuanRequest({
+        fundCode,
+        reportDate,
+        status: response.status,
+        errorCode: `http_${response.status}`,
+        errorMessage: "Danjuan upstream request failed",
+        latencyMs: Math.max(0, Date.now() - startedAt),
+      });
+      return { rows: [], raw };
+    }
+
+    if (parseErrorMessage) {
+      await recordDanjuanRequest({
+        fundCode,
+        reportDate,
+        status: response.status,
+        errorCode: "bad_json",
+        errorMessage: "Danjuan returned non-JSON payload",
+        latencyMs: Math.max(0, Date.now() - startedAt),
+      });
+      return { rows: [], raw };
+    }
 
     const data = isRecord(payloadRoot.data) ? payloadRoot.data : {};
     const rows = Array.isArray(data.stock_list) ? data.stock_list : [];
@@ -233,11 +286,26 @@ export async function fetchDanjuanFundAssetPercentWithRaw(params: {
       });
     }
 
+    await recordDanjuanRequest({
+      fundCode,
+      reportDate,
+      status: response.status,
+      latencyMs: Math.max(0, Date.now() - startedAt),
+    });
+
     return {
       rows: parsedRows,
       raw,
     };
   } catch (err) {
+    await recordDanjuanRequest({
+      fundCode,
+      reportDate,
+      status: 0,
+      errorCode: err instanceof Error && err.name === "AbortError" ? "timeout" : "network_error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      latencyMs: Math.max(0, Date.now() - startedAt),
+    });
     logSwallowed("danjuanFundSource.fetchAssetPercent", err);
     return {
       rows: [],
