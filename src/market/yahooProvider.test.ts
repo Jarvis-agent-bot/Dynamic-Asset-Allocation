@@ -4,6 +4,7 @@ import type { appendDaaExternalRequestLog } from "@/src/daa/store/jobStore";
 import { createYahooProvider } from "./yahooProvider";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -166,6 +167,43 @@ describe("market/yahooProvider", () => {
       httpStatus: 429,
       errorCode: "rate_limited",
     }));
+  });
+
+  it("keeps concurrent requests serialized when a host cooldown appears mid-queue", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let query2Count = 0;
+    const query2FetchTimes: number[] = [];
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("query2.finance.yahoo.com")) {
+        query2FetchTimes.push(Date.now());
+        query2Count += 1;
+        if (query2Count === 1) return new Response("Too Many Requests", { status: 429 });
+      }
+      return jsonResponse({
+        chart: {
+          result: [{ timestamp: [1778198400], indicators: { quote: [{ close: [11] }] } }],
+          error: null,
+        },
+      });
+    });
+    const provider = createYahooProvider({
+      fetchFn: fetchMock,
+      logRequest: createLogRequestMock(),
+      minRequestGapMs: 10,
+      rateLimitCooldownMs: 50,
+    });
+
+    const requests = Promise.all([
+      provider.fetchChart({ symbol: "AAPL", period1: 1, period2: 2 }),
+      provider.fetchChart({ symbol: "MSFT", period1: 1, period2: 2 }),
+      provider.fetchChart({ symbol: "NVDA", period1: 1, period2: 2 }),
+    ]);
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(requests).resolves.toHaveLength(3);
+
+    expect(query2FetchTimes).toEqual([0, 50, 60]);
   });
 
   it("records Yahoo payload errors as a failed request without a duplicate success log", async () => {

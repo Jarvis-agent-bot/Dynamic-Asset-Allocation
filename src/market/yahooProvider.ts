@@ -181,7 +181,7 @@ function readBodyPreview(text: string): string {
 }
 
 export function createYahooProvider(opts: YahooProviderOptions = {}): MarketDataProvider {
-  const fetchFn = opts.fetchFn ?? fetch;
+  const fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
   const logRequest = opts.logRequest ?? appendDaaExternalRequestLog;
   const minRequestGapMs = Math.max(0, Math.trunc(opts.minRequestGapMs ?? DEFAULT_MIN_REQUEST_GAP_MS_));
   const rateLimitCooldownMs = Math.max(0, Math.trunc(opts.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS_));
@@ -202,22 +202,22 @@ export function createYahooProvider(opts: YahooProviderOptions = {}): MarketData
       releaseQueue = resolve;
     }));
 
-    let waitMs = 0;
     await previous;
     try {
-      const currentTime = now();
-      const hostNextRequestAt = nextRequestAtByHost.get(endpointHost) ?? 0;
-      const reservedAt = Math.max(currentTime, nextGlobalRequestAt, hostNextRequestAt);
-      waitMs = Math.max(0, reservedAt - currentTime);
-      nextGlobalRequestAt = Math.max(nextGlobalRequestAt, reservedAt + minRequestGapMs);
+      for (;;) {
+        const currentTime = now();
+        const hostNextRequestAt = nextRequestAtByHost.get(endpointHost) ?? 0;
+        const waitMs = Math.max(nextGlobalRequestAt, hostNextRequestAt) - currentTime;
+        if (waitMs > 0) {
+          await sleep(waitMs);
+          continue;
+        }
+        nextGlobalRequestAt = Math.max(nextGlobalRequestAt, now() + minRequestGapMs);
+        return;
+      }
     } finally {
       releaseQueue();
     }
-
-    if (waitMs > 0) await sleep(waitMs);
-
-    const cooldownWaitMs = (nextRequestAtByHost.get(endpointHost) ?? 0) - now();
-    if (cooldownWaitMs > 0) await sleep(cooldownWaitMs);
   }
 
   function markRequest(endpointHost: string, status: number): void {
