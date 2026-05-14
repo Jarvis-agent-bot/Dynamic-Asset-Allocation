@@ -175,6 +175,7 @@ type QuoteSummaryStats = {
   currency: string | null;
   sharesOutstanding: number | null;
   sharesSource: "shares_outstanding" | "implied_shares_outstanding" | null;
+  shareSelectionIssue: string | null;
   marketCap: number | null;
   trailingPE: number | null;
   pbRatio: number | null;
@@ -192,6 +193,49 @@ type QuoteSummaryStats = {
   enterpriseValue: number | null;
 };
 
+function relativeDiff(a: number, b: number): number {
+  if (!(a > 0) || !(b > 0)) return Number.POSITIVE_INFINITY;
+  return Math.abs(a - b) / Math.max(Math.abs(b), 1);
+}
+
+function chooseSharesOutstanding(input: {
+  price: number | null;
+  quoteMarketCap: number | null;
+  sharesOutstanding: number | null;
+  impliedSharesOutstanding: number | null;
+}): {
+  shares: number | null;
+  source: "shares_outstanding" | "implied_shares_outstanding" | null;
+  issue: string | null;
+} {
+  const candidates = [
+    { source: "shares_outstanding" as const, shares: input.sharesOutstanding },
+    { source: "implied_shares_outstanding" as const, shares: input.impliedSharesOutstanding },
+  ].filter((item): item is { source: "shares_outstanding" | "implied_shares_outstanding"; shares: number } => (
+    item.shares != null && Number.isFinite(item.shares) && item.shares > 0
+  ));
+
+  if (candidates.length === 0) return { shares: null, source: null, issue: null };
+  if (!(input.price != null && input.price > 0 && input.quoteMarketCap != null && input.quoteMarketCap > 0)) {
+    const first = candidates[0]!;
+    return { shares: first.shares, source: first.source, issue: null };
+  }
+
+  const ranked = candidates
+    .map((item) => ({
+      ...item,
+      derivedMarketCap: input.price! * item.shares,
+      diff: relativeDiff(input.price! * item.shares, input.quoteMarketCap!),
+    }))
+    .sort((a, b) => a.diff - b.diff);
+  const best = ranked[0]!;
+  const ordinary = ranked.find((item) => item.source === "shares_outstanding");
+  const issue = best.source === "implied_shares_outstanding" && ordinary && ordinary.diff - best.diff > 0.05
+    ? `using impliedSharesOutstanding because sharesOutstanding-derived marketCap diverges from quote marketCap (${(ordinary.diff * 100).toFixed(1)}% vs ${(best.diff * 100).toFixed(1)}%)`
+    : null;
+  return { shares: best.shares, source: best.source, issue };
+}
+
 function readQuoteSummaryStats(payload: unknown): QuoteSummaryStats {
   const result = readQuoteSummaryResult(payload);
   const price = isRecord(result.price) ? result.price : {};
@@ -201,15 +245,22 @@ function readQuoteSummaryStats(payload: unknown): QuoteSummaryStats {
 
   const sharesOutstanding = readPositiveNumber(defaultStats, "sharesOutstanding");
   const impliedSharesOutstanding = readPositiveNumber(defaultStats, "impliedSharesOutstanding");
+  const regularMarketPrice = readPositiveNumber(price, "regularMarketPrice") ?? readPositiveNumber(financialData, "currentPrice");
+  const quoteMarketCap = readPositiveNumber(price, "marketCap") ?? readPositiveNumber(summaryDetail, "marketCap");
+  const shares = chooseSharesOutstanding({
+    price: regularMarketPrice,
+    quoteMarketCap,
+    sharesOutstanding,
+    impliedSharesOutstanding,
+  });
 
   return {
-    price: readPositiveNumber(price, "regularMarketPrice") ?? readPositiveNumber(financialData, "currentPrice"),
+    price: regularMarketPrice,
     currency: readStringMetric(price, "currency") ?? readStringMetric(summaryDetail, "currency"),
-    sharesOutstanding: sharesOutstanding ?? impliedSharesOutstanding,
-    sharesSource: sharesOutstanding != null
-      ? "shares_outstanding"
-      : (impliedSharesOutstanding != null ? "implied_shares_outstanding" : null),
-    marketCap: readPositiveNumber(price, "marketCap") ?? readPositiveNumber(summaryDetail, "marketCap"),
+    sharesOutstanding: shares.shares,
+    sharesSource: shares.source,
+    shareSelectionIssue: shares.issue,
+    marketCap: quoteMarketCap,
     trailingPE: readPositiveNumber(summaryDetail, "trailingPE")
       ?? readPositiveNumber(defaultStats, "trailingPE"),
     pbRatio: readPositiveNumber(defaultStats, "priceToBook"),
@@ -304,7 +355,9 @@ export function normalizeYfinanceFundamentalsPayload(input: {
   const derivedMarketCap = quoteStats.price != null && quoteStats.sharesOutstanding != null
     ? quoteStats.price * quoteStats.sharesOutstanding
     : null;
-  const marketCap = derivedMarketCap != null
+  const derivedMarketCapReliable = derivedMarketCap != null
+    && (quoteStats.marketCap == null || relativeDiff(derivedMarketCap, quoteStats.marketCap) <= 0.2);
+  const marketCap = derivedMarketCapReliable
     ? {
       value: derivedMarketCap,
       currency: quoteStats.currency,
@@ -330,6 +383,10 @@ export function normalizeYfinanceFundamentalsPayload(input: {
   if (trailingPE == null) issues.push("missing trailingPeRatio");
   if (marketCap.value == null) issues.push("missing marketCap");
   if (trailingPE != null && !peHistory.eligible) issues.push(`insufficient trailingPeRatio history: ${peHistory.reason}`);
+  if (quoteStats.shareSelectionIssue) issues.push(quoteStats.shareSelectionIssue);
+  if (derivedMarketCap != null && quoteStats.marketCap != null && !derivedMarketCapReliable) {
+    issues.push(`derived marketCap diverges from quoteSummary marketCap: ${(relativeDiff(derivedMarketCap, quoteStats.marketCap) * 100).toFixed(1)}%`);
+  }
   if (derivedMarketCap == null && quoteStats.price != null && quoteStats.sharesOutstanding == null) issues.push("missing sharesOutstanding for transparent marketCap");
   if (derivedMarketCap == null && quoteStats.price == null && quoteStats.sharesOutstanding != null) issues.push("missing market price for transparent marketCap");
 

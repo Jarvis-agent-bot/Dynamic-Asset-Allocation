@@ -13,7 +13,7 @@ function makeResult(success: boolean, data: unknown, outputFields: Record<string
 registerTool(
   {
     name: "fetch_valuation_signal",
-    description: "获取指定资产的估值信号（PE/PB/股息率/价格百分位/Z-score）。适合判断是否被低估或高估。",
+    description: "获取指定资产的估值与价格位置信号（PE/PB/股息率/价格百分位/Z-score）。这是辅助信号，不单独作为低估或高估结论。",
     category: "observe",
     parameters: {
       symbol: { type: "string", description: "资产代码", required: true },

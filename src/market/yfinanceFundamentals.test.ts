@@ -123,6 +123,40 @@ describe("market/yfinanceFundamentals", () => {
     expect(result.issues).toContain("missing trailingPeRatio");
   });
 
+  it("用更接近 quote marketCap 的 impliedSharesOutstanding 透明计算港股市值", () => {
+    const quoteSummaryPayload = {
+      quoteSummary: {
+        result: [{
+          price: {
+            currency: "HKD",
+            regularMarketPrice: { raw: 31.72 },
+            marketCap: { raw: 819_063_816_192 },
+          },
+          summaryDetail: {
+            trailingPE: { raw: 17.62 },
+          },
+          defaultKeyStatistics: {
+            sharesOutstanding: { raw: 21_353_625_662 },
+            impliedSharesOutstanding: { raw: 25_821_683_414 },
+            priceToBook: { raw: 2.68 },
+          },
+        }],
+      },
+    };
+
+    const result = normalizeYfinanceFundamentalsPayload({
+      symbol: "1810.HK",
+      payload: null,
+      quoteSummaryPayload,
+    });
+
+    expect(result.sharesOutstanding).toBe(25_821_683_414);
+    expect(result.sharesSource).toBe("implied_shares_outstanding");
+    expect(result.marketCap).toBeCloseTo(819_063_816_192, -5);
+    expect(result.marketCapSource).toBe("price_x_shares_outstanding");
+    expect(result.issues.some((item) => item.includes("using impliedSharesOutstanding"))).toBe(true);
+  });
+
   it("does not calculate historical percentile from tiny valuation samples", () => {
     const payload = {
       timeseries: {

@@ -97,7 +97,7 @@ function WatchlistRow(props: {
           {row.market} · {row.currency}
         </div>
         <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={`${valuation.description} ${growthRequirement.description}`}>
-          估值依据：{valuation.reason}；增长要求：{growthRequirement.reason}
+          已实现估值：{valuation.reason}；增长要求：{growthRequirement.reason}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--faint)]">
           {targetPct > 0 ? <span>目标 {targetPct.toFixed(1)}%</span> : null}
@@ -178,7 +178,7 @@ function WatchlistRow(props: {
 
       {/* 估值状态 */}
       <div className="hidden w-[96px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值 / 增长</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">已实现 / 增长</div>
         <span
           title={valuation.description}
           className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}

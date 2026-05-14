@@ -1,9 +1,8 @@
 import { clamp, meanOrNaN } from "@/src/core/math";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
-import { toFinite } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
-import { getYahooProvider } from "@/src/market/yahooProvider";
+import { fetchYfinanceFundamentalsCached } from "@/src/market/yfinanceFundamentalsCache";
 
 type DaaValuationMetricStatus = "bullish" | "bearish" | "neutral" | "unavailable";
 
@@ -51,15 +50,6 @@ type FundamentalStats = {
   dividendYieldPct: number | null;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function readRawMetric(row: Record<string, unknown>, key: string): unknown {
-  const value = row[key];
-  return isRecord(value) ? value.raw : undefined;
-}
-
 function std(values: number[]): number {
   if (values.length < 2) return 0;
   const avg = meanOrNaN(values);
@@ -102,37 +92,13 @@ async function fetchFundamentals(symbolRaw: string): Promise<FundamentalStats> {
   if (!symbol) return { pe: null, pb: null, dividendYieldPct: null };
 
   try {
-    const yahooResult = await getYahooProvider().fetchQuoteSummary({
-      symbol,
-      modules: "summaryDetail,defaultKeyStatistics,financialData",
+    const { snapshot } = await fetchYfinanceFundamentalsCached(symbol, {
       timeoutMs: 8_000,
-      context: {
-        caller: "valuationSignal.fetchFundamentals",
-        cacheStatus: "cache_bypass",
-      },
     });
-    const payload = yahooResult.payloadJson;
-    const payloadRoot = isRecord(payload) ? payload : {};
-    const quoteSummary = isRecord(payloadRoot.quoteSummary) ? payloadRoot.quoteSummary : {};
-    const resultRows = Array.isArray(quoteSummary.result) ? quoteSummary.result : [];
-    const result = isRecord(resultRows[0]) ? resultRows[0] : {};
-    const summaryDetail = isRecord(result.summaryDetail) ? result.summaryDetail : {};
-    const defaultStats = isRecord(result.defaultKeyStatistics) ? result.defaultKeyStatistics : {};
-    const financialData = isRecord(result.financialData) ? result.financialData : {};
-
-    const pe = toFinite(
-      readRawMetric(summaryDetail, "trailingPE")
-      ?? readRawMetric(defaultStats, "trailingPE")
-      ?? readRawMetric(financialData, "forwardPE"),
-      Number.NaN,
-    );
-    const pb = toFinite(readRawMetric(defaultStats, "priceToBook"), Number.NaN);
-    const dividendYieldRaw = toFinite(readRawMetric(summaryDetail, "dividendYield"), Number.NaN);
-
     return {
-      pe: Number.isFinite(pe) && pe > 0 ? pe : null,
-      pb: Number.isFinite(pb) && pb > 0 ? pb : null,
-      dividendYieldPct: Number.isFinite(dividendYieldRaw) && dividendYieldRaw >= 0 ? dividendYieldRaw * 100 : null,
+      pe: Number.isFinite(snapshot.trailingPE) && Number(snapshot.trailingPE) > 0 ? Number(snapshot.trailingPE) : null,
+      pb: Number.isFinite(snapshot.pbRatio) && Number(snapshot.pbRatio) > 0 ? Number(snapshot.pbRatio) : null,
+      dividendYieldPct: Number.isFinite(snapshot.dividendYieldPct) && Number(snapshot.dividendYieldPct) >= 0 ? Number(snapshot.dividendYieldPct) : null,
     };
   } catch (err) {
     logSwallowed("valuationSignal.fetchFundamentals", err);
