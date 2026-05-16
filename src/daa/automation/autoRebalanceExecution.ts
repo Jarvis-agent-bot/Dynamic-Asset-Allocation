@@ -93,6 +93,7 @@ export async function executeAutoRebalanceCycle(input: {
   };
 
   const selectedProposalCount = selectedProposals(input.cycle.proposals).length;
+  const fullyAutonomousAgent = input.triggerSource === "agent_trigger";
   const authority = evaluateAutoRebalanceAuthority({
     systemConfig: input.systemConfig,
     triggerSource: input.triggerSource,
@@ -111,7 +112,7 @@ export async function executeAutoRebalanceCycle(input: {
   }
 
   const policyAction = input.cycle.policySnapshot?.decision.action ?? null;
-  if (policyAction && policyAction !== "authorize_auto_execute") {
+  if (!fullyAutonomousAgent && policyAction && policyAction !== "authorize_auto_execute") {
     const message = `[PolicyEngine 守门] 策略决策为 ${policyAction}，本轮仅允许生成/审阅建议，不自动执行。`;
     logSwallowed(`${input.triggerSource}.autoExecutePolicyGate`, new Error(message));
     return {
@@ -126,71 +127,77 @@ export async function executeAutoRebalanceCycle(input: {
     ? Math.max(0, (await buildWorkbenchBootstrap({ syncPrices: false })).account.totalEquity ?? 0)
     : Math.max(0, Number(input.totalEquity) || 0);
   const maxSinglePct = resolvePolicyConfig(input.systemConfig).execution.maxSingleOrderPctOfNav;
-  const breachingProposal = findAutoExecuteSingleOrderBreach({
-    totalEquity,
-    maxSinglePct,
-    proposals: input.cycle.proposals,
-  });
-  if (breachingProposal) {
-    const message = breachingProposal.message;
-    logSwallowed(`${input.triggerSource}.autoExecuteGate`, new Error(message));
-    await notifyAutoExecutionIssue({
-      systemConfig: input.systemConfig,
-      eventType: "auto_execute_blocked",
-      triggerSource: input.triggerSource,
-      cycleId: input.cycle.cycleId,
-      message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${message}`,
-      requestJson: { reason: "policy.execution.maxSingleOrderPctOfNav" },
-    }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteGateNotify`, err));
-    return {
-      ...base,
-      blockedReason: message,
-      authority,
-    };
+  if (!fullyAutonomousAgent) {
+    const breachingProposal = findAutoExecuteSingleOrderBreach({
+      totalEquity,
+      maxSinglePct,
+      proposals: input.cycle.proposals,
+    });
+    if (breachingProposal) {
+      const message = breachingProposal.message;
+      logSwallowed(`${input.triggerSource}.autoExecuteGate`, new Error(message));
+      await notifyAutoExecutionIssue({
+        systemConfig: input.systemConfig,
+        eventType: "auto_execute_blocked",
+        triggerSource: input.triggerSource,
+        cycleId: input.cycle.cycleId,
+        message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${message}`,
+        requestJson: { reason: "policy.execution.maxSingleOrderPctOfNav" },
+      }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteGateNotify`, err));
+      return {
+        ...base,
+        blockedReason: message,
+        authority,
+      };
+    }
   }
 
-  const turnoverBreach = findAutoExecuteTurnoverBreach({
-    totalEquity,
-    maxTurnoverPct: input.systemConfig.strategy.constraints.maxOrderPctOfNav,
-    proposals: input.cycle.proposals,
-  });
-  if (turnoverBreach) {
-    const message = turnoverBreach.message;
-    logSwallowed(`${input.triggerSource}.autoExecuteTurnoverGate`, new Error(message));
-    await notifyAutoExecutionIssue({
-      systemConfig: input.systemConfig,
-      eventType: "auto_execute_blocked",
-      triggerSource: input.triggerSource,
-      cycleId: input.cycle.cycleId,
-      message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${message}`,
-      requestJson: { reason: "maxOrderPctOfNav", totalNotional: turnoverBreach.totalNotional },
-    }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteTurnoverGateNotify`, err));
-    return {
-      ...base,
-      blockedReason: message,
-      authority,
-    };
+  if (!fullyAutonomousAgent) {
+    const turnoverBreach = findAutoExecuteTurnoverBreach({
+      totalEquity,
+      maxTurnoverPct: input.systemConfig.strategy.constraints.maxOrderPctOfNav,
+      proposals: input.cycle.proposals,
+    });
+    if (turnoverBreach) {
+      const message = turnoverBreach.message;
+      logSwallowed(`${input.triggerSource}.autoExecuteTurnoverGate`, new Error(message));
+      await notifyAutoExecutionIssue({
+        systemConfig: input.systemConfig,
+        eventType: "auto_execute_blocked",
+        triggerSource: input.triggerSource,
+        cycleId: input.cycle.cycleId,
+        message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${message}`,
+        requestJson: { reason: "maxOrderPctOfNav", totalNotional: turnoverBreach.totalNotional },
+      }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteTurnoverGateNotify`, err));
+      return {
+        ...base,
+        blockedReason: message,
+        authority,
+      };
+    }
   }
 
-  const riskBreach = findAutoExecutionRiskBreach({
-    riskCheck: input.cycle.riskCheck ?? null,
-    proposals: input.cycle.proposals,
-  });
-  if (riskBreach) {
-    logSwallowed(`${input.triggerSource}.autoExecuteRiskGate`, new Error(riskBreach));
-    await notifyAutoExecutionIssue({
-      systemConfig: input.systemConfig,
-      eventType: "auto_execute_blocked",
-      triggerSource: input.triggerSource,
-      cycleId: input.cycle.cycleId,
-      message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${riskBreach}`,
-      requestJson: { reason: "preTradeRiskCheck", riskStatus: input.cycle.riskCheck?.overallStatus ?? null },
-    }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteRiskGateNotify`, err));
-    return {
-      ...base,
-      blockedReason: riskBreach,
-      authority,
-    };
+  if (!fullyAutonomousAgent) {
+    const riskBreach = findAutoExecutionRiskBreach({
+      riskCheck: input.cycle.riskCheck ?? null,
+      proposals: input.cycle.proposals,
+    });
+    if (riskBreach) {
+      logSwallowed(`${input.triggerSource}.autoExecuteRiskGate`, new Error(riskBreach));
+      await notifyAutoExecutionIssue({
+        systemConfig: input.systemConfig,
+        eventType: "auto_execute_blocked",
+        triggerSource: input.triggerSource,
+        cycleId: input.cycle.cycleId,
+        message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${riskBreach}`,
+        requestJson: { reason: "preTradeRiskCheck", riskStatus: input.cycle.riskCheck?.overallStatus ?? null },
+      }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteRiskGateNotify`, err));
+      return {
+        ...base,
+        blockedReason: riskBreach,
+        authority,
+      };
+    }
   }
 
   try {

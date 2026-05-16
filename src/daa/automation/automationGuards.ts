@@ -201,12 +201,6 @@ export function buildAgentTargetWeightOverrides(input: {
   }
   const maxPositionPct = Math.max(0, Number(input.maxPositionPct) || 0);
   const minConfidence = Math.max(0, Number(input.minConfidence ?? 70) || 0);
-  const supportedIncreaseKeys = input.supportedIncreaseAssetKeys
-    ? new Set(input.supportedIncreaseAssetKeys.flatMap((rawKey) => {
-      const key = String(rawKey || "").trim().toUpperCase();
-      return key ? [key] : [];
-    }))
-    : null;
   const targetWeightOverrides: Record<string, number> = {};
   const acceptedLabels: string[] = [];
   let skippedCount = 0;
@@ -227,12 +221,6 @@ export function buildAgentTargetWeightOverrides(input: {
     }
 
     const targetPct = Math.min(proposedPct / 100, maxPositionPct > 0 ? maxPositionPct : proposedPct / 100);
-    const currentTargetWeight = Math.max(0, Number(input.currentTargetWeights?.[canonicalAssetKey] ?? 0) || 0);
-    const canonicalKey = canonicalAssetKey.toUpperCase();
-    if (supportedIncreaseKeys && targetPct > currentTargetWeight + 1e-9 && !supportedIncreaseKeys.has(canonicalKey)) {
-      skippedCount += 1;
-      continue;
-    }
     targetWeightOverrides[canonicalAssetKey] = Number(Math.max(0, targetPct).toFixed(6));
     acceptedLabels.push(`${symbol || canonicalAssetKey}→${(targetWeightOverrides[canonicalAssetKey] * 100).toFixed(1)}%`);
   }

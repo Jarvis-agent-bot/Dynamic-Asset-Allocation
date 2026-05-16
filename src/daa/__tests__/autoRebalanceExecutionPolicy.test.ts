@@ -91,4 +91,52 @@ describe("auto-rebalance-execution-policy-gate", () => {
     expect(result.blockedReason).toContain("策略决策为 propose");
     expect(executeRebalanceViaGateway).not.toHaveBeenCalled();
   });
+
+  it("Agent 全自动触发会绕过 policy propose、单笔上限和风控 warn，直接进入执行网关", async () => {
+    const result = await executeAutoRebalanceCycle({
+      cycle: {
+        cycleId: "cycle-agent-auto",
+        proposals: [{
+          assetKey: "US::QQQ",
+          symbol: "QQQ",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 50,
+          suggestedNotional: 50_000,
+          price: 100,
+          reason: "Agent 全自动目标权重",
+          selected: true,
+          hfContribution: null,
+        }],
+        riskCheck: {
+          overallStatus: "warn",
+          items: [{
+            rule: "max_order_pct",
+            status: "warn",
+            current: 5,
+            limit: 1,
+            message: "测试风险不再阻断 Agent 全自动执行",
+          }],
+        },
+        policySnapshot: policySnapshot("propose"),
+      },
+      systemConfig: normalizeSystemConfig({
+        policy: {
+          execution: {
+            autoGenerateEnabled: true,
+            autoExecuteEnabled: true,
+          },
+        },
+      }),
+      triggerSource: "agent_trigger",
+      totalEquity: 10_000,
+    });
+
+    expect(result.blockedReason).toBeNull();
+    expect(executeRebalanceViaGateway).toHaveBeenCalledWith(expect.objectContaining({
+      cycleId: "cycle-agent-auto",
+      executeMode: "selected",
+    }));
+  });
 });

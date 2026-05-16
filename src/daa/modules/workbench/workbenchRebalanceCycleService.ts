@@ -570,7 +570,8 @@ export async function generateWorkbenchRebalanceCycle(
     proposals: mergedProposals,
     maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
   });
-  const reversalGuard = !manual && triggerSource !== "risk" && !isAgentPureRiskReduction
+  const isAgentTargetWeightCycle = triggerSource === "agent_trigger" && hasAgentTargetOverrides;
+  const reversalGuard = !manual && triggerSource !== "risk" && !isAgentPureRiskReduction && !isAgentTargetWeightCycle
     ? filterRecentAutoTradeReversals({
       proposals: mergedProposals,
       recentTrades: await listDaaTradeTickets({ status: "executed", limit: 300 }),

@@ -52,6 +52,9 @@ export function evaluatePortfolioPolicy(input: {
   const hasCashDeployIntent = input.intents.some((intent) => intent.source === "cash_deploy");
   const hasAgentIntent = input.intents.some((intent) => intent.source === "agent_thesis");
   const hasNonDriftProposal = input.proposals.some((proposal) => (proposal.proposalType ?? "drift") !== "drift");
+  const hasAgentExecutableProposal = input.triggerSource === "agent_trigger"
+    && hasAgentIntent
+    && input.proposals.some((proposal) => proposal.selected !== false);
 
   if (input.manual) {
     reasons.push("人工请求生成建议，跳过自动触发 no-trade band。");
@@ -60,7 +63,9 @@ export function evaluatePortfolioPolicy(input: {
   } else if (input.triggerSource === "scheduled_review") {
     reasons.push("定期复盘只在 action score 达标时生成调仓提案。");
   } else if (input.triggerSource === "agent_trigger") {
-    reasons.push("Agent 投资意图进入策略评估。");
+    reasons.push(hasAgentExecutableProposal
+      ? "Agent 目标权重计划进入全自动执行评估。"
+      : "Agent 投资意图进入策略评估。");
   } else if (band.state === "entered_outer") {
     reasons.push(`最大偏移 ${band.maxAbsDriftPct.toFixed(2)}% 已进入行动外圈。`);
   }
@@ -76,25 +81,29 @@ export function evaluatePortfolioPolicy(input: {
   }
   if (!input.manual
     && !hasRiskReductionIntent
+    && !hasAgentExecutableProposal
     && hasRecentProposal
     && score.score < input.policy.throttle.minScoreToBreakCooldown) {
     blockers.push(`策略建议去重窗口生效中，行动分 ${score.score.toFixed(1)} 低于突破阈值 ${input.policy.throttle.minScoreToBreakCooldown.toFixed(1)}。`);
   }
-  if (!input.manual && input.portfolioState.dataHealth.status !== "ok") {
+  if (!input.manual && !hasAgentExecutableProposal && input.portfolioState.dataHealth.status !== "ok") {
     blockers.push(`组合数据健康状态为 ${input.portfolioState.dataHealth.status}，禁止自动执行。`);
   }
-  if (!input.manual && !hasRiskReductionIntent && score.score < threshold) {
+  if (!input.manual && !hasRiskReductionIntent && !hasAgentExecutableProposal && score.score < threshold) {
     blockers.push(`行动分 ${score.score.toFixed(1)} 低于阈值 ${threshold.toFixed(1)}。`);
   }
 
-  const canPropose = input.manual || hasRiskReductionIntent || blockers.length === 0;
-  if (canPropose && !input.manual && autoExecutionCooling && !hasRiskReductionIntent) {
+  const canPropose = input.manual || hasRiskReductionIntent || hasAgentExecutableProposal || blockers.length === 0;
+  if (canPropose && !input.manual && autoExecutionCooling && !hasRiskReductionIntent && !hasAgentExecutableProposal) {
     reasons.push(`自动执行冷静期生效中，本轮最多生成建议，不自动下单。`);
   }
   const autoExecute = canPropose
-    && score.score >= input.policy.actionScore.autoExecuteThreshold
-    && (!autoExecutionCooling || hasRiskReductionIntent)
-    && input.portfolioState.dataHealth.status === "ok";
+    && (
+      hasAgentExecutableProposal
+      || score.score >= input.policy.actionScore.autoExecuteThreshold
+    )
+    && (!autoExecutionCooling || hasRiskReductionIntent || hasAgentExecutableProposal)
+    && (input.portfolioState.dataHealth.status === "ok" || hasAgentExecutableProposal);
   return {
     decisionId: `policy_${randomUUID()}`,
     source: sourceFromTrigger(input.triggerSource, input.manual),

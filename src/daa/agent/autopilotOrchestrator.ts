@@ -217,14 +217,6 @@ async function buildAgentTargetWeightPlan(input: {
   overlay: AgentStrategyOverlay | null;
 }): Promise<AgentTargetWeightPlan> {
   const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
-  const activeTheses = await thesisStore.getActiveTheses().catch(() => []);
-  const supportedIncreaseAssetKeys = Array.from(new Set(
-    activeTheses
-      .filter((thesis) => thesis.conviction === "high" || thesis.conviction === "medium")
-      .flatMap((thesis) => thesis.assetKeys)
-      .map((assetKey) => String(assetKey || "").trim().toUpperCase())
-      .filter(Boolean),
-  ));
   const currentTargetWeights = Object.fromEntries(
     bootstrap.assetUniverse.map((row) => [
       row.assetKey.toUpperCase(),
@@ -236,7 +228,6 @@ async function buildAgentTargetWeightPlan(input: {
     overlay: input.overlay,
     knownAssetKeys: bootstrap.assetUniverse.map((row) => row.assetKey),
     currentTargetWeights,
-    supportedIncreaseAssetKeys,
     maxPositionPct: input.row.config.strategy.constraints.maxPositionPct,
     minConfidence: aiTargetWeightPool.minConfidence,
   });

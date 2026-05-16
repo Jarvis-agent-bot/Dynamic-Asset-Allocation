@@ -230,8 +230,8 @@ const DEFAULT_POLICY_CONFIG_: DaaPolicyConfig = {
     minScoreToBreakCooldown: 85,
   },
   actionScore: {
-    proposalThreshold: 25,
-    autoExecuteThreshold: 70,
+    proposalThreshold: 0,
+    autoExecuteThreshold: 0,
   },
   execution: {
     autoGenerateEnabled: true,
@@ -359,7 +359,7 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     thesisStalenessDays: 7,
   },
   watchlistEntry: {
-    enabled: false,
+    enabled: true,
     maxPerCycle: 2,
     defaultRules: {
       minTechnicalScore: 65,
@@ -368,8 +368,8 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       requireStrongMomentum: false,
     },
     aiTargetWeightPool: {
-      enabled: false,
-      minConfidence: 70,
+      enabled: true,
+      minConfidence: 0,
       autoEnableEntry: true,
     },
     notionalCashCapPct: 0.3,
@@ -820,10 +820,10 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
     watchlistEntry: (() => {
       const we = isRecord(source.watchlistEntry) ? source.watchlistEntry : {};
       const fb = fallback.watchlistEntry ?? {
-        enabled: false,
+        enabled: true,
         maxPerCycle: 2,
         defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-        aiTargetWeightPool: { enabled: false, minConfidence: 70, autoEnableEntry: true },
+        aiTargetWeightPool: { enabled: true, minConfidence: 0, autoEnableEntry: true },
         notionalCashCapPct: 0.3,
       };
       const rules = isRecord(we.defaultRules) ? we.defaultRules : {};

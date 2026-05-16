@@ -26,8 +26,8 @@ export type PersistAgentTargetWeightPoolResult = {
 export function resolveAiTargetWeightPoolConfig(config: DaaSystemConfig): AiTargetWeightPoolConfig {
   const raw = config.watchlistEntry?.aiTargetWeightPool;
   return {
-    enabled: raw?.enabled === true,
-    minConfidence: Math.max(0, Math.min(100, Number(raw?.minConfidence ?? 70) || 70)),
+    enabled: raw?.enabled !== false,
+    minConfidence: Math.max(0, Math.min(100, Number(raw?.minConfidence ?? 0) || 0)),
     autoEnableEntry: raw?.autoEnableEntry !== false,
   };
 }

@@ -222,7 +222,7 @@ describe("automationGuards", () => {
     expect(plan).toBeNull();
   });
 
-  it("Agent 加仓必须有高/中 conviction 论点支持，但降仓可直接进入风控", () => {
+  it("Agent 目标权重计划可以直接指定新增仓位，不再要求预先存在高/中 conviction 论点", () => {
     const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
@@ -268,8 +268,12 @@ describe("automationGuards", () => {
       minConfidence: 70,
     });
 
-    expect(plan?.targetWeightOverrides).toEqual({ "US::NVDA": 0.03 });
-    expect(plan?.skippedCount).toBe(2);
+    expect(plan?.targetWeightOverrides).toEqual({
+      "US::SPY": 0.05,
+      "US::NVDA": 0.03,
+      "US::MSFT": 0.04,
+    });
+    expect(plan?.skippedCount).toBe(0);
   });
 
   it("目标权重覆盖会重算 workbench 资产目标与偏移", () => {

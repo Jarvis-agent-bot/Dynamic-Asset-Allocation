@@ -12,7 +12,7 @@ import {
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
 const DEFAULT_WATCHLIST_ENTRY_CONFIG: NonNullable<DaaSystemConfig["watchlistEntry"]> = {
-  enabled: false,
+  enabled: true,
   maxPerCycle: 2,
   defaultRules: {
     minTechnicalScore: 65,
@@ -21,8 +21,8 @@ const DEFAULT_WATCHLIST_ENTRY_CONFIG: NonNullable<DaaSystemConfig["watchlistEntr
     requireStrongMomentum: false,
   },
   aiTargetWeightPool: {
-    enabled: false,
-    minConfidence: 70,
+    enabled: true,
+    minConfidence: 0,
     autoEnableEntry: true,
   },
   notionalCashCapPct: 0.3,

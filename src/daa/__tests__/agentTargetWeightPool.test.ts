@@ -7,11 +7,11 @@ import {
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 describe("agentTargetWeightPool", () => {
-  it("默认不开启 AI 目标权重池，但保留 70 分置信度门槛", () => {
+  it("默认开启 AI 目标权重池，并允许 Agent 全自动指定权重", () => {
     const config = { watchlistEntry: undefined } as DaaSystemConfig;
     expect(resolveAiTargetWeightPoolConfig(config)).toEqual({
-      enabled: false,
-      minConfidence: 70,
+      enabled: true,
+      minConfidence: 0,
       autoEnableEntry: true,
     });
   });

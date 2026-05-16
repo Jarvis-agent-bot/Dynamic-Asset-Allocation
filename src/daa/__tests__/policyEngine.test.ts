@@ -67,6 +67,19 @@ function driftIntent(): InvestmentIntent {
   };
 }
 
+function agentIntent(): InvestmentIntent {
+  return {
+    intentId: "intent:agent:test",
+    source: "agent_thesis",
+    action: "review_only",
+    assetKeys: ["US::QQQ"],
+    thesis: "Agent 目标权重计划进入策略评估",
+    confidencePct: 80,
+    expiresAt: null,
+    evidenceRefs: [],
+  };
+}
+
 function proposal(): RebalanceProposal {
   return {
     assetKey: "US::QQQ",
@@ -158,5 +171,38 @@ describe("policy-engine", () => {
 
     expect(decision.action).toBe("propose");
     expect(decision.reasons.join(" ")).toContain("自动执行冷静期");
+  });
+
+  it("Agent 目标权重计划有可执行提案时直接授权自动执行", () => {
+    const policy = resolvePolicyConfig(normalizeSystemConfig({}));
+    const decision = evaluatePortfolioPolicy({
+      portfolioState: portfolioState({
+        dataHealth: {
+          status: "stale",
+          staleAssetKeys: ["US::QQQ"],
+          missingAssetKeys: [],
+          fxMissingAssetKeys: [],
+          message: "测试 stale 数据不再阻断 Agent 全自动目标权重计划",
+        },
+      }),
+      policy,
+      signals: [],
+      intents: [agentIntent()],
+      proposals: [{
+        ...proposal(),
+        side: "BUY",
+        proposalType: "drift",
+      }],
+      triggerSource: "agent_trigger",
+      manual: false,
+      latestAutoComparableCycle: {
+        cycleId: "recent-cycle",
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    expect(decision.action).toBe("authorize_auto_execute");
+    expect(decision.blockers).toEqual([]);
+    expect(decision.reasons.join(" ")).toContain("Agent 目标权重计划");
   });
 });
