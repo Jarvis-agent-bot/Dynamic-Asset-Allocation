@@ -177,7 +177,7 @@ export function buildWorkbenchBootstrap(
     },
     rebalance: {
       mode: "manual",
-      autoAnalysisEnabled: false,
+      autoGenerateEnabled: false,
       scheduledTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
     },

@@ -411,7 +411,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
         },
         rebalance: {
           mode: policy.execution.autoGenerateEnabled ? "auto" : "manual",
-          autoAnalysisEnabled: policy.execution.autoGenerateEnabled,
+          autoGenerateEnabled: policy.execution.autoGenerateEnabled,
           scheduledTimeUtc: policy.review.scheduledTimeUtc,
           timezone: policy.review.timezone,
         },
@@ -524,7 +524,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
       },
       rebalance: {
         mode: policy.execution.autoGenerateEnabled ? "auto" : "manual",
-        autoAnalysisEnabled: policy.execution.autoGenerateEnabled,
+        autoGenerateEnabled: policy.execution.autoGenerateEnabled,
         scheduledTimeUtc: policy.review.scheduledTimeUtc,
         timezone: policy.review.timezone,
       },

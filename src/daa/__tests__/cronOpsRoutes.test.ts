@@ -60,7 +60,7 @@ vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
     policy: { review: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, outerBandPct: 0.05 } },
     rebalance: {
       mode: "manual",
-      autoAnalysisEnabled: false,
+      autoGenerateEnabled: false,
       scheduledTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
     },

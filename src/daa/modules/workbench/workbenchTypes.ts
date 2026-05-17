@@ -360,7 +360,7 @@ type WorkbenchRebalanceMode = "manual" | "auto";
 
 type WorkbenchRebalanceConfig = {
   mode: WorkbenchRebalanceMode;
-  autoAnalysisEnabled: boolean;
+  autoGenerateEnabled: boolean;
   scheduledTimeUtc: string;
   timezone: string;
 };

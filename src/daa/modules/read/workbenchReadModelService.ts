@@ -139,7 +139,7 @@ function buildSignals(input: {
 
   const notificationStatus = input.notificationStatus;
   const notificationEnabled = notificationStatus.channels.telegram.enabled || notificationStatus.channels.feishu.enabled;
-  if (!notificationStatus.cronConfigured && (input.bootstrap.rebalance.autoAnalysisEnabled || notificationEnabled)) {
+  if (!notificationStatus.cronConfigured && (input.bootstrap.rebalance.autoGenerateEnabled || notificationEnabled)) {
     push({
       id: "warning:notification:cron-token",
       level: "warn",

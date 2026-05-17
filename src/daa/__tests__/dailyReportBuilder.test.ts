@@ -38,7 +38,7 @@ function makeBootstrap(overrides?: Partial<WorkbenchBootstrap>): WorkbenchBootst
       },
     ],
     execution: { logs: [] },
-    rebalance: { mode: "manual", autoAnalysisEnabled: false, scheduledTimeUtc: "00:20", timezone: "Asia/Shanghai" },
+    rebalance: { mode: "manual", autoGenerateEnabled: false, scheduledTimeUtc: "00:20", timezone: "Asia/Shanghai" },
     policy: {
       enabled: true,
       shadowMode: false,
