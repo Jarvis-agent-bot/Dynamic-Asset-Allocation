@@ -22,7 +22,7 @@ import { listDaaAssetUniverse, upsertDaaNewsEventSnapshots, upsertDaaNewsItemSna
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
+import { runNewsAutopilotDaily } from "@/src/daa/automation/newsAutopilotTrigger";
 import { refreshNewsIntelligenceForEvents } from "@/src/daa/modules/news-intelligence/newsIntelligenceService";
 
 export const runtime = "nodejs";
@@ -331,9 +331,10 @@ export async function POST(req: Request) {
     }
 
     const autopilot = majorEventSymbols.size > 0
-      ? await runAutopilotLoop({
+      ? await runNewsAutopilotDaily({
+          req,
           source: "alpaca_ws_realtime",
-          reason: `realtime high-impact news: ${event.headline}`,
+          reason: `daily news autopilot triggered by realtime high-impact news: ${event.headline}`,
           affectedSymbols: [...majorEventSymbols],
         }).catch((error) => {
           logSwallowed("newsRealtime.autopilot", error);

@@ -575,7 +575,8 @@ export async function generateWorkbenchRebalanceCycle(
   const recentExecutedTrades = !manual && triggerSource !== "risk"
     ? await listDaaTradeTickets({ status: "executed", limit: 300 })
     : [];
-  const agentStabilityGuard = isAgentTargetWeightCycle && !isAgentPureRiskReduction
+  const shouldApplyAutoTradeStabilityGuard = !manual && triggerSource !== "risk" && !isAgentPureRiskReduction;
+  const agentStabilityGuard = shouldApplyAutoTradeStabilityGuard
     ? filterAgentTradeStability({
       proposals: mergedProposals,
       recentTrades: recentExecutedTrades,
@@ -597,7 +598,7 @@ export async function generateWorkbenchRebalanceCycle(
   mergedProposals = agentStabilityGuard.proposals;
   if (agentStabilityGuard.blocked.length > 0 && mergedProposals.length === 0) {
     return skipWithLatest(
-      `Agent 交易稳定器已跳过本轮全部下单：${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；")}`,
+      `${isAgentTargetWeightCycle ? "Agent" : "自动"}交易稳定器已跳过本轮全部下单：${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；")}`,
       { attachLatestCycle: true },
     );
   }
@@ -694,7 +695,7 @@ export async function generateWorkbenchRebalanceCycle(
       ? `反向交易冷却: ${reversalGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
       : null,
     agentStabilityGuard.blocked.length > 0
-      ? `Agent交易稳定器: ${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
+      ? `${isAgentTargetWeightCycle ? "Agent" : "自动"}交易稳定器: ${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
       : null,
     cashClassification.cashIdleWarning
       ? `现金提示: 闲置资金 ${(cashClassification.investableIdlePct * 100).toFixed(1)}%（已${cashClassification.cashIdleDays}天）`

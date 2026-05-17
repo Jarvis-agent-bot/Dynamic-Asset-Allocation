@@ -135,6 +135,38 @@ describe("automationGuards", () => {
     expect(result.blocked[0]?.cooldownUntil).toBe("2026-03-11T03:00:00.000Z");
   });
 
+  it("交易稳定器会跳过 24 小时内同资产同方向重复操作", () => {
+    const result = filterAgentTradeStability({
+      nowMs: Date.parse("2026-03-10T12:00:00.000Z"),
+      totalEquity: 100000,
+      proposals: [
+        {
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          side: "BUY",
+          suggestedNotional: 3000,
+          targetWeightPct: 8,
+          reason: "继续加仓",
+          selected: true,
+        },
+      ],
+      recentTrades: [
+        {
+          ticketId: "ticket-aapl-buy",
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          side: "BUY",
+          status: "executed",
+          executedAt: "2026-03-10T04:00:00.000Z",
+        },
+      ],
+      currentTargetWeightPctByAssetKey: { "US::AAPL": 5 },
+    });
+
+    expect(result.proposals).toHaveLength(0);
+    expect(result.blocked[0]?.blockedReason).toContain("最近 24 小时内已有 BUY 成交");
+  });
+
   it("Agent 交易稳定器允许大幅降权或清仓退出", () => {
     const nowMs = Date.parse("2026-03-10T12:00:00.000Z");
     const result = filterAgentTradeStability({

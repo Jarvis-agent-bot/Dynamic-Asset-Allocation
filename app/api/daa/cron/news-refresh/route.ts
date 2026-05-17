@@ -16,11 +16,7 @@ import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
-import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
-import { runLoggedJob } from "@/src/daa/jobs/jobService";
-import { findRecentJobExecutionByIdempotencyKey } from "@/src/daa/store/jobExecutionLogRepo";
-import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
-import { getZonedYmd, normalizeTimeZoneOrUtc } from "@/src/daa/modules/workbench/reviewSchedule";
+import { runNewsAutopilotDaily } from "@/src/daa/automation/newsAutopilotTrigger";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -80,12 +76,6 @@ type MajorEventRefreshResult = {
   highImpactSymbols: string[];
   actionableSymbols: string[];
 };
-
-function buildDailyNewsAutopilotKey(now = new Date(), timeZone = "UTC"): string {
-  const zoned = getZonedYmd(now, normalizeTimeZoneOrUtc(timeZone));
-  const dayKey = `${zoned.year}-${String(zoned.month).padStart(2, "0")}-${String(zoned.day).padStart(2, "0")}`;
-  return `cron_news_autopilot:${dayKey}`;
-}
 
 /** 检测重大事件并发送 TG 推送（同一 symbol+type 24 小时内只推一次） */
 async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<MajorEventRefreshResult> {
@@ -156,63 +146,6 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<MajorEventRef
   return { pushed, highImpactSymbols: [...highImpactSymbols], actionableSymbols: [...actionableSymbols] };
 }
 
-async function runDailyNewsAutopilot(input: {
-  req: Request;
-  affectedSymbols: string[];
-}): Promise<Record<string, unknown>> {
-  const system = await getDaaSystemConfig();
-  const policy = resolvePolicyConfig(system.config);
-  const timeZone = normalizeTimeZoneOrUtc(policy.review.timezone);
-  const idempotencyKey = buildDailyNewsAutopilotKey(new Date(), timeZone);
-  const duplicate = await findRecentJobExecutionByIdempotencyKey({
-    jobType: "cron_news_autopilot",
-    idempotencyKey,
-    withinMinutes: 36 * 60,
-    statuses: ["succeeded"],
-  }).catch((error) => {
-    logSwallowed("newsRefresh.autopilotDailyDedupe", error);
-    return null;
-  });
-  if (duplicate) {
-    return {
-      attempted: false,
-      skipped: true,
-      reason: "news autopilot already ran today",
-      duplicateOf: duplicate.jobId,
-      idempotencyKey,
-      timeZone,
-    };
-  }
-
-  const execution = await runLoggedJob({
-    req: input.req,
-    jobType: "cron_news_autopilot",
-    triggerSource: "cron_news_refresh",
-    idempotencyKey,
-    summarize: (result) => ({
-      skipped: result.skipped,
-      reason: result.reason,
-      rebalanceCycleId: result.rebalance?.cycleId ?? null,
-      proposalCount: result.rebalance?.proposalCount ?? 0,
-      autoExecutedOrders: result.rebalance?.autoExecute?.ordersCount ?? 0,
-      targetWeightPoolPersisted: result.targetWeightPool?.persistedCount ?? 0,
-      targetWeightPoolFailed: result.targetWeightPool?.failedCount ?? 0,
-    }),
-    handler: async () => runAutopilotLoop({
-      source: "cron_news_refresh",
-      reason: `daily news autopilot detected ${input.affectedSymbols.length} actionable news signals`,
-      affectedSymbols: input.affectedSymbols,
-    }),
-  });
-  return {
-    ...execution.result,
-    autopilotJobId: execution.jobId,
-    autopilotDurationMs: execution.durationMs,
-    idempotencyKey,
-    timeZone,
-  } as unknown as Record<string, unknown>;
-}
-
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const denied = await requireCronAuth(req);
@@ -239,7 +172,19 @@ async function runNewsRefreshJob(req: Request, idempotencyKey: string | null): P
       duplicateReason: "当前账号同一 news-refresh 幂等任务已完成，跳过重复触发。",
       summarize: (r) => {
         const result = r as Record<string, unknown>;
-        return { symbols: result.refreshedSymbols, signals: result.signals, majorEvents: result.majorEventsPushed };
+        const autopilot = result.autopilot as Record<string, unknown> | undefined;
+        const rebalance = autopilot?.rebalance as Record<string, unknown> | undefined;
+        const autoExecute = rebalance?.autoExecute as Record<string, unknown> | undefined;
+        return {
+          symbols: result.refreshedSymbols,
+          signals: result.signals,
+          majorEvents: result.majorEventsPushed,
+          autopilotAttempted: autopilot?.attempted ?? null,
+          autopilotSkipped: autopilot?.skipped ?? null,
+          autopilotReason: autopilot?.reason ?? null,
+          autopilotCycleId: rebalance?.cycleId ?? null,
+          autopilotAutoExecutedOrders: autoExecute?.ordersCount ?? 0,
+        };
       },
       handler: async () => {
         const symbolsWithMarket = await resolveSymbolsWithMarket();
@@ -265,8 +210,10 @@ async function runNewsRefreshJob(req: Request, idempotencyKey: string | null): P
           ? majorEvents.actionableSymbols
           : majorEvents.highImpactSymbols;
         const autopilot = autopilotSymbols.length > 0
-          ? await runDailyNewsAutopilot({
+          ? await runNewsAutopilotDaily({
               req,
+              source: "cron_news_refresh",
+              reason: `daily news autopilot detected ${autopilotSymbols.length} actionable news signals`,
               affectedSymbols: autopilotSymbols,
             }).catch((error) => {
               logSwallowed("newsRefresh.autopilot", error);
