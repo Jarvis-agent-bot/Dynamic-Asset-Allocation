@@ -51,7 +51,7 @@
 
 Web UI + Telegram Bot，14 种意图，可查组合/市场/风险、发起调仓、确认执行。所有写操作 10 分钟 TTL 待确认。
 
-注意：上面的 TTL 待确认适用于对话里的人工写操作。Autopilot 是另一条显式配置路径：只有当 `brain.mode=autopilot`、`rebalanceStrategy.autoGenerateEnabled=true`、`rebalanceStrategy.autoExecuteEnabled=true` 且 Authority / 风控 / 本地执行网关都通过时，才会自动执行本地模拟调仓。
+注意：上面的 TTL 待确认适用于对话里的人工写操作。Autopilot 是另一条显式配置路径：只有当 `brain.mode=autopilot`、`policy.execution.autoGenerateEnabled=true`、`policy.execution.autoExecuteEnabled=true` 且 Authority / 风控 / 本地执行网关都通过时，才会自动执行本地模拟调仓。
 
 ### 💵 Money / Valuation Domain
 
@@ -155,9 +155,9 @@ pnpm gates         # 完整门控（test + typecheck + build）
 | 配置 | 默认值 | 含义 |
 |------|--------|------|
 | `brain.mode` | `autopilot` | 允许运行认知循环、初始化论点和本地模拟执行 |
-| `rebalanceStrategy.autoGenerateEnabled` | `true` | 允许 cron / Agent / drift 自动生成再平衡周期 |
-| `rebalanceStrategy.autoExecuteEnabled` | `true` | 允许通过 Authority 后自动执行本地模拟调仓 |
-| `rebalanceStrategy.autoExecuteMaxSinglePct` | `10` | 单笔自动执行不超过 NAV 的 10% |
+| `policy.execution.autoGenerateEnabled` | `true` | 允许 cron / Agent / drift 自动生成再平衡周期 |
+| `policy.execution.autoExecuteEnabled` | `true` | 允许通过 Authority 后自动执行本地模拟调仓 |
+| `policy.execution.maxSingleOrderPctOfNav` | `0.1` | 单笔自动执行不超过 NAV 的 10% |
 
 自动执行不是“LLM 说了就下单”。链路为：
 

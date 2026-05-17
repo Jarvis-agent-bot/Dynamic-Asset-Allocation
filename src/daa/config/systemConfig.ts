@@ -639,57 +639,6 @@ function normalizePolicyConfig(
   };
 }
 
-function legacyPercentToRatio(value: unknown): number | null {
-  const num = Number(value);
-  if (!Number.isFinite(num) || num < 0) return null;
-  return num > 1 ? num / 100 : num;
-}
-
-function mergeLegacyRebalanceStrategyIntoPolicy(input: unknown, legacyInput: unknown): unknown {
-  const legacy = isRecord(legacyInput) ? legacyInput : {};
-  if (Object.keys(legacy).length === 0) return input;
-
-  const policy = isRecord(input) ? { ...input } : {};
-  const legacyCalendar = isRecord(legacy.calendar) ? legacy.calendar : {};
-  const legacyDrift = isRecord(legacy.drift) ? legacy.drift : {};
-
-  const review = isRecord(policy.review) ? { ...policy.review } : {};
-  if (review.enabled == null && legacyCalendar.enabled != null) review.enabled = legacyCalendar.enabled;
-  if (review.frequency == null && legacyCalendar.frequency != null) review.frequency = legacyCalendar.frequency;
-  if (review.dayOfMonth == null && legacyCalendar.dayOfMonth != null) review.dayOfMonth = legacyCalendar.dayOfMonth;
-  if (review.scheduledTimeUtc == null && legacy.analysisTimeUtc != null) review.scheduledTimeUtc = legacy.analysisTimeUtc;
-  if (review.timezone == null && legacy.timezone != null) review.timezone = legacy.timezone;
-  if (Object.keys(review).length > 0) policy.review = review;
-
-  const drift = isRecord(policy.drift) ? { ...policy.drift } : {};
-  if (drift.enabled == null && legacyDrift.enabled != null) drift.enabled = legacyDrift.enabled;
-  const legacyDriftThreshold = legacyPercentToRatio(legacyDrift.thresholdPct);
-  if (drift.outerBandPct == null && legacyDriftThreshold != null) drift.outerBandPct = legacyDriftThreshold;
-  if (Object.keys(drift).length > 0) policy.drift = drift;
-
-  const throttle = isRecord(policy.throttle) ? { ...policy.throttle } : {};
-  if (legacy.cooldownHours != null) {
-    if (throttle.proposalDedupeWindowHours == null) throttle.proposalDedupeWindowHours = legacy.cooldownHours;
-    if (throttle.autoExecutionCooldownHours == null) throttle.autoExecutionCooldownHours = legacy.cooldownHours;
-  }
-  if (Object.keys(throttle).length > 0) policy.throttle = throttle;
-
-  const execution = isRecord(policy.execution) ? { ...policy.execution } : {};
-  if (execution.autoGenerateEnabled == null && legacy.autoGenerateEnabled != null) {
-    execution.autoGenerateEnabled = legacy.autoGenerateEnabled;
-  }
-  if (execution.autoExecuteEnabled == null && legacy.autoExecuteEnabled != null) {
-    execution.autoExecuteEnabled = legacy.autoExecuteEnabled;
-  }
-  const legacyMaxSingleOrderPct = legacyPercentToRatio(legacy.autoExecuteMaxSinglePct);
-  if (execution.maxSingleOrderPctOfNav == null && legacyMaxSingleOrderPct != null) {
-    execution.maxSingleOrderPctOfNav = legacyMaxSingleOrderPct;
-  }
-  if (Object.keys(execution).length > 0) policy.execution = execution;
-
-  return policy;
-}
-
 function normalizeStrategyExecutionTiming(value: unknown, fallback: DaaStrategyExecutionTiming = "t_plus_1_close"): DaaStrategyExecutionTiming {
   const text = String(value || "").trim().toLowerCase();
   if (text === "t_plus_1_close") return "t_plus_1_close";
@@ -774,7 +723,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         enforceOnExecution: toBool(risk.enforceOnExecution, fallback.strategy.risk.enforceOnExecution),
       },
     },
-    policy: normalizePolicyConfig(mergeLegacyRebalanceStrategyIntoPolicy(source.policy, source.rebalanceStrategy), {
+    policy: normalizePolicyConfig(source.policy, {
       maxPositionPct: clamp(Number(constraints.maxPositionPct) || fallback.strategy.constraints.maxPositionPct, 0.01, 1),
       minNotional: toPositiveNumber(constraints.minNotional, fallback.strategy.constraints.minNotional),
       maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav) || fallback.strategy.constraints.maxOrderPctOfNav, 0.01, 1),

@@ -91,48 +91,6 @@ describe("brain-policy", () => {
     expect(deriveCognitiveAgentScheduleTimesUtc(manual.cognitiveAgent?.schedule ?? "manual_only")).toEqual([]);
   });
 
-  it("旧 rebalanceStrategy 会映射到新 policy 周期、漂移和冷却配置", () => {
-    const config = normalizeSystemConfig({
-      rebalanceStrategy: {
-        calendar: {
-          enabled: true,
-          frequency: "every_3_days",
-          dayOfMonth: 5,
-        },
-        timezone: "Asia/Shanghai",
-        analysisTimeUtc: "10:51",
-        cooldownHours: 24,
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
-        autoExecuteMaxSinglePct: 10,
-        drift: {
-          enabled: true,
-          thresholdPct: 0.03,
-        },
-      },
-      policy: {
-        actionScore: {
-          proposalThreshold: 0,
-          autoExecuteThreshold: 0,
-        },
-      },
-    });
-
-    expect(config.policy.review).toMatchObject({
-      enabled: true,
-      frequency: "every_3_days",
-      dayOfMonth: 5,
-      scheduledTimeUtc: "10:51",
-      timezone: "Asia/Shanghai",
-    });
-    expect(config.policy.drift.outerBandPct).toBe(0.03);
-    expect(config.policy.throttle.autoExecutionCooldownHours).toBe(24);
-    expect(config.policy.throttle.proposalDedupeWindowHours).toBe(24);
-    expect(config.policy.execution.autoGenerateEnabled).toBe(true);
-    expect(config.policy.execution.autoExecuteEnabled).toBe(true);
-    expect(config.policy.execution.maxSingleOrderPctOfNav).toBe(0.1);
-  });
-
   it("模式预设只改变大脑模式", () => {
     expect(buildBrainConfigForMode("advisor")).toEqual({ mode: "advisor" });
     expect(buildBrainConfigForMode("operator")).toEqual({ mode: "operator" });
