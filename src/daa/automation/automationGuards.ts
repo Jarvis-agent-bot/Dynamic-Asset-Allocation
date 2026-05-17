@@ -28,6 +28,12 @@ type AutoReversalBlockedProposal<T> = T & {
   lastTrade: RecentExecutedTradeForReversal;
 };
 
+type AutoTradeStabilityBlockedProposal<T> = T & {
+  blockedReason: string;
+  cooldownUntil: string | null;
+  lastTrade: RecentExecutedTradeForReversal | null;
+};
+
 export function buildEmptyAutoTriggerSkipMessage(input: {
   triggerSource: RebalanceTriggerSource;
   manual: boolean;
@@ -168,6 +174,101 @@ export function filterRecentAutoTradeReversals<T extends {
   return { proposals, blocked };
 }
 
+export function filterAgentTradeStability<T extends {
+  assetKey: string;
+  symbol?: string | null;
+  side: "BUY" | "SELL";
+  suggestedNotional?: number | null;
+  targetWeightPct?: number | null;
+  reason?: string | null;
+  selected?: boolean | null;
+}>(input: {
+  proposals: T[];
+  recentTrades: RecentExecutedTradeForReversal[];
+  totalEquity: number;
+  currentTargetWeightPctByAssetKey?: Record<string, number>;
+  nowMs?: number;
+  minHoursBetweenTrades?: number;
+  minTradeWeightDeltaPct?: number;
+  largeTargetReductionPct?: number;
+}): {
+  proposals: T[];
+  blocked: Array<AutoTradeStabilityBlockedProposal<T>>;
+} {
+  const nowMs = Number.isFinite(input.nowMs) ? Number(input.nowMs) : Date.now();
+  const totalEquity = Math.max(0, Number(input.totalEquity) || 0);
+  const minHoursBetweenTrades = Math.max(0, Number(input.minHoursBetweenTrades ?? 24) || 0);
+  const minTradeWeightDeltaPct = Math.max(0, Number(input.minTradeWeightDeltaPct ?? 2) || 0);
+  const largeTargetReductionPct = Math.max(0, Number(input.largeTargetReductionPct ?? 5) || 0);
+  const currentTargetPctByAssetKey = new Map(
+    Object.entries(input.currentTargetWeightPctByAssetKey || {}).map(([assetKey, value]) => [
+      assetKey.trim().toUpperCase(),
+      Math.max(0, Number(value) || 0),
+    ]),
+  );
+
+  const executedTrades = input.recentTrades
+    .filter((trade) => String(trade.status || "").trim().toLowerCase() === "executed")
+    .map((trade) => ({ trade, ms: toTradeMs(trade) }))
+    .filter((row) => Number.isFinite(row.ms))
+    .sort((a, b) => b.ms - a.ms);
+
+  const proposals: T[] = [];
+  const blocked: Array<AutoTradeStabilityBlockedProposal<T>> = [];
+
+  for (const proposal of input.proposals) {
+    if (proposal.selected === false) {
+      proposals.push(proposal);
+      continue;
+    }
+
+    const assetKey = proposal.assetKey.trim().toUpperCase();
+    const label = formatAssetLabel({ symbol: proposal.symbol || undefined, assetKey: proposal.assetKey });
+    const nextTargetPct = Math.max(0, Number(proposal.targetWeightPct ?? 0) || 0);
+    const currentTargetPct = currentTargetPctByAssetKey.get(assetKey) ?? 0;
+    const targetDeltaPct = Math.abs(nextTargetPct - currentTargetPct);
+    const targetReductionPct = Math.max(0, currentTargetPct - nextTargetPct);
+    const reason = String(proposal.reason || "");
+    const explicitRiskExit = proposal.side === "SELL" && (
+      nextTargetPct <= 0.1
+      || targetReductionPct + 1e-9 >= largeTargetReductionPct
+      || /止损|风险退出|清仓|强制退出|risk exit|stop[- ]?loss/i.test(reason)
+    );
+
+    const fallbackTradeDeltaPct = totalEquity > 0
+      ? Math.max(0, Number(proposal.suggestedNotional ?? 0) || 0) / totalEquity * 100
+      : Number.POSITIVE_INFINITY;
+    const executionDeltaPct = currentTargetPctByAssetKey.has(assetKey) ? targetDeltaPct : fallbackTradeDeltaPct;
+    if (!explicitRiskExit && executionDeltaPct + 1e-9 < minTradeWeightDeltaPct) {
+      blocked.push({
+        ...proposal,
+        lastTrade: null,
+        cooldownUntil: null,
+        blockedReason: `${label} 目标权重变化约 ${executionDeltaPct.toFixed(2)}%，低于 ${minTradeWeightDeltaPct.toFixed(1)}% 执行阈值，仅更新目标权重，暂不下单。`,
+      });
+      continue;
+    }
+
+    const tradeRow = executedTrades.find(({ trade }) => (
+      String(trade.assetKey || "").trim().toUpperCase() === assetKey
+    ));
+    if (tradeRow && minHoursBetweenTrades > 0 && tradeRow.ms + minHoursBetweenTrades * 60 * 60 * 1000 > nowMs && !explicitRiskExit) {
+      const cooldownUntil = new Date(tradeRow.ms + minHoursBetweenTrades * 60 * 60 * 1000).toISOString();
+      blocked.push({
+        ...proposal,
+        lastTrade: tradeRow.trade,
+        cooldownUntil,
+        blockedReason: `${label} 最近 24 小时内已有 ${tradeRow.trade.side} 成交，自动 ${proposal.side} 已跳过（稳定器冷却至 ${cooldownUntil}）。`,
+      });
+      continue;
+    }
+
+    proposals.push(proposal);
+  }
+
+  return { proposals, blocked };
+}
+
 export function shouldSendAgentBriefingTelegram(config: DaaSystemConfig): boolean {
   return config.notification.telegram.enabled === true
     && config.notification.telegram.dailyReport === true;
@@ -175,6 +276,7 @@ export function shouldSendAgentBriefingTelegram(config: DaaSystemConfig): boolea
 
 type AgentTargetWeightOverrides = {
   targetWeightOverrides: Record<string, number>;
+  baselineTargetWeights: Record<string, number>;
   acceptedCount: number;
   skippedCount: number;
   reason: string;
@@ -201,7 +303,14 @@ export function buildAgentTargetWeightOverrides(input: {
   }
   const maxPositionPct = Math.max(0, Number(input.maxPositionPct) || 0);
   const minConfidence = Math.max(0, Number(input.minConfidence ?? 70) || 0);
+  const currentTargetWeights = new Map(
+    Object.entries(input.currentTargetWeights || {}).map(([assetKey, value]) => [
+      assetKey.trim().toUpperCase(),
+      Math.max(0, Number(value) || 0),
+    ]),
+  );
   const targetWeightOverrides: Record<string, number> = {};
+  const baselineTargetWeights: Record<string, number> = {};
   const acceptedLabels: string[] = [];
   let skippedCount = 0;
 
@@ -222,6 +331,7 @@ export function buildAgentTargetWeightOverrides(input: {
 
     const targetPct = Math.min(proposedPct / 100, maxPositionPct > 0 ? maxPositionPct : proposedPct / 100);
     targetWeightOverrides[canonicalAssetKey] = Number(Math.max(0, targetPct).toFixed(6));
+    baselineTargetWeights[canonicalAssetKey] = Number(Math.max(0, currentTargetWeights.get(canonicalAssetKey.toUpperCase()) ?? 0).toFixed(6));
     acceptedLabels.push(`${symbol || canonicalAssetKey}→${(targetWeightOverrides[canonicalAssetKey] * 100).toFixed(1)}%`);
   }
 
@@ -229,6 +339,7 @@ export function buildAgentTargetWeightOverrides(input: {
   const summary = String(plan?.reasoning || "Agent 目标权重计划").trim() || "Agent 目标权重计划";
   return {
     targetWeightOverrides,
+    baselineTargetWeights,
     acceptedCount: acceptedLabels.length,
     skippedCount,
     reason: acceptedLabels.join(", "),

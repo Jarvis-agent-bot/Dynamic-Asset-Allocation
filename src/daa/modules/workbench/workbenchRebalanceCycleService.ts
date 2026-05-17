@@ -45,6 +45,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   applyTargetWeightOverridesToBootstrap,
   buildEmptyAutoTriggerSkipMessage,
+  filterAgentTradeStability,
   filterRecentAutoTradeReversals,
 } from "@/src/daa/automation/automationGuards";
 
@@ -571,10 +572,39 @@ export async function generateWorkbenchRebalanceCycle(
     maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
   });
   const isAgentTargetWeightCycle = triggerSource === "agent_trigger" && hasAgentTargetOverrides;
+  const recentExecutedTrades = !manual && triggerSource !== "risk"
+    ? await listDaaTradeTickets({ status: "executed", limit: 300 })
+    : [];
+  const agentStabilityGuard = isAgentTargetWeightCycle && !isAgentPureRiskReduction
+    ? filterAgentTradeStability({
+      proposals: mergedProposals,
+      recentTrades: recentExecutedTrades,
+      totalEquity: bootstrap.account.totalEquity ?? systemRow.config.strategy.account.totalEquity ?? 0,
+      currentTargetWeightPctByAssetKey: Object.fromEntries(
+        rawBootstrap.assetUniverse.map((row) => {
+          const assetKey = row.assetKey.toUpperCase();
+          const baselineTargetWeight = input.targetWeightBaseline?.[assetKey];
+          return [
+            assetKey,
+            baselineTargetWeight == null
+              ? Math.max(0, toFinite(row.targetWeightPct, 0))
+              : Math.max(0, Math.min(1, toFinite(baselineTargetWeight, 0))) * 100,
+          ];
+        }),
+      ),
+    })
+    : { proposals: mergedProposals, blocked: [] };
+  mergedProposals = agentStabilityGuard.proposals;
+  if (agentStabilityGuard.blocked.length > 0 && mergedProposals.length === 0) {
+    return skipWithLatest(
+      `Agent 交易稳定器已跳过本轮全部下单：${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；")}`,
+      { attachLatestCycle: true },
+    );
+  }
   const reversalGuard = !manual && triggerSource !== "risk" && !isAgentPureRiskReduction && !isAgentTargetWeightCycle
     ? filterRecentAutoTradeReversals({
       proposals: mergedProposals,
-      recentTrades: await listDaaTradeTickets({ status: "executed", limit: 300 }),
+      recentTrades: recentExecutedTrades,
     })
     : { proposals: mergedProposals, blocked: [] };
   mergedProposals = reversalGuard.proposals;
@@ -663,6 +693,9 @@ export async function generateWorkbenchRebalanceCycle(
     reversalGuard.blocked.length > 0
       ? `反向交易冷却: ${reversalGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
       : null,
+    agentStabilityGuard.blocked.length > 0
+      ? `Agent交易稳定器: ${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
+      : null,
     cashClassification.cashIdleWarning
       ? `现金提示: 闲置资金 ${(cashClassification.investableIdlePct * 100).toFixed(1)}%（已${cashClassification.cashIdleDays}天）`
       : null,
@@ -678,6 +711,7 @@ export async function generateWorkbenchRebalanceCycle(
     marketRegime: agentResult.marketRegime,
     tokensUsed: agentResult.tokensUsed,
     targetWeightOverrides: normalizedAgentTargetWeightOverrides,
+    targetWeightBaseline: normalizeTargetWeightOverridesSnapshot(input.targetWeightBaseline),
     targetWeightLifecycle: normalizedAgentTargetWeightOverrides
       ? (systemRow.config.watchlistEntry?.aiTargetWeightPool.enabled
         ? "persisted_to_watchlist_target_pool"

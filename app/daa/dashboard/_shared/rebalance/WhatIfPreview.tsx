@@ -79,6 +79,7 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
   }
 
   const valueFormatter: Formatter<ValueType, NameType> = (value) => [formatCurrency(toTooltipNumber(value), data.baseCurrency), "市值"];
+  const visibleWeightChanges = data.weightChanges.filter((row) => Math.abs(row.changePct) >= 0.05);
 
   const renderPie = (items: AllocationItem[], title: string) => (
     <div className="text-center">
@@ -100,7 +101,7 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
   return (
     <DaaSurfacePanel accent="indigo" title="执行后组合预览" subtitle={`已选 ${data.selectedCount} 条建议`}>
       <div className="flex flex-wrap items-center justify-center gap-6">
-        {renderPie(data.before, "当前配置")}
+        {renderPie(data.before, "当前组合")}
         {renderPie(data.after, "执行后预测")}
       </div>
 
@@ -109,10 +110,10 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
         <DaaSurfaceMiniStat label="预计卖出" value={formatCurrency(data.totalSell, data.baseCurrency)} tone="red" />
       </div>
 
-      {data.weightChanges.length > 0 ? (
+      {visibleWeightChanges.length > 0 ? (
         <div className="mt-3 space-y-1 text-xs">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">权重变化</div>
-          {data.weightChanges.map((w) => (
+          {visibleWeightChanges.map((w) => (
             <div key={w.name} className="flex items-center justify-between text-[var(--muted)]">
               <span>{w.name}</span>
               <span className="font-[var(--font-mono)]">

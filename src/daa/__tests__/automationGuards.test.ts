@@ -4,6 +4,7 @@ import {
   applyTargetWeightOverridesToBootstrap,
   buildAgentTargetWeightOverrides,
   buildEmptyAutoTriggerSkipMessage,
+  filterAgentTradeStability,
   filterRecentAutoTradeReversals,
   findAutoExecuteSingleOrderBreach,
   findAutoExecuteTurnoverBreach,
@@ -100,6 +101,96 @@ describe("automationGuards", () => {
     expect(result.blocked[0]?.cooldownUntil).toBe("2026-03-20T00:00:00.000Z");
   });
 
+  it("Agent 交易稳定器会跳过 24 小时内同资产再次操作", () => {
+    const nowMs = Date.parse("2026-03-10T12:00:00.000Z");
+    const result = filterAgentTradeStability({
+      nowMs,
+      totalEquity: 100000,
+      proposals: [
+        {
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          side: "SELL",
+          suggestedNotional: 3000,
+          targetWeightPct: 7,
+          reason: "Agent 下调目标权重",
+          selected: true,
+        },
+      ],
+      recentTrades: [
+        {
+          ticketId: "ticket-msft-buy",
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          side: "BUY",
+          status: "executed",
+          executedAt: "2026-03-10T03:00:00.000Z",
+        },
+      ],
+      currentTargetWeightPctByAssetKey: { "US::MSFT": 9 },
+    });
+
+    expect(result.proposals).toHaveLength(0);
+    expect(result.blocked[0]?.blockedReason).toContain("最近 24 小时内已有 BUY 成交");
+    expect(result.blocked[0]?.cooldownUntil).toBe("2026-03-11T03:00:00.000Z");
+  });
+
+  it("Agent 交易稳定器允许大幅降权或清仓退出", () => {
+    const nowMs = Date.parse("2026-03-10T12:00:00.000Z");
+    const result = filterAgentTradeStability({
+      nowMs,
+      totalEquity: 100000,
+      proposals: [
+        {
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          side: "SELL",
+          suggestedNotional: 6000,
+          targetWeightPct: 2,
+          reason: "Agent 大幅降低风险预算",
+          selected: true,
+        },
+      ],
+      recentTrades: [
+        {
+          ticketId: "ticket-msft-buy",
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          side: "BUY",
+          status: "executed",
+          executedAt: "2026-03-10T03:00:00.000Z",
+        },
+      ],
+      currentTargetWeightPctByAssetKey: { "US::MSFT": 9 },
+    });
+
+    expect(result.proposals.map((row) => row.assetKey)).toEqual(["US::MSFT"]);
+    expect(result.blocked).toHaveLength(0);
+  });
+
+  it("Agent 交易稳定器会把低于 2% NAV 的小幅目标变动改为只更新目标", () => {
+    const result = filterAgentTradeStability({
+      nowMs: Date.parse("2026-03-10T12:00:00.000Z"),
+      totalEquity: 100000,
+      proposals: [
+        {
+          assetKey: "US::QQQ",
+          symbol: "QQQ",
+          side: "BUY",
+          suggestedNotional: 1500,
+          targetWeightPct: 6.5,
+          reason: "小幅提高目标权重",
+          selected: true,
+        },
+      ],
+      recentTrades: [],
+      currentTargetWeightPctByAssetKey: { "US::QQQ": 5 },
+    });
+
+    expect(result.proposals).toHaveLength(0);
+    expect(result.blocked[0]?.blockedReason).toContain("低于 2.0% 执行阈值");
+  });
+
   it("Agent 日报推送必须同时满足 Telegram 开关和 dailyReport 开关", () => {
     const enabled = buildSystemConfigRow({
       notification: {
@@ -157,6 +248,7 @@ describe("automationGuards", () => {
 
     expect(plan).toEqual({
       targetWeightOverrides: { "US::NVDA": 0.03 },
+      baselineTargetWeights: { "US::NVDA": 0 },
       acceptedCount: 1,
       skippedCount: 1,
       reason: "NVDA→3.0%",
@@ -272,6 +364,11 @@ describe("automationGuards", () => {
       "US::SPY": 0.05,
       "US::NVDA": 0.03,
       "US::MSFT": 0.04,
+    });
+    expect(plan?.baselineTargetWeights).toEqual({
+      "US::SPY": 0,
+      "US::NVDA": 0.1,
+      "US::MSFT": 0,
     });
     expect(plan?.skippedCount).toBe(0);
   });

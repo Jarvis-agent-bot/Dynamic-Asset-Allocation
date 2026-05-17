@@ -213,6 +213,11 @@ export type GenerateRebalanceCycleInput = {
    * 只影响本次周期生成，不直接写入系统配置。
    */
   targetWeightOverrides?: Record<string, number>;
+  /**
+   * Agent 生成目标前的目标权重基线（0-1）。
+   * 用于交易稳定器判断目标变化幅度，避免目标池先写入后丢失旧基线。
+   */
+  targetWeightBaseline?: Record<string, number>;
 };
 
 /**

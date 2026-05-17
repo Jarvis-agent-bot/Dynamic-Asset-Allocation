@@ -327,6 +327,7 @@ async function maybeRunAgentDrivenRebalance(input: {
       : `Agent 自动驾驶检查${eventContext ? `: ${eventContext}` : ""}`,
     manual: false,
     targetWeightOverrides: input.targetPlan?.targetWeightOverrides,
+    targetWeightBaseline: input.targetPlan?.baselineTargetWeights,
   });
   const cycle = generated.cycle;
   if (!generated.created || !cycle) {
