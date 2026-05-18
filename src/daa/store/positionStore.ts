@@ -7,6 +7,10 @@ import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { buildDaaAssetKey } from "@/src/daa/assetKey";
 import {
+  buildFxRateBook,
+  resolveFxRateToBaseCurrency,
+} from "@/src/daa/modules/money/money";
+import {
   withDaaPgClient,
   toIsoString,
   type DaaTxQueryFn,
@@ -39,7 +43,19 @@ type DaaPositionSnapshotRow = {
   updatedAt: string;
 };
 
-function normalizePositionSnapshotRow(row: Partial<DaaPositionSnapshotRow>): DaaPositionSnapshotRow | null {
+export type CostBasisInBaseMode = "auto" | "preserve" | "recompute";
+
+type NormalizedPositionSnapshotRow = DaaPositionSnapshotRow & {
+  costBasisProvided: boolean;
+  costBasisInBaseProvided: boolean;
+  currencyProvided: boolean;
+};
+
+function hasOwn(input: object, key: keyof DaaPositionSnapshotRow): boolean {
+  return Object.prototype.hasOwnProperty.call(input, key);
+}
+
+function normalizePositionSnapshotRow(row: Partial<DaaPositionSnapshotRow>): NormalizedPositionSnapshotRow | null {
   const symbol = normalizeText(row.symbol).toUpperCase();
   const market = normalizeText(row.market, "US").toUpperCase();
   if (!symbol) return null;
@@ -54,7 +70,70 @@ function normalizePositionSnapshotRow(row: Partial<DaaPositionSnapshotRow>): Daa
     costBasisInBase: row.costBasisInBase == null ? null : Math.max(0, toFiniteNumber(row.costBasisInBase, 0)),
     tags: Array.isArray(row.tags) ? row.tags.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean) : [],
     updatedAt: toIsoString(row.updatedAt, new Date().toISOString()),
+    costBasisProvided: hasOwn(row, "costBasis"),
+    costBasisInBaseProvided: hasOwn(row, "costBasisInBase"),
+    currencyProvided: hasOwn(row, "currency"),
   };
+}
+
+function normalizeCostBasisInBase(value: unknown): number | null {
+  if (value == null) return null;
+  return Math.max(0, toFiniteNumber(value, 0));
+}
+
+async function resolveBaseCurrencyInTx(query: DaaTxQueryFn, ownerAccountId: string): Promise<string> {
+  const accountRes = await query(
+    "SELECT base_currency FROM daa_account_state_v2 WHERE id = $1 LIMIT 1",
+    [ownerAccountId],
+  );
+  return normalizeCcyCode(accountRes.rows[0]?.base_currency, "USD");
+}
+
+async function resolveCostBasisInBaseFromFxInTx(input: {
+  query: DaaTxQueryFn;
+  ownerAccountId: string;
+  costBasis: number | null;
+  localCurrency: string;
+}): Promise<number | null> {
+  if (input.costBasis == null) return null;
+  const costBasis = Math.max(0, toFiniteNumber(input.costBasis, 0));
+  if (!(costBasis > 0)) return 0;
+
+  const baseCurrency = await resolveBaseCurrencyInTx(input.query, input.ownerAccountId);
+  const fxRes = await input.query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
+  const fxRateToBase = resolveFxRateToBaseCurrency(
+    baseCurrency,
+    input.localCurrency,
+    buildFxRateBook(fxRes.rows as Array<Record<string, unknown>>),
+  );
+  if (!(fxRateToBase && fxRateToBase > 0)) return null;
+  return costBasis * fxRateToBase;
+}
+
+async function resolveCostBasisInBaseForWriteInTx(input: {
+  query: DaaTxQueryFn;
+  ownerAccountId: string;
+  row: NormalizedPositionSnapshotRow;
+  mode: CostBasisInBaseMode;
+  existingCostBasisInBase?: unknown;
+}): Promise<number | null> {
+  if (input.row.costBasisInBaseProvided) {
+    return input.row.costBasisInBase;
+  }
+
+  const existing = normalizeCostBasisInBase(input.existingCostBasisInBase);
+  const shouldPreserveExisting = input.mode === "preserve"
+    || (input.mode === "auto" && !input.row.costBasisProvided && !input.row.currencyProvided);
+  if (shouldPreserveExisting && existing != null) {
+    return existing;
+  }
+
+  return resolveCostBasisInBaseFromFxInTx({
+    query: input.query,
+    ownerAccountId: input.ownerAccountId,
+    costBasis: input.row.costBasis,
+    localCurrency: input.row.currency,
+  });
 }
 
 export async function replacePositionsV2SnapshotInTx(
@@ -66,6 +145,12 @@ export async function replacePositionsV2SnapshotInTx(
   for (const raw of rows) {
     const row = normalizePositionSnapshotRow(raw);
     if (!row || !(row.qty > 0)) continue;
+    const costBasisInBase = await resolveCostBasisInBaseForWriteInTx({
+      query,
+      ownerAccountId,
+      row,
+      mode: "recompute",
+    });
     await query(
       `INSERT INTO daa_positions_v2 (
          owner_account_id, asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
@@ -81,7 +166,7 @@ export async function replacePositionsV2SnapshotInTx(
         row.qty,
         row.price,
         row.costBasis,
-        row.costBasisInBase,
+        costBasisInBase,
         row.tags,
         row.updatedAt,
       ],
@@ -92,6 +177,7 @@ export async function replacePositionsV2SnapshotInTx(
 export async function syncSinglePositionV2InTx(
   query: DaaTxQueryFn,
   row: Partial<DaaPositionSnapshotRow>,
+  opts: { costBasisInBaseMode?: CostBasisInBaseMode } = {},
 ): Promise<void> {
   const ownerAccountId = getDaaAccountScopeId();
   const normalized = normalizePositionSnapshotRow(row);
@@ -100,6 +186,17 @@ export async function syncSinglePositionV2InTx(
     await query("DELETE FROM daa_positions_v2 WHERE owner_account_id = $1 AND asset_key = $2", [ownerAccountId, normalized.assetKey]);
     return;
   }
+  const existing = await query(
+    "SELECT cost_basis_in_base FROM daa_positions_v2 WHERE owner_account_id = $1 AND asset_key = $2 LIMIT 1",
+    [ownerAccountId, normalized.assetKey],
+  );
+  const costBasisInBase = await resolveCostBasisInBaseForWriteInTx({
+    query,
+    ownerAccountId,
+    row: normalized,
+    mode: opts.costBasisInBaseMode ?? "auto",
+    existingCostBasisInBase: existing.rows[0]?.cost_basis_in_base,
+  });
   await query(
     `INSERT INTO daa_positions_v2 (
        owner_account_id, asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
@@ -126,7 +223,7 @@ export async function syncSinglePositionV2InTx(
       normalized.qty,
       normalized.price,
       normalized.costBasis,
-      normalized.costBasisInBase,
+      costBasisInBase,
       normalized.tags,
       normalized.updatedAt,
     ],

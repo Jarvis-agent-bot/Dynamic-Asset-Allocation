@@ -7,7 +7,6 @@ import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { getAssetDisplayName } from "@/src/daa/assetRegistry";
-import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
 import {
   inferMarketGroup, inferRegionByMarket,
   normalizeAssetClass, normalizeInstrumentType, normalizeRegion,
@@ -64,27 +63,6 @@ function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUnivers
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
   };
-}
-
-async function resolveCostBasisInBaseForPatch(input: {
-  query: DaaTxQueryFn;
-  ownerAccountId: string;
-  localCurrency: string;
-  costBasis: number | null;
-}): Promise<number | null> {
-  if (input.costBasis == null) return null;
-  const costBasis = Math.max(0, toFiniteNumber(input.costBasis, 0));
-  if (!(costBasis > 0)) return 0;
-
-  const accountRes = await input.query(
-    "SELECT base_currency FROM daa_account_state_v2 WHERE id = $1 LIMIT 1",
-    [input.ownerAccountId],
-  );
-  const baseCurrency = normalizeCcyCode(accountRes.rows[0]?.base_currency, "USD");
-  const fxRes = await input.query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
-  const fxRateToBase = resolveFxRateToBase(baseCurrency, input.localCurrency, buildFxLookupToBase(fxRes.rows as Array<Record<string, unknown>>));
-  if (!(fxRateToBase && fxRateToBase > 0)) return null;
-  return costBasis * fxRateToBase;
 }
 
 const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
@@ -383,15 +361,9 @@ export async function patchDaaAssetUniverseRow(input: {
       if (next.lastPrice > 0 && next.priceUpdatedAt) {
         await updateMarketPriceSnapshotInTx(txQuery, assetKey, next.lastPrice, next.priceUpdatedAt);
       }
-      const shouldRecomputeCostBasisInBase = input.costBasis !== undefined || input.currency !== undefined;
-      const nextCostBasisInBase = shouldRecomputeCostBasisInBase
-        ? await resolveCostBasisInBaseForPatch({
-          query: txQuery,
-          ownerAccountId,
-          localCurrency: next.currency,
-          costBasis: next.costBasis,
-        })
-        : current.costBasisInBase;
+      const costBasisInBaseMode = input.costBasis !== undefined || input.currency !== undefined
+        ? "recompute"
+        : "preserve";
       await syncSinglePositionV2InTx(txQuery, {
         assetKey,
         symbol: current.symbol,
@@ -400,9 +372,10 @@ export async function patchDaaAssetUniverseRow(input: {
         qty: next.holdingQty,
         price: next.holdingPrice,
         costBasis: next.costBasis,
-        costBasisInBase: nextCostBasisInBase,
         tags: current.holdingTags,
         updatedAt: new Date().toISOString(),
+      }, {
+        costBasisInBaseMode,
       });
       const row = await selectAssetUniverseRowByKeyInTx(txQuery, assetKey);
       if (!row) throw new Error(`patch succeeded but row not found: ${assetKey}`);
