@@ -17,6 +17,7 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaExternalPayloadRaw: vi.fn(),
   appendDaaFxRateHistoryRows: vi.fn(),
   getDaaSystemConfig: vi.fn(),
+  listDaaTradeTickets: vi.fn(async () => []),
   listDaaAssetUniverse: vi.fn(),
   listDaaFxRates: vi.fn(),
   upsertDaaFxRates: vi.fn(),

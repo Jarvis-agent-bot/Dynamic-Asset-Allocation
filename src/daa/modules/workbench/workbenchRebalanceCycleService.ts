@@ -45,7 +45,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   applyTargetWeightOverridesToBootstrap,
   buildEmptyAutoTriggerSkipMessage,
-  filterAgentTradeStability,
+  filterAutoTradeStability,
   filterRecentAutoTradeReversals,
 } from "@/src/daa/automation/automationGuards";
 
@@ -577,7 +577,7 @@ export async function generateWorkbenchRebalanceCycle(
     : [];
   const shouldApplyAutoTradeStabilityGuard = !manual && triggerSource !== "risk" && !isAgentPureRiskReduction;
   const agentStabilityGuard = shouldApplyAutoTradeStabilityGuard
-    ? filterAgentTradeStability({
+    ? filterAutoTradeStability({
       proposals: mergedProposals,
       recentTrades: recentExecutedTrades,
       totalEquity: bootstrap.account.totalEquity ?? systemRow.config.strategy.account.totalEquity ?? 0,

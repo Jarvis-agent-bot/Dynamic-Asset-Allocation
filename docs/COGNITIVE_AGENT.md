@@ -348,7 +348,7 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 | `memoryRecallLimit` | `5` | 每次调查召回记忆条数 |
 | `memoryDecayRate` | `0.97` | 每日衰减率 |
 | `circuitBreakerThreshold` | `3` | 连续 LLM 失败次数触发熔断 |
-| `schedule` | `"2x_daily"` | `2x_daily` / `daily` / `every_6h` / `manual_only` |
+| `schedule` | `"daily"` | `daily` / `2x_daily` / `every_6h` / `manual_only` |
 
 运行时间窗口不再作为独立配置持久化，而是由 `schedule` 统一派生，避免出现“频率为 daily 但仍保留两个窗口”的冲突。
 

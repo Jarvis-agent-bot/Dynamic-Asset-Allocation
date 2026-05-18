@@ -174,7 +174,7 @@ export function filterRecentAutoTradeReversals<T extends {
   return { proposals, blocked };
 }
 
-export function filterAgentTradeStability<T extends {
+export function filterAutoTradeStability<T extends {
   assetKey: string;
   symbol?: string | null;
   side: "BUY" | "SELL";
@@ -224,13 +224,15 @@ export function filterAgentTradeStability<T extends {
 
     const assetKey = proposal.assetKey.trim().toUpperCase();
     const label = formatAssetLabel({ symbol: proposal.symbol || undefined, assetKey: proposal.assetKey });
-    const nextTargetPct = Math.max(0, Number(proposal.targetWeightPct ?? 0) || 0);
+    const rawNextTargetPct = Number(proposal.targetWeightPct);
+    const hasProposalTargetPct = proposal.targetWeightPct != null && Number.isFinite(rawNextTargetPct);
+    const nextTargetPct = hasProposalTargetPct ? Math.max(0, rawNextTargetPct) : 0;
     const currentTargetPct = currentTargetPctByAssetKey.get(assetKey) ?? 0;
-    const targetDeltaPct = Math.abs(nextTargetPct - currentTargetPct);
-    const targetReductionPct = Math.max(0, currentTargetPct - nextTargetPct);
+    const targetDeltaPct = hasProposalTargetPct ? Math.abs(nextTargetPct - currentTargetPct) : 0;
+    const targetReductionPct = hasProposalTargetPct ? Math.max(0, currentTargetPct - nextTargetPct) : 0;
     const reason = String(proposal.reason || "");
     const explicitRiskExit = proposal.side === "SELL" && (
-      nextTargetPct <= 0.1
+      (hasProposalTargetPct && nextTargetPct <= 0.1)
       || targetReductionPct + 1e-9 >= largeTargetReductionPct
       || /止损|风险退出|清仓|强制退出|risk exit|stop[- ]?loss/i.test(reason)
     );
@@ -238,7 +240,7 @@ export function filterAgentTradeStability<T extends {
     const fallbackTradeDeltaPct = totalEquity > 0
       ? Math.max(0, Number(proposal.suggestedNotional ?? 0) || 0) / totalEquity * 100
       : Number.POSITIVE_INFINITY;
-    const executionDeltaPct = currentTargetPctByAssetKey.has(assetKey) ? targetDeltaPct : fallbackTradeDeltaPct;
+    const executionDeltaPct = hasProposalTargetPct && currentTargetPctByAssetKey.has(assetKey) ? targetDeltaPct : fallbackTradeDeltaPct;
     if (!explicitRiskExit && executionDeltaPct + 1e-9 < minTradeWeightDeltaPct) {
       blocked.push({
         ...proposal,
@@ -287,7 +289,6 @@ export function buildAgentTargetWeightOverrides(input: {
   overlay: AgentStrategyOverlay | null;
   knownAssetKeys: string[];
   currentTargetWeights?: Record<string, number>;
-  supportedIncreaseAssetKeys?: string[];
   maxPositionPct: number;
   minConfidence?: number;
 }): AgentTargetWeightOverrides | null {

@@ -9,8 +9,10 @@ import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { PreTradeRiskCheck, RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
+import { listDaaTradeTickets } from "@/src/daa/store/daaStorePg";
 
 import {
+  filterAutoTradeStability,
   findAutoExecuteSingleOrderBreach,
   findAutoExecuteTurnoverBreach,
 } from "./automationGuards";
@@ -55,6 +57,10 @@ async function notifyAutoExecutionIssue(input: {
 
 function selectedProposals(proposals: RebalanceProposal[]): RebalanceProposal[] {
   return proposals.filter((row) => row.selected !== false);
+}
+
+function shouldApplyExecutionStabilityGuard(triggerSource: AutomationAuthorityTrigger): boolean {
+  return triggerSource !== "manual" && triggerSource !== "manual_api" && triggerSource !== "risk";
 }
 
 function findAutoExecutionRiskBreach(input: {
@@ -123,9 +129,52 @@ export async function executeAutoRebalanceCycle(input: {
     };
   }
 
+  const applyExecutionStabilityGuard = shouldApplyExecutionStabilityGuard(input.triggerSource);
+  const bootstrap = input.totalEquity == null || applyExecutionStabilityGuard
+    ? await buildWorkbenchBootstrap({ syncPrices: false })
+    : null;
   const totalEquity = input.totalEquity == null
-    ? Math.max(0, (await buildWorkbenchBootstrap({ syncPrices: false })).account.totalEquity ?? 0)
+    ? Math.max(0, bootstrap?.account.totalEquity ?? 0)
     : Math.max(0, Number(input.totalEquity) || 0);
+
+  if (applyExecutionStabilityGuard) {
+    const recentTrades = await listDaaTradeTickets({ status: "executed", limit: 300 }).catch((error) => {
+      logSwallowed(`${input.triggerSource}.autoExecuteStabilityTrades`, error);
+      return [];
+    });
+    const currentTargetWeightPctByAssetKey = Object.fromEntries(
+      (bootstrap?.assetUniverse ?? [])
+        .map((row) => [
+          String(row.assetKey || "").trim().toUpperCase(),
+          Math.max(0, Number(row.targetWeightPct) || 0),
+        ] as const)
+        .filter(([assetKey]) => assetKey),
+    );
+    const stability = filterAutoTradeStability({
+      proposals: input.cycle.proposals,
+      recentTrades,
+      totalEquity,
+      currentTargetWeightPctByAssetKey,
+    });
+    if (stability.blocked.length > 0) {
+      const message = `[自动交易稳定器] ${stability.blocked.map((row) => row.blockedReason).join("；")} 请等待冷却窗口结束或重新生成周期。`;
+      logSwallowed(`${input.triggerSource}.autoExecuteStabilityGate`, new Error(message));
+      await notifyAutoExecutionIssue({
+        systemConfig: input.systemConfig,
+        eventType: "auto_execute_blocked",
+        triggerSource: input.triggerSource,
+        cycleId: input.cycle.cycleId,
+        message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${message}`,
+        requestJson: { reason: "auto_trade_stability", blockedCount: stability.blocked.length },
+      }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteStabilityNotify`, err));
+      return {
+        ...base,
+        blockedReason: message,
+        authority,
+      };
+    }
+  }
+
   const maxSinglePct = resolvePolicyConfig(input.systemConfig).execution.maxSingleOrderPctOfNav;
   if (!fullyAutonomousAgent) {
     const breachingProposal = findAutoExecuteSingleOrderBreach({

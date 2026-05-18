@@ -354,7 +354,7 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     reviewIntervalDays: 14,
     memoryRecallLimit: 5,
     circuitBreakerThreshold: 3,
-    schedule: "2x_daily",
+    schedule: "daily",
     memoryDecayRate: 0.97,
     thesisStalenessDays: 7,
   },
@@ -797,7 +797,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         reviewIntervalDays: 14,
         memoryRecallLimit: 5,
         circuitBreakerThreshold: 3,
-        schedule: "2x_daily" as const,
+        schedule: "daily" as const,
         memoryDecayRate: 0.97,
         thesisStalenessDays: 7,
       };

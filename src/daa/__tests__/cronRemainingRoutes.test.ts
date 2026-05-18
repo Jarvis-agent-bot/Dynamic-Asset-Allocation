@@ -36,6 +36,7 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
       },
     },
   })),
+  listDaaTradeTickets: vi.fn(async () => []),
 }));
 
 vi.mock('@/src/daa/store/notificationDeliveryLogRepo', () => ({

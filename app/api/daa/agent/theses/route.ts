@@ -53,8 +53,8 @@ export async function GET(req: Request) {
       const ca = sys.config.cognitiveAgent;
       if (ca?.enabled) {
         schedule = {
-          mode: ca.schedule ?? "2x_daily",
-          timesUtc: deriveCognitiveAgentScheduleTimesUtc(ca.schedule ?? "2x_daily"),
+          mode: ca.schedule ?? "daily",
+          timesUtc: deriveCognitiveAgentScheduleTimesUtc(ca.schedule ?? "daily"),
         };
       }
     } catch (e) {

@@ -4,7 +4,7 @@ import {
   applyTargetWeightOverridesToBootstrap,
   buildAgentTargetWeightOverrides,
   buildEmptyAutoTriggerSkipMessage,
-  filterAgentTradeStability,
+  filterAutoTradeStability,
   filterRecentAutoTradeReversals,
   findAutoExecuteSingleOrderBreach,
   findAutoExecuteTurnoverBreach,
@@ -103,7 +103,7 @@ describe("automationGuards", () => {
 
   it("Agent 交易稳定器会跳过 24 小时内同资产再次操作", () => {
     const nowMs = Date.parse("2026-03-10T12:00:00.000Z");
-    const result = filterAgentTradeStability({
+    const result = filterAutoTradeStability({
       nowMs,
       totalEquity: 100000,
       proposals: [
@@ -136,7 +136,7 @@ describe("automationGuards", () => {
   });
 
   it("交易稳定器会跳过 24 小时内同资产同方向重复操作", () => {
-    const result = filterAgentTradeStability({
+    const result = filterAutoTradeStability({
       nowMs: Date.parse("2026-03-10T12:00:00.000Z"),
       totalEquity: 100000,
       proposals: [
@@ -169,7 +169,7 @@ describe("automationGuards", () => {
 
   it("Agent 交易稳定器允许大幅降权或清仓退出", () => {
     const nowMs = Date.parse("2026-03-10T12:00:00.000Z");
-    const result = filterAgentTradeStability({
+    const result = filterAutoTradeStability({
       nowMs,
       totalEquity: 100000,
       proposals: [
@@ -201,7 +201,7 @@ describe("automationGuards", () => {
   });
 
   it("Agent 交易稳定器会把低于 2% NAV 的小幅目标变动改为只更新目标", () => {
-    const result = filterAgentTradeStability({
+    const result = filterAutoTradeStability({
       nowMs: Date.parse("2026-03-10T12:00:00.000Z"),
       totalEquity: 100000,
       proposals: [
@@ -221,6 +221,28 @@ describe("automationGuards", () => {
 
     expect(result.proposals).toHaveLength(0);
     expect(result.blocked[0]?.blockedReason).toContain("低于 2.0% 执行阈值");
+  });
+
+  it("交易稳定器对没有目标权重字段的旧提案退回按成交额判断", () => {
+    const result = filterAutoTradeStability({
+      nowMs: Date.parse("2026-03-10T12:00:00.000Z"),
+      totalEquity: 100000,
+      proposals: [
+        {
+          assetKey: "US::SPY",
+          symbol: "SPY",
+          side: "BUY",
+          suggestedNotional: 3000,
+          reason: "旧周期提案",
+          selected: true,
+        },
+      ],
+      recentTrades: [],
+      currentTargetWeightPctByAssetKey: { "US::SPY": 20 },
+    });
+
+    expect(result.proposals.map((row) => row.assetKey)).toEqual(["US::SPY"]);
+    expect(result.blocked).toHaveLength(0);
   });
 
   it("Agent 日报推送必须同时满足 Telegram 开关和 dailyReport 开关", () => {
@@ -387,7 +409,6 @@ describe("automationGuards", () => {
         "US::NVDA": 0.1,
         "US::MSFT": 0,
       },
-      supportedIncreaseAssetKeys: ["US::NVDA", "US:MSFT"],
       maxPositionPct: 0.1,
       minConfidence: 70,
     });

@@ -16,7 +16,7 @@ import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
-import { runNewsAutopilotDaily } from "@/src/daa/automation/newsAutopilotTrigger";
+import { isActionableNewsForAutopilot, runNewsAutopilotDaily } from "@/src/daa/automation/newsAutopilotTrigger";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -86,9 +86,10 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<MajorEventRef
   const batchPushedKeys = new Set<string>();
 
   for (const signal of signals) {
-    const impact = String(signal.llmMajorEvent?.impact || "").trim().toLowerCase();
-    const actionHint = String(signal.llmActionHint || "").trim();
-    if (impact === "high" || impact === "medium" || actionHint === "警惕") {
+    if (isActionableNewsForAutopilot({
+      impact: signal.llmMajorEvent?.impact,
+      actionHint: signal.llmActionHint,
+    })) {
       actionableSymbols.add(signal.symbol);
     }
     if (signal.llmMajorEvent && signal.llmMajorEvent.impact === "high") {

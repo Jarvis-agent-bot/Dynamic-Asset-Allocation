@@ -7,6 +7,7 @@ vi.mock("@/src/daa/modules/workbench/executionGateway", () => ({
 vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
   buildWorkbenchBootstrap: vi.fn(async () => ({
     account: { totalEquity: 10_000 },
+    assetUniverse: [],
   })),
 }));
 
@@ -18,10 +19,16 @@ vi.mock("@/src/daa/notify/feishu", () => ({
   sendFeishuByEnv: vi.fn(async () => false),
 }));
 
+vi.mock("@/src/daa/store/daaStorePg", () => ({
+  listDaaTradeTickets: vi.fn(async () => []),
+}));
+
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
 import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { listDaaTradeTickets } from "@/src/daa/store/daaStorePg";
 
 function policySnapshot(action: PolicyDecisionSnapshot["decision"]["action"]): PolicyDecisionSnapshot {
   return {
@@ -137,6 +144,64 @@ describe("auto-rebalance-execution-policy-gate", () => {
     expect(executeRebalanceViaGateway).toHaveBeenCalledWith(expect.objectContaining({
       cycleId: "cycle-agent-auto",
       executeMode: "selected",
+    }));
+  });
+
+  it("Agent 全自动触发仍会被执行层交易稳定器拦住同资产 24 小时重复操作", async () => {
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce({
+      account: { totalEquity: 100_000 },
+      assetUniverse: [{
+        assetKey: "US::MSFT",
+        targetWeightPct: 5,
+      }],
+    } as Awaited<ReturnType<typeof buildWorkbenchBootstrap>>);
+    vi.mocked(listDaaTradeTickets).mockResolvedValueOnce([{
+      ticketId: "ticket-msft-buy",
+      assetKey: "US::MSFT",
+      symbol: "MSFT",
+      side: "BUY",
+      status: "executed",
+      executedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    } as Awaited<ReturnType<typeof listDaaTradeTickets>>[number]]);
+
+    const result = await executeAutoRebalanceCycle({
+      cycle: {
+        cycleId: "cycle-agent-stability",
+        proposals: [{
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "SELL",
+          suggestedQty: 4,
+          suggestedNotional: 2_000,
+          price: 500,
+          reason: "Agent 小幅降低目标权重",
+          selected: true,
+          hfContribution: null,
+          targetWeightPct: 3,
+        }],
+        riskCheck: { overallStatus: "warn", items: [] },
+        policySnapshot: policySnapshot("propose"),
+      },
+      systemConfig: normalizeSystemConfig({
+        policy: {
+          execution: {
+            autoGenerateEnabled: true,
+            autoExecuteEnabled: true,
+          },
+        },
+      }),
+      triggerSource: "agent_trigger",
+      totalEquity: 100_000,
+    });
+
+    expect(result.executed).toBe(false);
+    expect(result.blockedReason).toContain("自动交易稳定器");
+    expect(result.blockedReason).toContain("最近 24 小时内已有 BUY 成交");
+    expect(executeRebalanceViaGateway).not.toHaveBeenCalledWith(expect.objectContaining({
+      cycleId: "cycle-agent-stability",
     }));
   });
 });

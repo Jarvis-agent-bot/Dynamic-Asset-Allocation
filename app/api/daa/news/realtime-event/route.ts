@@ -22,7 +22,7 @@ import { listDaaAssetUniverse, upsertDaaNewsEventSnapshots, upsertDaaNewsItemSna
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { runNewsAutopilotDaily } from "@/src/daa/automation/newsAutopilotTrigger";
+import { isActionableNewsForAutopilot, runNewsAutopilotDaily } from "@/src/daa/automation/newsAutopilotTrigger";
 import { refreshNewsIntelligenceForEvents } from "@/src/daa/modules/news-intelligence/newsIntelligenceService";
 
 export const runtime = "nodejs";
@@ -283,6 +283,7 @@ export async function POST(req: Request) {
     let analyzed = 0;
     let pushed = 0;
     const majorEventSymbols = new Set<string>();
+    const actionableEventSymbols = new Set<string>();
     if (focusSymbols.length > 0) {
       const rawItem = {
         title: event.headline,
@@ -301,6 +302,12 @@ export async function POST(req: Request) {
           analyzed++;
           if (analysis.majorEvent?.impact === "high") {
             majorEventSymbols.add(symbol);
+          }
+          if (isActionableNewsForAutopilot({
+            impact: analysis.majorEvent?.impact,
+            actionHint: analysis.actionHint,
+          })) {
+            actionableEventSymbols.add(symbol);
           }
 
           // 立即把分析结果写回 signal 表，让 Today 新闻流能即时标出 majorEvent
@@ -330,12 +337,15 @@ export async function POST(req: Request) {
       }
     }
 
-    const autopilot = majorEventSymbols.size > 0
+    const autopilotSymbols = actionableEventSymbols.size > 0
+      ? [...actionableEventSymbols]
+      : [...majorEventSymbols];
+    const autopilot = autopilotSymbols.length > 0
       ? await runNewsAutopilotDaily({
           req,
           source: "alpaca_ws_realtime",
-          reason: `daily news autopilot triggered by realtime high-impact news: ${event.headline}`,
-          affectedSymbols: [...majorEventSymbols],
+          reason: `daily news autopilot triggered by realtime actionable news: ${event.headline}`,
+          affectedSymbols: autopilotSymbols,
         }).catch((error) => {
           logSwallowed("newsRealtime.autopilot", error);
           return {
@@ -351,6 +361,7 @@ export async function POST(req: Request) {
       pushed,
       focusSymbols,
       majorEventSymbols: [...majorEventSymbols],
+      actionableEventSymbols: [...actionableEventSymbols],
       autopilot,
       newsId: event.id,
     });

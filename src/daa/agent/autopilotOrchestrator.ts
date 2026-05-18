@@ -4,9 +4,10 @@ import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { getAgentStrategyOverlayForRun } from "@/src/daa/agent/store/overlayStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
-import { evaluateBrainActionAuthority } from "@/src/daa/automation/automationAuthority";
+import { evaluateBrainActionAuthority, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
+import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
@@ -23,7 +24,7 @@ import {
 import type { DaaStoreSystemConfigRow } from "@/src/daa/store/storeTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-type AutopilotEventSource =
+export type AutopilotEventSource =
   | "cron_cognitive_agent"
   | "cron_news_refresh"
   | "alpaca_ws_realtime"
@@ -79,6 +80,14 @@ type RunAutopilotLoopInput = {
   reason: string;
   affectedSymbols?: string[];
 };
+
+export function resolveAutopilotRebalanceTriggerSource(source: AutopilotEventSource): RebalanceTriggerSource {
+  return source === "cron_cognitive_agent" ? "scheduled_review" : "agent_trigger";
+}
+
+export function resolveAutopilotExecutionTriggerSource(source: AutopilotEventSource): AutomationAuthorityTrigger {
+  return source === "cron_cognitive_agent" ? "cron_cognitive_agent" : "agent_trigger";
+}
 
 function buildSkippedResult(input: {
   source: AutopilotEventSource;
@@ -278,17 +287,19 @@ async function maybePersistAgentTargetWeightPool(input: {
 async function executeAutopilotRebalance(input: {
   cycle: RebalanceCycle;
   systemConfig: DaaSystemConfig;
+  triggerSource: AutomationAuthorityTrigger;
 }): Promise<AutopilotLoopResult["rebalance"]["autoExecute"]> {
   return executeAutoRebalanceCycle({
     cycle: input.cycle,
     systemConfig: input.systemConfig,
-    triggerSource: "agent_trigger",
+    triggerSource: input.triggerSource,
   });
 }
 
 async function maybeRunAgentDrivenRebalance(input: {
   row: DaaStoreSystemConfigRow;
   targetPlan: AgentTargetWeightPlan;
+  source: AutopilotEventSource;
   reason: string;
   affectedSymbols?: string[];
 }): Promise<AutopilotLoopResult["rebalance"]> {
@@ -307,6 +318,13 @@ async function maybeRunAgentDrivenRebalance(input: {
     reason: null,
   };
 
+  if (input.source === "cron_cognitive_agent" && !input.targetPlan) {
+    return {
+      ...empty,
+      reason: "定期 Agent 审核未形成目标权重计划，本轮只更新认知状态，不创建调仓周期。",
+    };
+  }
+
   const prerequisites = validateAutopilotPrerequisites(input.row.config);
   if (!prerequisites.ready) {
     return { ...empty, reason: prerequisites.reason };
@@ -319,11 +337,12 @@ async function maybeRunAgentDrivenRebalance(input: {
     input.reason,
     affectedSymbols.length > 0 ? `影响标的: ${affectedSymbols.join(", ")}` : null,
   ].filter(Boolean).join("；");
+  const rebalanceTriggerSource = resolveAutopilotRebalanceTriggerSource(input.source);
 
   const generated = await generateWorkbenchRebalanceCycle({
-    triggerSource: "agent_trigger",
+    triggerSource: rebalanceTriggerSource,
     triggerReason: input.targetPlan
-      ? `Agent 目标权重调仓: ${input.targetPlan.reason}；${input.targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
+      ? `${rebalanceTriggerSource === "scheduled_review" ? "定期 AI 目标权重复盘" : "Agent 目标权重调仓"}: ${input.targetPlan.reason}；${input.targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
       : `Agent 自动驾驶检查${eventContext ? `: ${eventContext}` : ""}`,
     manual: false,
     targetWeightOverrides: input.targetPlan?.targetWeightOverrides,
@@ -346,6 +365,7 @@ async function maybeRunAgentDrivenRebalance(input: {
     autoExecute: await executeAutopilotRebalance({
       cycle,
       systemConfig: input.row.config,
+      triggerSource: resolveAutopilotExecutionTriggerSource(input.source),
     }),
     reason: null,
   };
@@ -438,6 +458,23 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
         autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
         reason: `AI 目标权重计划构建失败：${targetPlanError}`,
       };
+    } else if (input.source === "cron_cognitive_agent") {
+      const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(row.config);
+      targetWeightPool = {
+        attempted: false,
+        enabled: aiTargetWeightPool.enabled,
+        targetPlanAvailable: targetPlan != null,
+        acceptedCount: targetPlan?.acceptedCount ?? 0,
+        skippedCount: targetPlan?.skippedCount ?? 0,
+        attemptedCount: 0,
+        persistedCount: 0,
+        failedCount: 0,
+        minConfidence: aiTargetWeightPool.minConfidence,
+        autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
+        reason: targetPlan
+          ? "定期 Agent 审核使用临时目标权重，只有进入再平衡周期或执行成交后才写入持久目标。"
+          : "定期 Agent 审核未形成目标权重计划。",
+      };
     } else {
       targetWeightPool = await maybePersistAgentTargetWeightPool({ row, targetPlan }).catch((error) => {
         logSwallowed("autopilot.targetWeightPool", error);
@@ -464,6 +501,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     : await maybeRunAgentDrivenRebalance({
       row,
       targetPlan,
+      source: input.source,
       reason: input.reason,
       affectedSymbols: input.affectedSymbols,
     }).catch((error) => {

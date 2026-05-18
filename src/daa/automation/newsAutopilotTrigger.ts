@@ -12,6 +12,15 @@ function buildDailyNewsAutopilotKey(now = new Date(), timeZone = "UTC"): string 
   return `cron_news_autopilot:${dayKey}`;
 }
 
+export function isActionableNewsForAutopilot(input: {
+  impact?: unknown;
+  actionHint?: unknown;
+}): boolean {
+  const impact = String(input.impact || "").trim().toLowerCase();
+  const actionHint = String(input.actionHint || "").trim();
+  return impact === "high" || impact === "medium" || actionHint === "警惕";
+}
+
 export async function runNewsAutopilotDaily(input: {
   req: Request;
   source: NewsAutopilotSource;

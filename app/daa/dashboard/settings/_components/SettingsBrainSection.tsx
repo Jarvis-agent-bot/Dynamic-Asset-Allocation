@@ -50,7 +50,7 @@ export function SettingsBrainSection(props: {
     reviewIntervalDays: 14,
     memoryRecallLimit: 5,
     circuitBreakerThreshold: 3,
-    schedule: "2x_daily" as const,
+    schedule: "daily" as const,
     memoryDecayRate: 0.97,
   };
 
@@ -147,7 +147,7 @@ export function SettingsBrainSection(props: {
             <div>
               <FieldLabel>运行频率</FieldLabel>
               <FormSelect
-                value={agent.schedule ?? "2x_daily"}
+                value={agent.schedule ?? "daily"}
                 onChange={(e) => update({ schedule: e.target.value as DaaCognitiveAgentSchedule })}
               >
                 <option value="2x_daily">每日 2 次（开盘前 + 收盘后）</option>

@@ -31,8 +31,6 @@ import {
   marketRegimeTone,
   riskStatusLabel,
 } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
-// 历史周期已移至交易记录页
-import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndicatorDashboard";
 
 import { QuickConfigPopover } from "./QuickConfigPopover";
 import { MarketContextCard } from "./MarketContextCard";
@@ -454,29 +452,9 @@ export default function RebalancePageClient() {
             </SectionErrorBoundary>
           </div>
 
-          {/* ── 全宽：市场指标仪表盘（美林时钟 + 指标概览 + scope 分析） ── */}
+          {/* ── 全宽：市场指标证据条 ── */}
           {wbModel.bootstrap.marketContext ? (
-            <div className="space-y-3">
-              <MarketEvidenceStrip marketContext={wbModel.bootstrap.marketContext} />
-              <details className="group rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.72)]">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[var(--text)]">
-                  <span>完整市场指标</span>
-                  <span className="text-xs font-normal text-[var(--faint)] group-open:hidden">
-                    展开 {wbModel.bootstrap.marketContext.indicators.length} 项指标
-                  </span>
-                  <span className="hidden text-xs font-normal text-[var(--faint)] group-open:inline">
-                    收起指标面板
-                  </span>
-                </summary>
-                <div className="border-t border-[var(--border)] px-4 py-4">
-                  <SectionErrorBoundary sectionName="市场指标">
-                    <MarketIndicatorDashboard
-                      marketContext={wbModel.bootstrap.marketContext}
-                    />
-                  </SectionErrorBoundary>
-                </div>
-              </details>
-            </div>
+            <MarketEvidenceStrip marketContext={wbModel.bootstrap.marketContext} />
           ) : null}
         </>
       ) : null}
