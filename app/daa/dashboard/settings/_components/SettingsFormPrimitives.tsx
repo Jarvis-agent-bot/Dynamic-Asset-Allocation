@@ -33,7 +33,7 @@ export const MARKET_INDICATOR_ITEMS_: Array<{
   { key: "btcVolatility", label: "比特币波动率 (BTC)", hint: "衡量加密市场核心资产的波动风险。", dependencies: "BTC-USD" },
   { key: "goldSilverRatio", label: "金银比 (GC/SI)", hint: "高位通常意味着宏观资金更偏防御。", dependencies: "GC=F, SI=F" },
   { key: "yieldCurveSpread", label: "收益率曲线斜率 (IEF/SHY)", hint: "观察债券期限结构是否进入更防守的宏观状态。", dependencies: "IEF, SHY" },
-  { key: "usdStrength", label: "美元强弱波动 (UUP)", hint: "衡量美元波动压力，对非美风险资产有辅助解释。", dependencies: "UUP" },
+  { key: "usdStrength", label: "美元波动压力 (UUP)", hint: "衡量美元波动压力，对非美风险资产有辅助解释。", dependencies: "UUP" },
   { key: "creditSpread", label: "信用利差 (HYG/LQD)", hint: "观察信用风险偏好是否收缩。", dependencies: "HYG, LQD" },
   { key: "inflationExpectation", label: "通胀预期 (TIP/IEF)", hint: "观察通胀预期是否影响权益与债券配置语境。", dependencies: "TIP, IEF" },
   { key: "marketBreadth", label: "市场广度 (RSP/SPY)", hint: "观察美股上涨是否由少数头部资产驱动。", dependencies: "RSP, SPY" },

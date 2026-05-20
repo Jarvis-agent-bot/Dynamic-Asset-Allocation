@@ -27,7 +27,6 @@ import {
 } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 
 import { QuickConfigPopover } from "./QuickConfigPopover";
-import { MarketContextCard } from "./MarketContextCard";
 import { ExecutionPanel } from "./ExecutionPanel";
 
 const LazyWhatIfPreview = dynamic<WhatIfPreviewProps>(
@@ -104,7 +103,7 @@ function buildDecisionState(input: {
       tone: "cyan" as DaaSurfaceTone,
       title: "等待生成本轮调仓建议",
       description: "先生成本轮建议，再审阅买卖清单、风控结果和执行影响。",
-      nextStep: "下一步：在右侧执行面板生成本轮建议。",
+      nextStep: "下一步：在下方执行面板生成本轮建议。",
     };
   }
   if (riskCheck?.overallStatus === "block") {
@@ -136,7 +135,7 @@ function buildDecisionState(input: {
       tone: "green" as DaaSurfaceTone,
       title: "已选建议可执行",
       description: "当前选中项已通过执行前检查，可以先执行选中项，保留其余建议继续观察。",
-      nextStep: "下一步：在右侧执行面板执行选中建议。",
+      nextStep: "下一步：在下方执行面板执行选中建议。",
     };
   }
   return {
@@ -252,20 +251,6 @@ export default function RebalancePageClient() {
 
   const rp = wbModel.rebalanceSectionProps;
 
-  const aiSnapshot = useMemo(() => {
-    const cycleSnapshot = rp?.currentCycle?.agentDecisionSnapshot;
-    if (!cycleSnapshot) return null;
-    return {
-      summary: cycleSnapshot.summary ?? undefined,
-      reasoning: cycleSnapshot.reasoning ?? undefined,
-      keyRisks: cycleSnapshot.keyRisks ?? undefined,
-      keyOpportunities: cycleSnapshot.keyOpportunities ?? undefined,
-      cashAdvice: cycleSnapshot.cashAdvice ?? undefined,
-      cashRationale: cycleSnapshot.cashRationale ?? undefined,
-      overallConfidence: cycleSnapshot.overallConfidence ?? undefined,
-    };
-  }, [rp?.currentCycle?.agentDecisionSnapshot]);
-
   const cycle = rp?.currentCycle ?? null;
   const policyDecision = cycle?.policySnapshot?.decision ?? null;
 
@@ -307,72 +292,22 @@ export default function RebalancePageClient() {
             />
           </div>
 
-          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-            {/* 左侧：提案列表 */}
-            <div className="space-y-4">
-              <SectionErrorBoundary sectionName="调仓建议">
-                <RebalanceProposalList
-                  bootstrap={wbModel.bootstrap}
-                  currentCycle={rp.currentCycle}
-                  currentRiskCheck={rp.currentRiskCheck}
-                  busy={rp.busy}
-                  isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
-                  canEditCurrentCycle={rp.canEditCurrentCycle}
-                  buyProposalCount={rp.buyProposalCount}
-                  sellProposalCount={rp.sellProposalCount}
-                  selectedProposalNotional={rp.selectedProposalNotional}
-                  expandedProposalDecisionKeys={rp.expandedProposalDecisionKeys}
-                  setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
-                  onSelectAllProposals={rp.onSelectAllProposals}
-                  onToggleProposal={rp.onToggleProposal}
-                />
-              </SectionErrorBoundary>
-            </div>
-
-            {/* 右侧：审阅与执行 */}
-            <div className="space-y-4 xl:sticky xl:top-20">
-              <ExecutionPanel
-                currentCycle={rp.currentCycle}
-                currentRiskCheck={rp.currentRiskCheck}
-                baseCurrency={wbModel.bootstrap.baseCurrency}
-                busy={rp.busy}
-                selectedProposalCount={rp.selectedProposalCount}
-                selectedProposalNotional={rp.selectedProposalNotional}
-                canExecuteAll={rp.canExecuteAll}
-                canExecuteSelected={rp.canExecuteSelected}
-                isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
-                rebalanceChecklistAllPassed={rp.rebalanceChecklistAllPassed}
-                onGenerateCycle={rp.onGenerateCycle}
-                onOpenExecuteDialog={rp.onOpenExecuteDialog}
-                onCancelCycle={rp.onCancelCycle}
-              />
-
-              <SectionErrorBoundary sectionName="市场环境">
-                <MarketContextCard
-                  marketContext={wbModel.bootstrap.marketContext ?? null}
-                  aiSnapshot={aiSnapshot}
-                />
-              </SectionErrorBoundary>
-
-              <SectionErrorBoundary sectionName="漂移概览">
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
-                      漂移概览 ({driftCount} 项超阈值)
-                    </div>
-                    <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
-                      {driftCount > 0 ? "需要关注" : "目标内"}
-                    </DaaSurfaceStatusPill>
-                  </div>
-                  <LazyDriftBarChart
-                    rows={wbModel.tableProps.rows}
-                    driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
-                    maxItems={8}
-                  />
-                </div>
-              </SectionErrorBoundary>
-
-              {rp.selectedProposalCount > 0 && rp.currentCycle ? (
+          <SectionErrorBoundary sectionName="调仓建议">
+            <RebalanceProposalList
+              bootstrap={wbModel.bootstrap}
+              currentCycle={rp.currentCycle}
+              currentRiskCheck={rp.currentRiskCheck}
+              busy={rp.busy}
+              isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
+              canEditCurrentCycle={rp.canEditCurrentCycle}
+              buyProposalCount={rp.buyProposalCount}
+              sellProposalCount={rp.sellProposalCount}
+              selectedProposalNotional={rp.selectedProposalNotional}
+              expandedProposalDecisionKeys={rp.expandedProposalDecisionKeys}
+              setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
+              onSelectAllProposals={rp.onSelectAllProposals}
+              onToggleProposal={rp.onToggleProposal}
+              sideContent={rp.selectedProposalCount > 0 && rp.currentCycle ? (
                 <SectionErrorBoundary sectionName="执行预览">
                   <LazyWhatIfPreview
                     cycleId={rp.currentCycle.cycleId}
@@ -380,11 +315,48 @@ export default function RebalancePageClient() {
                       .filter((p) => p.selected)
                       .map((p) => `${p.assetKey}-${p.side}`)}
                     baseCurrency={wbModel.bootstrap.baseCurrency}
+                    embedded
                   />
                 </SectionErrorBoundary>
-              ) : null}
-            </div>
-          </div>
+              ) : undefined}
+              afterContent={(
+                <ExecutionPanel
+                  currentCycle={rp.currentCycle}
+                  currentRiskCheck={rp.currentRiskCheck}
+                  baseCurrency={wbModel.bootstrap.baseCurrency}
+                  busy={rp.busy}
+                  selectedProposalCount={rp.selectedProposalCount}
+                  selectedProposalNotional={rp.selectedProposalNotional}
+                  canExecuteAll={rp.canExecuteAll}
+                  canExecuteSelected={rp.canExecuteSelected}
+                  isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
+                  rebalanceChecklistAllPassed={rp.rebalanceChecklistAllPassed}
+                  onGenerateCycle={rp.onGenerateCycle}
+                  onOpenExecuteDialog={rp.onOpenExecuteDialog}
+                  onCancelCycle={rp.onCancelCycle}
+                />
+              )}
+            />
+          </SectionErrorBoundary>
+
+          <SectionErrorBoundary sectionName="漂移概览">
+            <DaaSurfacePanel
+              title="漂移概览"
+              subtitle="按当前持仓与目标权重的偏离查看，超过策略阈值的项目会优先进入调仓审阅。"
+              accent={driftCount > 0 ? "amber" : "green"}
+              action={(
+                <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                  {driftCount > 0 ? `${driftCount} 项超阈值` : "目标内"}
+                </DaaSurfaceStatusPill>
+              )}
+            >
+              <LazyDriftBarChart
+                rows={wbModel.tableProps.rows}
+                driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
+                maxItems={12}
+              />
+            </DaaSurfacePanel>
+          </SectionErrorBoundary>
 
           {/* ── 全宽：完整市场指标 ── */}
           {wbModel.bootstrap.marketContext ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Play, History, AlertTriangle } from "lucide-react";
+import { Play, History, AlertTriangle, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   LineChart,
@@ -37,6 +37,7 @@ import type {
   StrategyLabHistoryItem,
 } from "@/src/daa/modules/strategyLab/strategyLabTypes";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
+import { summarizeStrategyLabWarnings } from "./strategyLabWarningPresentation";
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -286,6 +287,11 @@ export default function StrategyLabPageClient() {
       .map(([, row]) => row);
   }, [result, strategyResults]);
 
+  const warningSummary = useMemo(
+    () => summarizeStrategyLabWarnings(result?.warnings ?? []),
+    [result?.warnings],
+  );
+
   return (
     <div className="space-y-6 lg:space-y-7">
       {/* ---- 页头 ---- */}
@@ -458,16 +464,43 @@ export default function StrategyLabPageClient() {
           {/* -- 结果区域 -- */}
           {result && !running ? (
             <>
-              {/* 警告信息 */}
-              {result.warnings.length > 0 ? (
+              {warningSummary.valuationNotes.length > 0 ? (
+                <DaaSurfaceNoticeBox
+                  tone="slate"
+                  title="估值口径"
+                  icon={<Info className="h-4 w-4" />}
+                >
+                  <ul className="list-inside list-disc space-y-1 text-xs text-[var(--muted)]">
+                    {warningSummary.valuationNotes.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </DaaSurfaceNoticeBox>
+              ) : null}
+
+              {warningSummary.orderNotes.length > 0 || warningSummary.orderWarnings.length > 0 ? (
+                <DaaSurfaceNoticeBox
+                  tone={warningSummary.orderWarnings.length > 0 ? "amber" : "slate"}
+                  title="下单约束"
+                  icon={warningSummary.orderWarnings.length > 0 ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+                >
+                  <ul className="list-inside list-disc space-y-1 text-xs text-[var(--muted)]">
+                    {[...warningSummary.orderWarnings, ...warningSummary.orderNotes].map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </DaaSurfaceNoticeBox>
+              ) : null}
+
+              {warningSummary.otherWarnings.length > 0 ? (
                 <DaaSurfaceNoticeBox
                   tone="amber"
-                  title="回测警告"
+                  title="回测提醒"
                   icon={<AlertTriangle className="h-4 w-4" />}
                 >
                   <ul className="list-inside list-disc space-y-1 text-xs text-[var(--muted)]">
-                    {result.warnings.map((w, i) => (
-                      <li key={i}>{w}</li>
+                    {warningSummary.otherWarnings.map((item) => (
+                      <li key={item}>{item}</li>
                     ))}
                   </ul>
                 </DaaSurfaceNoticeBox>

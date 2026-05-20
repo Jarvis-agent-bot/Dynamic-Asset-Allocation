@@ -36,6 +36,17 @@ export function marketActionByRiskOffScoreLabelZh(scorePct: number | null | unde
   return marketActionLabelZh(classifyMarketActionByRiskOffScore(scorePct));
 }
 
+export function marketIndicatorSignalLabelZh(input: {
+  riskOffScorePct: number | null | undefined;
+}): string {
+  const score = Number.isFinite(input.riskOffScorePct) ? Number(input.riskOffScorePct) : 50;
+  if (score <= 20) return "风险压力很低";
+  if (score <= 40) return "风险压力偏低";
+  if (score < 65) return "风险压力中性";
+  if (score < 80) return "风险压力偏高";
+  return "风险压力很高";
+}
+
 export function marketRegimeActionLabelZh(regime: DaaMarketRegime | string | null | undefined): string {
   if (regime === "risk_on") return "环境偏积极";
   if (regime === "risk_off") return "环境偏谨慎";
@@ -60,7 +71,7 @@ export function marketPressureLabelZh(scorePct: number | null | undefined): stri
 }
 
 export function marketScopeMetricLabelZh(scope: string | null | undefined): string {
-  if (isActionableMarketScope(scope)) return "适合加仓程度";
+  if (isActionableMarketScope(scope)) return "加仓环境";
   if (scope === "macro_defensive") return "避险需求";
   if (scope === "macro_global") return "宏观压力";
   return "风险指数";

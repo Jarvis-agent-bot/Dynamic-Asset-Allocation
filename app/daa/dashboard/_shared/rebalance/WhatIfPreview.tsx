@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { Loader2 } from "lucide-react";
-import { DaaSurfacePanel, DaaSurfaceMiniStat } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { DaaSurfacePanel, DaaSurfaceMiniStat, daaSurfaceSubtlePanelClassName } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatPercent, formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
+import { cn } from "@/lib/utils";
 
 const COLORS = [
   "hsl(188 95% 60%)",
@@ -41,7 +42,32 @@ export type WhatIfPreviewProps = {
   cycleId: string | null;
   selectedProposalKeys: string[];
   baseCurrency: string;
+  embedded?: boolean;
 };
+
+function PreviewFrame(props: {
+  embedded?: boolean;
+  subtitle: string;
+  children: ReactNode;
+}) {
+  if (!props.embedded) {
+    return (
+      <DaaSurfacePanel accent="indigo" title="执行后组合预览" subtitle={props.subtitle}>
+        {props.children}
+      </DaaSurfacePanel>
+    );
+  }
+
+  return (
+    <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-4")}>
+      <div className="mb-3">
+        <div className="text-sm font-semibold text-[var(--text)]">执行后组合预览</div>
+        <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{props.subtitle}</div>
+      </div>
+      {props.children}
+    </div>
+  );
+}
 
 export function WhatIfPreview(props: WhatIfPreviewProps) {
   const [data, setData] = useState<WhatIfData | null>(null);
@@ -72,9 +98,9 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
 
   if (loading || !data) {
     return (
-      <DaaSurfacePanel accent="indigo" title="执行后组合预览" subtitle={loading ? "计算中..." : "暂无数据"}>
+      <PreviewFrame embedded={props.embedded} subtitle={loading ? "计算中..." : "暂无数据"}>
         {loading ? <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" /></div> : null}
-      </DaaSurfacePanel>
+      </PreviewFrame>
     );
   }
 
@@ -99,7 +125,7 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
   );
 
   return (
-    <DaaSurfacePanel accent="indigo" title="执行后组合预览" subtitle={`已选 ${data.selectedCount} 条建议`}>
+    <PreviewFrame embedded={props.embedded} subtitle={`已选 ${data.selectedCount} 条建议`}>
       <div className="flex flex-wrap items-center justify-center gap-6">
         {renderPie(data.before, "当前组合")}
         {renderPie(data.after, "执行后预测")}
@@ -126,6 +152,6 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
           ))}
         </div>
       ) : null}
-    </DaaSurfacePanel>
+    </PreviewFrame>
   );
 }

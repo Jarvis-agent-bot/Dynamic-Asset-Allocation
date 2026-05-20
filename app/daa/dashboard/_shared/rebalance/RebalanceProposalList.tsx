@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type Dispatch, type SetStateAction } from "react";
+import { useMemo, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { AlertCircle, CheckSquare2, TriangleAlert, XSquare } from "lucide-react";
 
 import {
@@ -35,6 +35,8 @@ export function RebalanceProposalList(props: {
   onToggleProposal: (assetKey: string, side: "BUY" | "SELL", selected: boolean) => Promise<void>;
   /** 空状态生成按钮回调 */
   onGenerateCycle?: () => Promise<void>;
+  sideContent?: ReactNode;
+  afterContent?: ReactNode;
 }) {
   // 预计算漂移 map 避免 O(N*M) 查找
   const driftMap = useMemo(() => {
@@ -83,8 +85,11 @@ export function RebalanceProposalList(props: {
         </div>
       )}
     >
-      {props.currentCycle ? (
-        <div className="space-y-4">
+      <div className="space-y-4">
+        <div className={cn(props.sideContent ? "grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_390px]" : "")}>
+          <div className="min-w-0">
+            {props.currentCycle ? (
+              <div className="space-y-4">
           {props.isCurrentCycleTerminal ? (
             <DaaSurfaceNoticeBox tone="slate" icon={<AlertCircle className="h-4 w-4" />} title="当前周期已终态" description="该周期只读；如需继续调仓，请生成新周期。" />
           ) : null}
@@ -261,18 +266,30 @@ export function RebalanceProposalList(props: {
               </div>
             </div>
           )}
+              </div>
+            ) : (
+              <DaaSurfaceEmptyState
+                title="尚无调仓建议"
+                description="生成建议后，可在此审阅并勾选执行。"
+                action={props.onGenerateCycle ? (
+                  <DaaSurfaceActionButton tone="primary" onClick={() => void props.onGenerateCycle!()}>
+                    生成调仓建议
+                  </DaaSurfaceActionButton>
+                ) : undefined}
+              />
+            )}
+          </div>
+          {props.sideContent ? (
+            <div className="min-w-0">{props.sideContent}</div>
+          ) : null}
         </div>
-      ) : (
-        <DaaSurfaceEmptyState
-          title="尚无调仓建议"
-          description="生成建议后，可在此审阅并勾选执行。"
-          action={props.onGenerateCycle ? (
-            <DaaSurfaceActionButton tone="primary" onClick={() => void props.onGenerateCycle!()}>
-              生成调仓建议
-            </DaaSurfaceActionButton>
-          ) : undefined}
-        />
-      )}
+
+        {props.afterContent ? (
+          <div className="border-t border-[rgba(255,255,255,0.06)] pt-4">
+            {props.afterContent}
+          </div>
+        ) : null}
+      </div>
     </DaaSurfacePanel>
   );
 }

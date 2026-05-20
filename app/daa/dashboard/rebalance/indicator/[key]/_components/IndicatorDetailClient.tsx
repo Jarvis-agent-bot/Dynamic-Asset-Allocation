@@ -10,9 +10,10 @@ import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErr
 import { marketRegimeTone } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 import {
   isActionableMarketScope,
-  marketActionByRiskOffScoreLabelZh,
+  marketIndicatorSignalLabelZh,
   marketScopePrimaryLabelZh,
 } from "@/src/daa/modules/marketContext/marketContextLabels";
+import { MARKET_SCOPE_LABEL_ZH_, type DaaMarketIndicatorMeaning } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type { DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 import { IndicatorChart } from "./IndicatorChart";
@@ -24,6 +25,7 @@ type IndicatorSeriesData = {
   category: string;
   scope: string;
   unit: string;
+  meaning?: DaaMarketIndicatorMeaning;
   symbols: string[];
   isRatio: boolean;
   isVolatility: boolean;
@@ -40,6 +42,18 @@ type IndicatorSeriesData = {
     right: { symbol: string; series: Array<{ date: string; value: number }> };
   };
 };
+
+function categoryLabelZh(category: string): string {
+  if (category === "volatility") return "波动压力";
+  if (category === "relative_value") return "相对强弱";
+  if (category === "macro") return "宏观代理";
+  if (category === "sentiment") return "情绪";
+  return category;
+}
+
+function scopeLabelZh(scope: string): string {
+  return MARKET_SCOPE_LABEL_ZH_[scope as keyof typeof MARKET_SCOPE_LABEL_ZH_] || scope;
+}
 
 export default function IndicatorDetailClient(props: { indicatorKey: string }) {
   const router = useRouter();
@@ -119,7 +133,7 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
             <span className="text-xs text-[var(--faint)]">百分位 {snapshot.percentile252?.toFixed(0) ?? "—"}%</span>
             <DaaSurfaceStatusPill tone={marketRegimeTone(snapshot.stance)}>
               {isActionableMarketScope(snapshot.scope)
-                ? marketActionByRiskOffScoreLabelZh(snapshot.riskOffScorePct)
+                ? marketIndicatorSignalLabelZh(snapshot)
                 : marketScopePrimaryLabelZh(snapshot)}
             </DaaSurfaceStatusPill>
           </>
@@ -182,13 +196,38 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
               <div className="space-y-1.5 border-t border-[var(--border)] pt-3 text-xs">
                 <div className="flex justify-between text-[var(--faint)]">
                   <span>影响区域</span>
-                  <span className="text-[var(--muted)]">{snapshot.scope}</span>
+                  <span className="text-[var(--muted)]">{scopeLabelZh(snapshot.scope)}</span>
                 </div>
                 <div className="flex justify-between text-[var(--faint)]">
                   <span>类别</span>
-                  <span className="text-[var(--muted)]">{snapshot.category}</span>
+                  <span className="text-[var(--muted)]">{categoryLabelZh(snapshot.category)}</span>
                 </div>
                 <div className="text-[var(--muted)] leading-5">{snapshot.reason}</div>
+              </div>
+            ) : null}
+
+            {data.meaning ? (
+              <div className="space-y-2 border-t border-[var(--border)] pt-3 text-xs leading-5">
+                <div>
+                  <div className="text-[var(--faint)]">测量对象</div>
+                  <div className="text-[var(--muted)]">{data.meaning.measurement}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--faint)]">高分位代表</div>
+                  <div className="text-[var(--muted)]">{data.meaning.highSignal}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--faint)]">低分位代表</div>
+                  <div className="text-[var(--muted)]">{data.meaning.lowSignal}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--faint)]">中性区间</div>
+                  <div className="text-[var(--muted)]">{data.meaning.neutralSignal}</div>
+                </div>
+                <div>
+                  <div className="text-[var(--faint)]">使用口径</div>
+                  <div className="text-[var(--muted)]">{data.meaning.usage}</div>
+                </div>
               </div>
             ) : null}
 

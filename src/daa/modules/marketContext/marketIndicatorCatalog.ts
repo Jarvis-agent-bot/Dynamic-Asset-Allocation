@@ -13,6 +13,14 @@ export const MARKET_SCOPE_LABEL_ZH_: Record<DaaMarketIndicatorScope, string> = {
   macro_global: "宏观全局",
 };
 
+export type DaaMarketIndicatorMeaning = {
+  measurement: string;
+  highSignal: string;
+  lowSignal: string;
+  neutralSignal: string;
+  usage: string;
+};
+
 export const MARKET_INDICATOR_KEYS_: DaaMarketIndicatorKey[] = [
   "vix",
   "qqq_spy_ratio",
@@ -80,6 +88,7 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
   unit?: string;
   source: string;
   fixedSymbols: string[];
+  meaning: DaaMarketIndicatorMeaning;
 }> = {
   vix: {
     label: "美股恐慌指数 (VIX)",
@@ -87,6 +96,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     scope: "us_equity",
     source: "yfinance:^VIX",
     fixedSymbols: ["^VIX"],
+    meaning: {
+      measurement: "标普 500 隐含波动率，用来观察美股避险情绪和期权定价里的恐慌程度。",
+      highSignal: "分位越高，代表美股波动压力越大，当前更不适合盲目加仓。",
+      lowSignal: "分位越低，代表波动压力较低，对美股风险资产更友好。",
+      neutralSignal: "中性区间表示波动没有形成极端约束，需要结合风格和市场广度判断。",
+      usage: "和 QQQ/SPY、RSP/SPY 一起汇总成美股加仓环境，不单独决定订单。",
+    },
   },
   qqq_spy_ratio: {
     label: "美股成长/大盘比 (QQQ/SPY)",
@@ -95,6 +111,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:QQQ/SPY",
     fixedSymbols: ["QQQ", "SPY"],
+    meaning: {
+      measurement: "QQQ 相对 SPY 的强弱，用来观察科技成长风格相对大盘的进攻性。",
+      highSignal: "分位越高，代表成长风格占优，美股风险偏好更活跃。",
+      lowSignal: "分位越低，代表资金偏向防守或大盘，进攻型加仓环境转弱。",
+      neutralSignal: "中性区间表示风格切换不明显，不能单独解释买入时机。",
+      usage: "和 VIX、市场广度一起看美股环境，避免只因科技股强弱就调仓。",
+    },
   },
   fxi_volatility: {
     label: "港中概波动率 (FXI)",
@@ -103,6 +126,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "%",
     source: "yfinance:FXI",
     fixedSymbols: ["FXI"],
+    meaning: {
+      measurement: "FXI 的 20 日实现波动率，用来观察港股和中概代表资产的波动压力。",
+      highSignal: "分位越高，代表港股 / 中概波动放大，新增仓位容错率下降。",
+      lowSignal: "分位越低，代表波动环境较平稳，对分批加仓更友好。",
+      neutralSignal: "中性区间表示波动没有明显极端，仍需结合 KWEB/FXI 判断风险偏好。",
+      usage: "和 KWEB/FXI 合成港股 / 中概加仓环境，不等同于单只港股买卖信号。",
+    },
   },
   kweb_fxi_ratio: {
     label: "中概互联/大盘比 (KWEB/FXI)",
@@ -111,6 +141,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:KWEB/FXI",
     fixedSymbols: ["KWEB", "FXI"],
+    meaning: {
+      measurement: "KWEB 相对 FXI 的强弱，用来观察中概互联网和成长风格是否强于港中概大盘。",
+      highSignal: "分位越高，代表中概成长风格回暖，风险偏好改善。",
+      lowSignal: "分位越低，代表成长风格承压，港股 / 中概进攻预算应下降。",
+      neutralSignal: "中性区间表示风格优势不明显，需要结合波动率和个股基本面。",
+      usage: "和 FXI 波动率一起看港股 / 中概环境，避免把单一风格强弱当成订单。",
+    },
   },
   btc_eth_ratio: {
     label: "比特币/以太坊比 (BTC/ETH)",
@@ -119,6 +156,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:BTC-USD/ETH-USD",
     fixedSymbols: ["BTC-USD", "ETH-USD"],
+    meaning: {
+      measurement: "BTC 相对 ETH 的强弱，用来观察加密市场在防守 BTC 和进攻型高 beta 资产之间的切换。",
+      highSignal: "分位越高，代表 BTC 相对 ETH 过强，通常意味着加密风险偏好收缩。",
+      lowSignal: "分位越低，代表 ETH 相对 BTC 更强，通常意味着加密风险偏好改善。",
+      neutralSignal: "中性区间表示 BTC 与 ETH 风格切换不明显，不能单独决定加密仓位。",
+      usage: "这是加密内部风格信号；需要和 BTC 波动率合成后再判断加密加仓环境。",
+    },
   },
   btc_volatility: {
     label: "比特币波动率 (BTC)",
@@ -127,6 +171,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "%",
     source: "yfinance:BTC-USD",
     fixedSymbols: ["BTC-USD"],
+    meaning: {
+      measurement: "BTC 的 20 日实现波动率，用来观察加密核心资产的波动压力。",
+      highSignal: "分位越高，代表加密波动压力升高，追加入场需要更高安全边际。",
+      lowSignal: "分位越低，代表波动压力缓和，对分批加仓更友好。",
+      neutralSignal: "中性区间表示波动没有极端约束，仍需结合 BTC/ETH 风格信号。",
+      usage: "它只衡量波动压力，不判断 BTC 方向；需要和 BTC/ETH 合成加密环境。",
+    },
   },
   gold_silver_ratio: {
     label: "金银比 (GC/SI)",
@@ -135,6 +186,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:GC=F/SI=F",
     fixedSymbols: ["GC=F", "SI=F"],
+    meaning: {
+      measurement: "黄金相对白银的强弱，用来观察贵金属内部的防御需求和周期需求。",
+      highSignal: "分位越高，代表黄金相对白银更强，宏观资金更偏防御。",
+      lowSignal: "分位越低，代表白银相对更强，周期需求和风险偏好更积极。",
+      neutralSignal: "中性区间表示贵金属内部没有明显防御倾斜。",
+      usage: "这是宏观背景指标，用来提示是否提高现金、黄金、短债等防御仓。",
+    },
   },
   yield_curve_spread: {
     label: "收益率曲线斜率 (IEF/SHY)",
@@ -143,14 +201,28 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:IEF/SHY",
     fixedSymbols: ["IEF", "SHY"],
+    meaning: {
+      measurement: "IEF 相对 SHY 的代理指标，用来近似观察中短端利率结构和经济周期压力。",
+      highSignal: "分位越高，按当前模型视为曲线环境更健康，衰退压力相对缓和。",
+      lowSignal: "分位越低，按当前模型视为曲线压力升高，宏观防御需求增加。",
+      neutralSignal: "中性区间表示利率结构没有给出强信号。",
+      usage: "这是利率代理，不是官方期限利差；只作为宏观防御背景参与汇总。",
+    },
   },
   usd_strength: {
-    label: "美元强弱波动 (UUP)",
+    label: "美元波动压力 (UUP)",
     category: "macro",
     scope: "macro_global",
     unit: "%",
     source: "yfinance:UUP",
     fixedSymbols: ["UUP"],
+    meaning: {
+      measurement: "UUP 的 20 日实现波动率，用来观察美元波动带来的全球流动性压力。",
+      highSignal: "分位越高，代表美元波动压力升高，新兴市场和风险资产更容易承压。",
+      lowSignal: "分位越低，代表美元波动较平稳，全球风险资产外部压力较小。",
+      neutralSignal: "中性区间表示美元波动没有形成明显宏观约束。",
+      usage: "这是宏观压力指标，不是美元方向预测；和通胀、信用一起看全局环境。",
+    },
   },
   credit_spread: {
     label: "信用利差 (HYG/LQD)",
@@ -159,6 +231,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:HYG/LQD",
     fixedSymbols: ["HYG", "LQD"],
+    meaning: {
+      measurement: "HYG 相对 LQD 的强弱，用来观察高收益信用相对投资级信用的风险偏好。",
+      highSignal: "分位越高，代表高收益债表现较强，信用环境更宽松。",
+      lowSignal: "分位越低，代表高收益信用承压，信用风险和防御需求升高。",
+      neutralSignal: "中性区间表示信用市场没有给出强烈风险偏好变化。",
+      usage: "这是宏观防御指标，用来校验股票和加密信号是否有信用风险背书。",
+    },
   },
   inflation_expectation: {
     label: "通胀预期 (TIP/IEF)",
@@ -167,6 +246,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:TIP/IEF",
     fixedSymbols: ["TIP", "IEF"],
+    meaning: {
+      measurement: "TIP 相对 IEF 的强弱，用来观察通胀保护债相对名义债的压力。",
+      highSignal: "分位越高，代表通胀预期或通胀对冲需求升温，估值和名义债承压。",
+      lowSignal: "分位越低，代表通胀压力相对缓和，名义债和久期资产环境改善。",
+      neutralSignal: "中性区间表示通胀代理没有形成强约束。",
+      usage: "这是宏观全局指标，用来决定是否提高现金和通胀对冲权重。",
+    },
   },
   market_breadth: {
     label: "市场广度 (RSP/SPY)",
@@ -175,6 +261,13 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     unit: "x",
     source: "yfinance:RSP/SPY",
     fixedSymbols: ["RSP", "SPY"],
+    meaning: {
+      measurement: "RSP 相对 SPY 的强弱，用来观察美股上涨是否由更广泛股票共同参与。",
+      highSignal: "分位越高，代表市场广度更健康，美股风险偏好更扎实。",
+      lowSignal: "分位越低，代表涨幅集中在少数权重股，市场结构更脆弱。",
+      neutralSignal: "中性区间表示广度没有给出明显风险偏好信号。",
+      usage: "和 VIX、QQQ/SPY 一起看美股环境，避免被头部权重股单独误导。",
+    },
   },
 };
 

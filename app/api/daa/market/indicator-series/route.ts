@@ -76,6 +76,7 @@ export async function GET(req: Request) {
       category: meta.category,
       scope: meta.scope,
       unit: meta.unit || "",
+      meaning: meta.meaning,
       symbols,
       isRatio,
       isVolatility,

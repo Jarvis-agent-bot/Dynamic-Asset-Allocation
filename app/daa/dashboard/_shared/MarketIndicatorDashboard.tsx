@@ -11,9 +11,10 @@ import { SkeletonIndicatorGrid } from "@/app/daa/dashboard/_components/SkeletonP
 import { cn } from "@/lib/utils";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { MARKET_INDICATOR_META_CATALOG_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import {
   isActionableMarketScope,
-  marketActionByRiskOffScoreLabelZh,
+  marketIndicatorSignalLabelZh,
   marketRegimeEnvironmentLabelZh,
   marketScopeMeaningZh,
   marketScopeMetricLabelZh,
@@ -62,7 +63,7 @@ function riskScoreTone(scorePct: number | null | undefined) {
 
 function indicatorSignalLabel(indicator: DaaMarketContext["indicators"][number]) {
   if (isActionableMarketScope(indicator.scope)) {
-    return marketActionByRiskOffScoreLabelZh(indicator.riskOffScorePct);
+    return marketIndicatorSignalLabelZh(indicator);
   }
   return marketScopePrimaryLabelZh(indicator);
 }
@@ -186,67 +187,81 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
       {/* Section 2: 指标概览 */}
       {indicators.length > 0 ? (
         <div>
-          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">指标概览</div>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">指标概览</div>
+            <div className="max-w-[520px] text-[11px] leading-5 text-[var(--muted)]">
+              单项指标解释风险来源；下方市场区域才把同一市场的指标合成为加仓环境。
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {indicators.map((ind) => (
-              <div
-                key={ind.key}
-                role="button"
-                tabIndex={0}
-                onClick={() => window.location.href = `/daa/dashboard/rebalance/indicator/${encodeURIComponent(ind.key)}`}
-                onKeyDown={(e) => { if (e.key === "Enter") window.location.href = `/daa/dashboard/rebalance/indicator/${encodeURIComponent(ind.key)}`; }}
-                className={cn(daaSurfaceSubtlePanelClassName, "cursor-pointer px-4 py-3.5 transition-colors hover:border-[var(--primary)]/30")}
-              >
-                {/* 顶部: label + scope */}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-[var(--text)]">{ind.label}</span>
-                  <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] text-[var(--faint)]">
-                    {scopeLabelZh(ind.scope)}
-                  </span>
-                </div>
-
-                {/* 中间: raw value + sparkline + percentile */}
-                <div className="mt-2.5 flex items-center justify-between gap-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-[var(--font-mono)] text-lg text-[var(--text)]">
-                      {ind.rawValue !== null && ind.rawValue !== undefined ? ind.rawValue.toFixed(2) : "-"}
+            {indicators.map((ind) => {
+              const meaning = MARKET_INDICATOR_META_CATALOG_[ind.key]?.meaning;
+              return (
+                <div
+                  key={ind.key}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => window.location.href = `/daa/dashboard/rebalance/indicator/${encodeURIComponent(ind.key)}`}
+                  onKeyDown={(e) => { if (e.key === "Enter") window.location.href = `/daa/dashboard/rebalance/indicator/${encodeURIComponent(ind.key)}`; }}
+                  className={cn(daaSurfaceSubtlePanelClassName, "cursor-pointer px-4 py-3.5 transition-colors hover:border-[var(--primary)]/30")}
+                >
+                  {/* 顶部: label + scope */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-[var(--text)]">{ind.label}</span>
+                    <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] text-[var(--faint)]">
+                      {scopeLabelZh(ind.scope)}
                     </span>
-                    {ind.unit ? <span className="text-xs text-[var(--faint)]">{ind.unit}</span> : null}
                   </div>
-                  {sparklines[ind.key] && (
-                    <Sparkline
-                      data={sparklines[ind.key]}
-                      width={56}
-                      height={20}
-                      color={sparklineColor(sparklines[ind.key])}
-                    />
-                  )}
-                </div>
-                {ind.percentile252 !== null && ind.percentile252 !== undefined ? (
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between text-[10px] text-[var(--faint)]">
-                      <span>252 日分位</span>
-                      <span>{ind.percentile252.toFixed(0)}%</span>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
-                      <div
-                        className={cn("h-full rounded-full transition-all", percentileBarColor(ind.percentile252))}
-                        style={{ width: `${Math.min(100, Math.max(0, ind.percentile252))}%` }}
-                      />
-                    </div>
-                  </div>
-                ) : null}
 
-                {/* 底部: trend + stance */}
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  {trendArrow(ind.trend7dPct, "7d")}
-                  {trendArrow(ind.trend30dPct, "30d")}
-                  <DaaSurfaceStatusPill tone={riskScoreTone(ind.riskOffScorePct)}>
-                    {indicatorSignalLabel(ind)}
-                  </DaaSurfaceStatusPill>
+                  {meaning ? (
+                    <div className="mt-2 min-h-[40px] text-xs leading-5 text-[var(--muted)]">
+                      {meaning.measurement}
+                    </div>
+                  ) : null}
+
+                  {/* 中间: raw value + sparkline + percentile */}
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-[var(--font-mono)] text-lg text-[var(--text)]">
+                        {ind.rawValue !== null && ind.rawValue !== undefined ? ind.rawValue.toFixed(2) : "-"}
+                      </span>
+                      {ind.unit ? <span className="text-xs text-[var(--faint)]">{ind.unit}</span> : null}
+                    </div>
+                    {sparklines[ind.key] && (
+                      <Sparkline
+                        data={sparklines[ind.key]}
+                        width={56}
+                        height={20}
+                        color={sparklineColor(sparklines[ind.key])}
+                      />
+                    )}
+                  </div>
+                  {ind.percentile252 !== null && ind.percentile252 !== undefined ? (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-[10px] text-[var(--faint)]">
+                        <span>252 日分位</span>
+                        <span>{ind.percentile252.toFixed(0)}%</span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+                        <div
+                          className={cn("h-full rounded-full transition-all", percentileBarColor(ind.percentile252))}
+                          style={{ width: `${Math.min(100, Math.max(0, ind.percentile252))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* 底部: trend + signal */}
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    {trendArrow(ind.trend7dPct, "7d")}
+                    {trendArrow(ind.trend30dPct, "30d")}
+                    <DaaSurfaceStatusPill tone={riskScoreTone(ind.riskOffScorePct)}>
+                      {indicatorSignalLabel(ind)}
+                    </DaaSurfaceStatusPill>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}
