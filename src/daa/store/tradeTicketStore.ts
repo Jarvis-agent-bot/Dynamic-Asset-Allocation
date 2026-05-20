@@ -854,6 +854,7 @@ export async function listDaaTradeTickets(opts: {
   basketId?: string;
   cycleId?: string;
   limit?: number;
+  symbol?: string;
   status?: DaaStoreTradeTicketStatus;
   source?: DaaStoreTradeTicketSource;
 } = {}): Promise<DaaStoreTradeTicket[]> {
@@ -879,6 +880,10 @@ export async function listDaaTradeTickets(opts: {
     if (opts.cycleId) {
       params.push(normalizeText(opts.cycleId));
       where.push(`cycle_id = $${params.length}`);
+    }
+    if (opts.symbol) {
+      params.push(normalizeText(opts.symbol).toUpperCase());
+      where.push(`UPPER(symbol) = $${params.length}`);
     }
 
     params.push(limit);

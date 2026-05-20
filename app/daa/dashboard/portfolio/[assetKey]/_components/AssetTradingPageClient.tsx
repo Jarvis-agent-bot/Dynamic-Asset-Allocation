@@ -1,54 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
-import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
+import { getApiErrorMessage } from "@/src/daa/api/client";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { AssetKlineChart, type KlineTradeMarker } from "@/app/daa/dashboard/_shared/AssetKlineChart";
+import { AssetKlineChart } from "@/app/daa/dashboard/_shared/AssetKlineChart";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
+import { buildManualExecutionInput } from "@/app/daa/dashboard/_hooks/dashboard/assetActionCommands";
+import { getAssetDetailReadModel } from "@/src/daa/modules/read/readApi";
+import { executeWorkbenchOrder, previewWorkbenchExecution } from "@/src/daa/modules/workbench/workbenchApi";
+import type { AssetDetailReadModel } from "@/src/daa/modules/read/readModels";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { AssetInfoBar } from "./AssetInfoBar";
 import { AssetDetailTabs } from "./AssetDetailTabs";
 import { InlineTradePanel } from "./InlineTradePanel";
 import { AssetPositionPanel } from "./AssetPositionPanel";
-
-/** 从交易记录 API 加载该标的的历史交易，用于 K 线标记 */
-function useTradeMarkers(symbol: string): KlineTradeMarker[] {
-  const [markers, setMarkers] = useState<KlineTradeMarker[]>([]);
-
-  useEffect(() => {
-    if (!symbol) return;
-    fetch("/api/daa/read/trades")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        const orders: Array<{
-          symbol: string;
-          side: "BUY" | "SELL";
-          qty: number;
-          price: number;
-          executedAt: string;
-        }> = j?.data?.records?.orders ?? [];
-
-        const filtered = orders
-          .filter((o) => o.symbol === symbol && o.executedAt)
-          .map((o) => ({
-            date: o.executedAt.slice(0, 10),
-            side: o.side,
-            qty: o.qty,
-            price: o.price,
-          }));
-        setMarkers(filtered);
-      })
-      .catch(() => {});
-  }, [symbol]);
-
-  return markers;
-}
 
 function priceStatusTone(status: string) {
   if (status === "fresh") return "green" as const;
@@ -106,17 +78,41 @@ function AssetTradeContextPanel(props: {
 
 export default function AssetTradingPageClient(props: { assetKey: string }) {
   const router = useRouter();
-  const wbModel = useDashboardPageModel();
+  const [detail, setDetail] = useState<AssetDetailReadModel | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
 
-  const row = useMemo(() => {
-    return wbModel.tableProps.rows.find((r) => r.assetKey === props.assetKey) ?? null;
-  }, [wbModel.tableProps.rows, props.assetKey]);
+  const loadDetail = useCallback(async (fresh = false) => {
+    if (fresh) setRefreshing(true);
+    else {
+      setLoading(true);
+      setDetail(null);
+    }
+    setError("");
+    try {
+      setDetail(await getAssetDetailReadModel({
+        assetKey: props.assetKey,
+        fresh,
+      }));
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      if (fresh) setRefreshing(false);
+      else setLoading(false);
+    }
+  }, [props.assetKey]);
 
-  const baseCurrency = wbModel.bootstrap?.baseCurrency || "USD";
-  const slippageBps = wbModel.bootstrap?.execution?.slippageBps ?? 0;
+  useEffect(() => {
+    void loadDetail(false);
+  }, [loadDetail]);
 
-  // 交易标记
-  const tradeMarkers = useTradeMarkers(row?.symbol ?? "");
+  const row = detail?.row ?? null;
+  const baseCurrency = detail?.baseCurrency || "USD";
+  const slippageBps = detail?.execution.slippageBps ?? 0;
+  const availableCashValue = Math.max(0, (detail?.account.cash ?? 0) - (detail?.account.frozenCash ?? 0));
+  const tradeMarkers = detail?.tradeMarkers ?? [];
   const sparklineSymbols = useMemo(() => row ? [row.yfinanceSymbol || row.symbol] : [], [row]);
   const sparklines = useSparklines(sparklineSymbols);
   const sparkData = row ? (sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null) : null;
@@ -127,12 +123,55 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
     return row.costBasis / row.holdingQty;
   }, [row]);
 
-  // 加载中
-  if (wbModel.loading && !wbModel.bootstrap) {
+  const handlePreviewOrder = useCallback((payload: {
+    assetKey: string;
+    side: "BUY" | "SELL";
+    qty?: number;
+    notional?: number;
+  }) => previewWorkbenchExecution(payload), []);
+
+  const handleSubmitOrder = useCallback(async (preview: Awaited<ReturnType<typeof previewWorkbenchExecution>>) => {
+    if (orderSubmitting) return;
+    setOrderSubmitting(true);
+    try {
+      const result = await executeWorkbenchOrder(buildManualExecutionInput(preview));
+      if (result.result.status === "executed" || result.result.status === "submitted" || result.result.status === "partially_filled") {
+        toast.success(result.result.status === "executed" ? `${preview.symbol} 执行成功` : `${preview.symbol} 订单已提交`);
+      } else {
+        toast.error(result.result.rejectMessage || `${preview.symbol} 执行失败`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "执行失败");
+    } finally {
+      setOrderSubmitting(false);
+    }
+  }, [orderSubmitting]);
+
+  const tradeCallbacks = useMemo(() => ({
+    onPreview: handlePreviewOrder,
+    onSubmit: handleSubmitOrder,
+  }), [handlePreviewOrder, handleSubmitOrder]);
+
+  if (loading && !detail) {
     return (
       <div className="flex items-center justify-center gap-2 py-20">
         <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />
-        <span className="text-sm text-[var(--muted)]">加载组合数据…</span>
+        <span className="text-sm text-[var(--muted)]">加载资产数据…</span>
+      </div>
+    );
+  }
+
+  if (error && !detail) {
+    return (
+      <div className="space-y-4 py-12 text-center">
+        <div className="text-sm text-red-300">{error}</div>
+        <button
+          type="button"
+          onClick={() => void loadDetail(true)}
+          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+        >
+          重新加载
+        </button>
       </div>
     );
   }
@@ -154,11 +193,6 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
       </div>
     );
   }
-
-  const tradeCallbacks = {
-    onPreview: wbModel.dialogProps.onPreview,
-    onSubmit: wbModel.dialogProps.onSubmitOrder,
-  };
 
   return (
     <div className="space-y-4">
@@ -185,11 +219,11 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
           <SectionErrorBoundary sectionName="交易面板">
             <InlineTradePanel
               row={row}
-              availableCash={wbModel.availableCashValue}
+              availableCash={availableCashValue}
               slippageBps={slippageBps}
-              submitting={wbModel.dialogProps.orderSubmitting}
+              submitting={orderSubmitting || refreshing}
               callbacks={tradeCallbacks}
-              onOrderCompleted={() => void wbModel.loadBootstrap(true)}
+              onOrderCompleted={() => void loadDetail(true)}
             />
           </SectionErrorBoundary>
 

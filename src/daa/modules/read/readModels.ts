@@ -5,6 +5,7 @@ import type {
   DaaStoreEquitySnapshot,
 } from "@/src/daa/store/daaStorePg";
 import type {
+  AssetUniverseView,
   RebalanceCycle,
   WorkbenchBootstrap,
   WorkbenchRebalanceCycleReport,
@@ -30,6 +31,23 @@ export type TradesReadModel = {
   records: WorkbenchTradeRecords;
   reports: WorkbenchRebalanceCycleReport[];
   ledgerMeta: DaaCurrentLedgerMeta;
+  loadedAt: string;
+};
+
+export type AssetDetailTradeMarker = {
+  date: string;
+  side: "BUY" | "SELL";
+  qty: number;
+  price: number;
+};
+
+export type AssetDetailReadModel = {
+  assetKey: string;
+  row: AssetUniverseView | null;
+  baseCurrency: string;
+  account: Pick<WorkbenchBootstrap["account"], "cash" | "investableCash" | "frozenCash" | "totalEquity" | "valuation">;
+  execution: Pick<WorkbenchBootstrap["execution"], "feeRateBps" | "slippageBps" | "minNotional">;
+  tradeMarkers: AssetDetailTradeMarker[];
   loadedAt: string;
 };
 

@@ -47,6 +47,7 @@ describe("daa/adminAuth require* v0", () => {
 
     expect(denied).not.toBe(null);
     expect(denied!.status).toBe(401);
+    expect(mocks.getDaaAuthContextFromRequest).toHaveBeenCalledWith(req, { touch: false });
   });
 
   it("allows viewer role via local session", async () => {
@@ -58,6 +59,7 @@ describe("daa/adminAuth require* v0", () => {
 
     const req = new Request("http://localhost/api/daa/admin/users");
     expect(await requireDaaAdminViewerAuth(req)).toBe(null);
+    expect(mocks.getDaaAuthContextFromRequest).toHaveBeenCalledWith(req, { touch: false });
   });
 
   it("denies viewer-only user from editor endpoints", async () => {

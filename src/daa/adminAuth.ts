@@ -35,7 +35,7 @@ function roleSatisfied(required: DaaAdminRole, rolesRaw: unknown): boolean {
 async function requireDaaAdminRole(req: Request, role: DaaAdminRole): Promise<NextResponse | null> {
   let ctx: Awaited<ReturnType<typeof getDaaAuthContextFromRequest>>;
   try {
-    ctx = await getDaaAuthContextFromRequest(req);
+    ctx = await getDaaAuthContextFromRequest(req, { touch: false });
   } catch {
     return authUnavailable();
   }

@@ -1,6 +1,7 @@
 import { requestData } from "@/src/daa/api/client";
 
 import type {
+  AssetDetailReadModel,
   TradesReadModel,
   WorkbenchReadModel,
 } from "./readModels";
@@ -46,5 +47,15 @@ export async function getTradesReadModel(input: {
     symbol: input.symbol || null,
     side: input.side || null,
     status: input.status || null,
+  });
+}
+
+export async function getAssetDetailReadModel(input: {
+  assetKey: string;
+  fresh?: boolean;
+}): Promise<AssetDetailReadModel> {
+  return requestReadModel<AssetDetailReadModel>("/api/daa/read/asset-detail", {
+    assetKey: input.assetKey,
+    fresh: input.fresh == null ? null : (input.fresh ? "1" : "0"),
   });
 }

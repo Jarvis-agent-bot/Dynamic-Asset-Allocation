@@ -75,11 +75,28 @@ function errorToResponse(error: unknown): Response {
   return fail("INTERNAL_ERROR", "internal server error", { status: 500 });
 }
 
-export async function withApiHandler(handler: () => Promise<Response>): Promise<Response> {
+function setApiTimingHeaders(response: Response, startedAt: number): Response {
+  const durationMs = Math.max(0, Date.now() - startedAt);
+  const durationText = durationMs.toFixed(1);
   try {
-    return await handler();
+    const existingServerTiming = response.headers.get("server-timing");
+    response.headers.set(
+      "Server-Timing",
+      existingServerTiming ? `${existingServerTiming}, daa;dur=${durationText}` : `daa;dur=${durationText}`,
+    );
+    response.headers.set("X-DAA-Route-Time-Ms", durationText);
+  } catch (err) {
+    logSwallowed("routeHelpers.setApiTimingHeaders", err);
+  }
+  return response;
+}
+
+export async function withApiHandler(handler: () => Promise<Response>): Promise<Response> {
+  const startedAt = Date.now();
+  try {
+    return setApiTimingHeaders(await handler(), startedAt);
   } catch (error) {
-    return errorToResponse(error);
+    return setApiTimingHeaders(errorToResponse(error), startedAt);
   }
 }
 

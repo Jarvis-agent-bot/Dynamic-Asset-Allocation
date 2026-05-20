@@ -398,6 +398,9 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_cycle_created_desc
             ON daa_trade_tickets(owner_account_id, cycle_id, created_at DESC);
 
+          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_symbol_created_desc
+            ON daa_trade_tickets(owner_account_id, UPPER(symbol), created_at DESC);
+
           CREATE TABLE IF NOT EXISTS daa_broker_account_state (
             owner_account_id TEXT NOT NULL DEFAULT 'default',
             broker_kind TEXT NOT NULL,
@@ -675,6 +678,9 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc ON daa_trade_tickets(owner_account_id, cycle_id, created_at DESC)",
         );
+        await query(
+          "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_symbol_created_desc ON daa_trade_tickets(owner_account_id, UPPER(symbol), created_at DESC)",
+        );
         await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_broker_order_id ON daa_trade_tickets(owner_account_id, broker_order_id)");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN basket_id DROP NOT NULL");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN asset_key DROP NOT NULL");
@@ -876,6 +882,8 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_symbol_asof_desc
           ON daa_market_price_history_v1(symbol, as_of_ts DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_upper_symbol_date_asof_desc
+          ON daa_market_price_history_v1(UPPER(symbol), (as_of_ts::date), as_of_ts DESC);
 
         CREATE TABLE IF NOT EXISTS daa_fx_rate_history_v1 (
           provider TEXT NOT NULL,

@@ -4,6 +4,7 @@ import {
   listDaaEquitySnapshots,
   type DaaStoreEquitySnapshot,
 } from "@/src/daa/store/daaStorePg";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import {
   buildWorkbenchBootstrapBundle,
 } from "@/src/daa/modules/workbench/workbenchReadService";
@@ -19,6 +20,7 @@ import type {
   WorkbenchReadModel,
   WorkbenchSignal,
 } from "./readModels";
+import { getOrSetReadModelMemoryCache } from "./readModelMemoryCache";
 
 function isAfterLedgerStart(ts: string | null | undefined, ledgerStartTs: string | null): boolean {
   if (!ledgerStartTs) return true;
@@ -325,7 +327,7 @@ function buildEquityDelta(input: {
   return { dayChange, dayChangePct, weekChange, weekChangePct };
 }
 
-export async function buildWorkbenchReadModel(input: {
+async function buildWorkbenchReadModelUncached(input: {
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
 } = {}): Promise<WorkbenchReadModel> {
@@ -373,4 +375,19 @@ export async function buildWorkbenchReadModel(input: {
     notificationStatus,
     loadedAt: new Date().toISOString(),
   };
+}
+
+export async function buildWorkbenchReadModel(input: {
+  syncPrices?: boolean;
+  autoRiskCycle?: boolean;
+} = {}): Promise<WorkbenchReadModel> {
+  if (input.syncPrices === true || input.autoRiskCycle === true) {
+    return buildWorkbenchReadModelUncached(input);
+  }
+  const scopeId = getDaaAccountScopeId();
+  return getOrSetReadModelMemoryCache(
+    `workbench-read:${scopeId}`,
+    5000,
+    () => buildWorkbenchReadModelUncached(input),
+  );
 }

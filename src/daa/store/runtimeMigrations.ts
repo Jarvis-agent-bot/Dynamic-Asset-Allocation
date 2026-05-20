@@ -563,6 +563,23 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260408_asset_detail_perf_indexes",
+    async apply(query) {
+      if (await tableExists(query, "daa_market_price_history_v1")) {
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_upper_symbol_date_asof_desc
+          ON daa_market_price_history_v1 (UPPER(symbol), (as_of_ts::date), as_of_ts DESC)
+        `);
+      }
+      if (await tableExists(query, "daa_trade_tickets")) {
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_symbol_created_desc
+          ON daa_trade_tickets (owner_account_id, UPPER(symbol), created_at DESC)
+        `);
+      }
+    },
+  },
 
   // ── Cognitive Agent OS ──
 
