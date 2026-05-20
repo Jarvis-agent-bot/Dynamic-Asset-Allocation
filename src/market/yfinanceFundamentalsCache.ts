@@ -15,7 +15,8 @@ export type YfinanceFundamentalsCacheStatus =
   | "hit"
   | "miss"
   | "partial_miss"
-  | "refresh_failed_stale";
+  | "refresh_failed_stale"
+  | "quote_batch";
 
 function isSnapshot(value: unknown): value is YfinanceFundamentalSnapshot {
   return Boolean(value)

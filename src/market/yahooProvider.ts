@@ -630,6 +630,24 @@ export function createYahooProvider(opts: YahooProviderOptions = {}): MarketData
       });
     },
 
+    async fetchQuoteBatch(params) {
+      const symbols = [...new Set(params.symbols.map((item) => item.trim().toUpperCase()).filter(Boolean))];
+      const candidates = buildQueryHostUrls("/v7/finance/quote");
+      for (const candidate of candidates) {
+        candidate.searchParams.set("symbols", symbols.join(","));
+      }
+      return requestJsonWithFallback({
+        candidates,
+        context: {
+          resource: "yahoo.quote",
+          subjectKey: symbols.join(","),
+          ...params.context,
+        },
+        timeoutMs: params.timeoutMs ?? DEFAULT_TIMEOUT_MS_,
+        withCrumb: true,
+      });
+    },
+
     async fetchSearch(params) {
       const query = params.query.trim();
       const candidates = buildQueryHostUrls("/v1/finance/search");

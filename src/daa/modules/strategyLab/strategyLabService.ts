@@ -69,6 +69,12 @@ function inferInstrumentCurrency(marketRaw: string): string {
   const market = String(marketRaw || "").trim().toUpperCase();
   if (market === "HK") return "HKD";
   if (market === "CN") return "CNY";
+  if (market === "KR") return "KRW";
+  if (market === "TW") return "TWD";
+  if (market === "JP") return "JPY";
+  if (market === "SG") return "SGD";
+  if (market === "UK") return "GBP";
+  if (market === "EU") return "EUR";
   return "USD";
 }
 
@@ -251,6 +257,8 @@ async function fetchPriceHistory(
       }
       try {
         const result = await fetchPriceSeriesWithCache(asset.yfinanceSymbol, startDate, {
+          market: asset.market,
+          currency: asset.currency,
           minDbDays: 2,
           timeoutMs: 8000,
         });
@@ -306,6 +314,8 @@ async function fetchFxRateHistoryToBase(
   const baseToLocalSymbol = fxYahooSymbol(baseCurrency, localCurrency);
   try {
     const result = await fetchPriceSeriesWithCache(baseToLocalSymbol, startDate, {
+      market: "FX",
+      currency: localCurrency,
       minDbDays: 2,
       timeoutMs: 8000,
     });
@@ -325,6 +335,8 @@ async function fetchFxRateHistoryToBase(
   const localToBaseSymbol = fxYahooSymbol(localCurrency, baseCurrency);
   try {
     const result = await fetchPriceSeriesWithCache(localToBaseSymbol, startDate, {
+      market: "FX",
+      currency: baseCurrency,
       minDbDays: 2,
       timeoutMs: 8000,
     });
@@ -377,6 +389,8 @@ async function fetchBenchmarkHistory(
   }
   try {
     const result = await fetchPriceSeriesWithCache(resolved.yfinanceSymbol, startDate, {
+      market: resolved.market,
+      currency: resolved.currency,
       minDbDays: 2,
       timeoutMs: 8000,
     });

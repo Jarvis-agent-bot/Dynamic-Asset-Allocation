@@ -53,6 +53,11 @@ export type MarketDataProvider = {
     timeoutMs?: number;
     context?: Omit<MarketDataRequestContext, "resource" | "subjectKey">;
   }): Promise<MarketDataJsonResult>;
+  fetchQuoteBatch(params: {
+    symbols: readonly string[];
+    timeoutMs?: number;
+    context?: Omit<MarketDataRequestContext, "resource" | "subjectKey">;
+  }): Promise<MarketDataJsonResult>;
   fetchSearch(params: {
     query: string;
     quotesCount?: number;

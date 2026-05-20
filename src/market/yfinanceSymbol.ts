@@ -19,6 +19,21 @@ export function toYfinanceSymbolByMarket(symbolRaw: string, marketRaw: string): 
     if (/^\d{6}$/.test(symbol)) return symbol.startsWith("6") ? `${symbol}.SS` : `${symbol}.SZ`;
   }
 
+  if (market === "KR") {
+    if (symbol.endsWith(".KS") || symbol.endsWith(".KQ")) return symbol;
+    if (/^\d{6}$/.test(symbol)) return `${symbol}.KS`;
+  }
+
+  if (market === "TW") {
+    if (symbol.endsWith(".TW") || symbol.endsWith(".TWO")) return symbol;
+    if (/^\d{4}$/.test(symbol)) return `${symbol}.TW`;
+  }
+
+  if (market === "JP") {
+    if (symbol.endsWith(".T")) return symbol;
+    if (/^\d{4}$/.test(symbol)) return `${symbol}.T`;
+  }
+
   if (market === "COMMODITY") return symbol;
 
   return normalizeYfinanceSymbol(symbol);

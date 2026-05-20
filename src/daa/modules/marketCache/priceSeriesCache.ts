@@ -19,6 +19,11 @@ import { getYahooProvider } from "@/src/market/yahooProvider";
 
 export type CachedPricePoint = { date: string; close: number };
 
+type PriceSeriesWriteScope = {
+  market: string;
+  currency: string;
+};
+
 type PriceSeriesCacheResult = {
   symbol: string;
   data: CachedPricePoint[];
@@ -27,6 +32,10 @@ type PriceSeriesCacheResult = {
 };
 
 type PriceSeriesCacheOptions = {
+  /** 当前系统里的资产市场，用于历史表主键和 fallback 口径 */
+  market?: string;
+  /** 当前系统里的资产报价币种，用于历史表和 fallback 口径 */
+  currency?: string;
   /** 认为 DB 数据"充足"的最小天数（默认 100） */
   minDbDays?: number;
   /** 认为 DB 数据"新鲜"的最大天数（默认 2） */
@@ -52,6 +61,8 @@ export async function fetchPriceSeriesWithCache(
 ): Promise<PriceSeriesCacheResult> {
   const normalized = normalizeYfinanceSymbol(symbol);
   const normalizedUpper = normalized.toUpperCase();
+  const marketHint = normalizeUpper(opts.market);
+  const currencyHint = normalizeUpper(opts.currency);
   const minDbDays = opts.minDbDays ?? DEFAULT_MIN_DB_DAYS;
   const maxStaleDays = opts.maxStaleDays ?? DEFAULT_MAX_STALE_DAYS;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -59,7 +70,7 @@ export async function fetchPriceSeriesWithCache(
   // Step 1: 从 DB 查缓存
   let dbData: CachedPricePoint[] = [];
   try {
-    dbData = await queryPriceHistory(normalizedUpper, start);
+    dbData = await queryPriceHistory(normalizedUpper, start, marketHint);
   } catch (e) {
     logSwallowed("priceSeriesCache.dbRead", e);
   }
@@ -78,7 +89,11 @@ export async function fetchPriceSeriesWithCache(
   // Step 3: 从 Yahoo Finance 补数据
   try {
     const fetchStart = latestDbDate && dbData.length >= minDbDays ? latestDbDate : start;
-    const freshData = await fetchFromYahoo(normalized, fetchStart, timeoutMs);
+    const fresh = await fetchFromYahoo(normalized, fetchStart, timeoutMs, {
+      market: marketHint,
+      currency: currencyHint,
+    });
+    const freshData = fresh.data;
 
     if (freshData.length === 0 && dbData.length > 0) {
       return { symbol, data: dbData, source: "db" };
@@ -86,7 +101,7 @@ export async function fetchPriceSeriesWithCache(
 
     // Step 4: 新数据异步写回 DB（fire-and-forget）
     if (freshData.length > 0) {
-      void writePriceHistory(normalizedUpper, freshData).catch((e) => logSwallowed("priceSeriesCache.dbWrite", e));
+      void writePriceHistory(normalizedUpper, freshData, fresh.scope).catch((e) => logSwallowed("priceSeriesCache.dbWrite", e));
     }
 
     if (dbData.length === 0) {
@@ -150,22 +165,72 @@ export async function fetchSparklinesBatch(
 
 // ─── Internal ────────────────────────────────────────────────
 
-async function queryPriceHistory(symbolUpper: string, start: string): Promise<CachedPricePoint[]> {
+function normalizeUpper(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+async function queryPriceHistory(symbolUpper: string, start: string, market?: string): Promise<CachedPricePoint[]> {
   const pool = daaPgPool();
+  const params: unknown[] = [symbolUpper, start];
+  const marketFilter = market ? ` AND market = $${params.push(market)}` : "";
   const result = await pool.query(
     `SELECT DISTINCT ON (as_of_ts::date)
        as_of_ts::date::text AS date, price
      FROM daa_market_price_history_v1
-     WHERE UPPER(symbol) = $1 AND as_of_ts >= $2::date
+     WHERE UPPER(symbol) = $1 AND as_of_ts >= $2::date${marketFilter}
      ORDER BY as_of_ts::date, as_of_ts DESC`,
-    [symbolUpper, start],
+    params,
   );
   return result.rows
     .filter((r: Record<string, unknown>) => r.price != null && Number.isFinite(Number(r.price)))
     .map((r: Record<string, unknown>) => ({ date: String(r.date).slice(0, 10), close: Number(r.price) }));
 }
 
-async function fetchFromYahoo(normalizedSymbol: string, start: string, timeoutMs: number): Promise<CachedPricePoint[]> {
+function resolveMarketFromYahooMeta(input: {
+  symbol: string;
+  marketHint?: string;
+  currency: string;
+  instrumentType: string;
+}): string {
+  if (input.marketHint) return input.marketHint;
+  if (input.instrumentType === "CRYPTOCURRENCY") return "CRYPTO";
+  if (input.instrumentType === "FUTURE") return "COMMODITY";
+  if (input.instrumentType === "CURRENCY") return "FX";
+  if (input.symbol.startsWith("^")) return "INDEX";
+  if (input.symbol.endsWith("=X")) return "FX";
+  if (input.symbol.includes("=F")) return "COMMODITY";
+
+  switch (input.currency) {
+    case "HKD":
+      return "HK";
+    case "CNY":
+    case "CNH":
+      return "CN";
+    case "KRW":
+      return "KR";
+    case "TWD":
+      return "TW";
+    case "JPY":
+      return "JP";
+    case "SGD":
+      return "SG";
+    case "GBP":
+      return "UK";
+    case "EUR":
+      return "EU";
+    case "USD":
+      return "US";
+    default:
+      return "";
+  }
+}
+
+async function fetchFromYahoo(
+  normalizedSymbol: string,
+  start: string,
+  timeoutMs: number,
+  hints: { market?: string; currency?: string } = {},
+): Promise<{ data: CachedPricePoint[]; scope: PriceSeriesWriteScope | null }> {
   const period1 = Math.floor(new Date(start).getTime() / 1000);
   const result = await getYahooProvider().fetchChart({
     symbol: normalizedSymbol,
@@ -182,15 +247,25 @@ async function fetchFromYahoo(normalizedSymbol: string, start: string, timeoutMs
   });
 
   const json = result.payloadJson as { chart?: { result?: Array<{
+    meta?: { currency?: string; instrumentType?: string };
     timestamp?: number[];
     indicators?: { adjclose?: Array<{ adjclose?: number[] }>; quote?: Array<{ close?: number[] }> };
   }> } };
 
   const chartResult = json?.chart?.result?.[0];
-  if (!chartResult?.timestamp) return [];
+  if (!chartResult?.timestamp) return { data: [], scope: null };
 
   const timestamps = chartResult.timestamp;
   const closes = chartResult.indicators?.adjclose?.[0]?.adjclose ?? chartResult.indicators?.quote?.[0]?.close ?? [];
+  const metaCurrency = normalizeUpper(chartResult.meta?.currency);
+  const currency = normalizeUpper(hints.currency) || metaCurrency;
+  const instrumentType = normalizeUpper(chartResult.meta?.instrumentType);
+  const market = resolveMarketFromYahooMeta({
+    symbol: normalizedSymbol.toUpperCase(),
+    marketHint: normalizeUpper(hints.market),
+    currency,
+    instrumentType,
+  });
 
   const data: CachedPricePoint[] = [];
   for (let i = 0; i < timestamps.length; i++) {
@@ -199,7 +274,10 @@ async function fetchFromYahoo(normalizedSymbol: string, start: string, timeoutMs
     const date = new Date(timestamps[i] * 1000).toISOString().slice(0, 10);
     data.push({ date, close });
   }
-  return data;
+  return {
+    data,
+    scope: market && currency ? { market, currency } : null,
+  };
 }
 
 function mergeByDate(dbData: CachedPricePoint[], freshData: CachedPricePoint[]): CachedPricePoint[] {
@@ -211,21 +289,11 @@ function mergeByDate(dbData: CachedPricePoint[], freshData: CachedPricePoint[]):
     .map(([date, close]) => ({ date, close }));
 }
 
-/** 从 symbol 推导 market（而非硬编码 US） */
-function inferMarketFromSymbol(symbol: string): string {
-  const s = symbol.toUpperCase();
-  if (s.endsWith(".HK")) return "HK";
-  if (s.endsWith(".SS") || s.endsWith(".SZ")) return "CN";
-  if (s.includes("-USD") || s.includes("-EUR") || s.includes("-GBP")) return "CRYPTO";
-  if (s.startsWith("^")) return "INDEX";
-  if (s.includes("=F")) return "COMMODITY";
-  return "US";
-}
-
-async function writePriceHistory(symbolUpper: string, data: CachedPricePoint[]): Promise<void> {
+async function writePriceHistory(symbolUpper: string, data: CachedPricePoint[], scope: PriceSeriesWriteScope | null): Promise<void> {
+  if (!scope) return;
   const pool = daaPgPool();
-  const market = inferMarketFromSymbol(symbolUpper);
-  const currency = market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD";
+  const market = scope.market;
+  const currency = scope.currency;
 
   for (let i = 0; i < data.length; i += 50) {
     const batch = data.slice(i, i + 50);

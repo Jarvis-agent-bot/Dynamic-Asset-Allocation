@@ -110,6 +110,46 @@ describe("market/yahooProvider", () => {
     ]);
   });
 
+  it("gets batch quote data through the crumb-protected v7 quote endpoint", async () => {
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "https://fc.yahoo.com/") {
+        return new Response("", {
+          status: 200,
+          headers: { "set-cookie": "A3=session-token; Path=/; Domain=.yahoo.com" },
+        });
+      }
+      if (url.includes("/v1/test/getcrumb")) return new Response("crumb-token", { status: 200 });
+      expect(url).toContain("/v7/finance/quote");
+      expect(url).toContain("symbols=AAPL%2CMSFT");
+      expect(url).toContain("crumb=crumb-token");
+      expect((init?.headers as Record<string, string>).cookie).toContain("A3=session-token");
+      return jsonResponse({ quoteResponse: { result: [{ symbol: "AAPL" }, { symbol: "MSFT" }], error: null } });
+    });
+    const logRequest = createLogRequestMock();
+    const provider = createYahooProvider({
+      fetchFn: fetchMock,
+      logRequest,
+      minRequestGapMs: 0,
+      rateLimitCooldownMs: 0,
+    });
+
+    const result = await provider.fetchQuoteBatch({
+      symbols: ["aapl", "MSFT", "AAPL"],
+      context: { caller: "test" },
+    });
+
+    expect(result.url).toContain("/v7/finance/quote");
+    expect(result.url).toContain("symbols=AAPL%2CMSFT");
+    expect(logRequest).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "yahoo",
+      resource: "yahoo.quote",
+      subjectKey: "AAPL,MSFT",
+      httpStatus: 200,
+      caller: "test",
+    }));
+  });
+
   it("refreshes crumb once after invalid crumb responses", async () => {
     let crumbCounter = 0;
     const fetchMock = vi.fn(async (input: string | URL) => {

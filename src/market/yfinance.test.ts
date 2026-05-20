@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { addDaysIsoUtc, normalizeYfinanceHistoricalQuotes, normalizeYfinanceSymbol } from "./yfinance";
+import { toYfinanceSymbolByMarket } from "./yfinanceSymbol";
 
 describe("market/yfinance", () => {
   it("normalizeYfinanceSymbol() uppercases and maps 4-digit HK tickers", () => {
@@ -8,6 +9,13 @@ describe("market/yfinance", () => {
     expect(normalizeYfinanceSymbol(" 2800 ")).toBe("2800.HK");
     expect(normalizeYfinanceSymbol("0700")).toBe("0700.HK");
     expect(normalizeYfinanceSymbol("0700.hk")).toBe("0700.HK");
+  });
+
+  it("toYfinanceSymbolByMarket() maps explicit Asian market symbols", () => {
+    expect(toYfinanceSymbolByMarket("300750", "CN")).toBe("300750.SZ");
+    expect(toYfinanceSymbolByMarket("005930", "KR")).toBe("005930.KS");
+    expect(toYfinanceSymbolByMarket("2330", "TW")).toBe("2330.TW");
+    expect(toYfinanceSymbolByMarket("7203", "JP")).toBe("7203.T");
   });
 
   it("addDaysIsoUtc() adds days in UTC", () => {

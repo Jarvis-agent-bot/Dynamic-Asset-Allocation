@@ -1,6 +1,9 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
-import type { YfinanceFundamentalSnapshot } from "@/src/market/yfinanceFundamentals";
+import {
+  fetchYfinanceQuoteBatchSnapshots,
+  type YfinanceFundamentalSnapshot,
+} from "@/src/market/yfinanceFundamentals";
 import {
   fetchYfinanceFundamentalsCached,
   type YfinanceFundamentalsCacheStatus,
@@ -15,6 +18,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 export const runtime = "nodejs";
 
 const MAX_SYMBOLS_ = 30;
+const FUNDAMENTALS_ROUTE_CONCURRENCY_ = 4;
 
 function parseSymbols(url: URL): string[] {
   const raw = url.searchParams.get("symbols") || url.searchParams.get("symbol") || "";
@@ -26,6 +30,29 @@ function parseSymbols(url: URL): string[] {
     if (dedup.size >= MAX_SYMBOLS_) break;
   }
   return [...dedup.values()];
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = [];
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+
+  async function worker() {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      const item = items[index];
+      if (item == null) return;
+      out[index] = await mapper(item, index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return out;
 }
 
 export async function GET(req: Request) {
@@ -42,19 +69,30 @@ export async function GET(req: Request) {
     }
 
     const peerSymbols = getYfinanceFundamentalPeerCandidates(symbols);
-    const [settled, peerSettled] = await Promise.all([
-      Promise.allSettled(
-        symbols.map((symbol) => fetchYfinanceFundamentalsCached(symbol, { forceRefresh, now, timeoutMs: 8_000 })),
+    const [settled, peerBatch] = await Promise.all([
+      mapWithConcurrency(
+        symbols,
+        FUNDAMENTALS_ROUTE_CONCURRENCY_,
+        async (symbol) => {
+          try {
+            const value = await fetchYfinanceFundamentalsCached(symbol, { forceRefresh, now, timeoutMs: 8_000 });
+            return { status: "fulfilled" as const, value };
+          } catch (reason) {
+            return { status: "rejected" as const, reason };
+          }
+        },
       ),
-      Promise.allSettled(
-        peerSymbols.map((symbol) => fetchYfinanceFundamentalsCached(symbol, { forceRefresh: false, now, timeoutMs: 8_000 })),
-      ),
+      peerSymbols.length > 0
+        ? fetchYfinanceQuoteBatchSnapshots(peerSymbols, { now, timeoutMs: 8_000 })
+          .then((value) => ({ status: "fulfilled" as const, value }))
+          .catch((reason) => ({ status: "rejected" as const, reason }))
+        : Promise.resolve({ status: "fulfilled" as const, value: {} as Record<string, YfinanceFundamentalSnapshot> }),
     ]);
     const items: Record<string, YfinanceFundamentalSnapshot> = {};
-    const peerItems: Record<string, YfinanceFundamentalSnapshot> = {};
     const cache: Record<string, YfinanceFundamentalsCacheStatus> = {};
-    const peerCache: Record<string, YfinanceFundamentalsCacheStatus> = {};
     const errors: Record<string, string> = {};
+    const peerItems: Record<string, YfinanceFundamentalSnapshot> = peerBatch.status === "fulfilled" ? peerBatch.value : {};
+    const peerCache: Record<string, YfinanceFundamentalsCacheStatus> = {};
     const peerErrors: Record<string, string> = {};
 
     for (let i = 0; i < settled.length; i += 1) {
@@ -71,17 +109,17 @@ export async function GET(req: Request) {
       }
     }
 
-    for (let i = 0; i < peerSettled.length; i += 1) {
-      const symbol = peerSymbols[i];
-      const result = peerSettled[i];
-      if (!symbol || !result) continue;
-      if (result.status === "fulfilled") {
-        peerItems[symbol] = result.value.snapshot;
-        peerCache[symbol] = result.value.cacheStatus;
-      } else {
-        const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
-        peerErrors[symbol] = message;
-        logSwallowed(`yfinanceFundamentalsRoute.peerFetch(${symbol})`, result.reason);
+    if (peerBatch.status === "rejected") {
+      const message = peerBatch.reason instanceof Error ? peerBatch.reason.message : String(peerBatch.reason);
+      logSwallowed("yfinanceFundamentalsRoute.peerQuoteBatch", peerBatch.reason);
+      for (const symbol of peerSymbols) peerErrors[symbol] = message;
+    } else {
+      for (const symbol of peerSymbols) {
+        if (peerItems[symbol]) {
+          peerCache[symbol] = "quote_batch";
+        } else {
+          peerErrors[symbol] = "missing from Yahoo quote batch response";
+        }
       }
     }
 

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchYfinanceFundamentals, normalizeYfinanceFundamentalsPayload } from "./yfinanceFundamentals";
+import {
+  fetchYfinanceFundamentals,
+  normalizeYfinanceFundamentalsPayload,
+  normalizeYfinanceQuoteBatchPayload,
+} from "./yfinanceFundamentals";
 
 vi.mock("@/src/daa/store/jobStore", () => ({
   appendDaaExternalRequestLog: vi.fn(async () => ({
@@ -243,6 +247,39 @@ describe("market/yfinanceFundamentals", () => {
     expect(result.peHistory.eligible).toBe(true);
     expect(result.peSampleCount).toBe(36);
     expect(result.pePercentile).toBe(50);
+  });
+
+  it("normalizes batch quote payloads into lightweight peer valuation snapshots", () => {
+    const result = normalizeYfinanceQuoteBatchPayload({
+      updatedAt: "2026-05-20T00:00:00.000Z",
+      payload: {
+        quoteResponse: {
+          result: [{
+            symbol: "000660.KS",
+            currency: "KRW",
+            regularMarketPrice: 1_744_000,
+            marketCap: 1_238_000_000_000_000,
+            sharesOutstanding: 709_854_891,
+            trailingPE: 16.52,
+          }, {
+            symbol: "AAPL",
+            currency: "USD",
+            regularMarketPrice: 298.97,
+            marketCap: 4_391_000_000_000,
+            sharesOutstanding: 14_687_356_000,
+            trailingPE: 36.24,
+            priceToBook: 41.18,
+          }],
+        },
+      },
+    });
+
+    expect(result["000660.KS"]?.source).toBe("yfinance_quote_batch");
+    expect(result["000660.KS"]?.marketPriceCurrency).toBe("KRW");
+    expect(result["000660.KS"]?.trailingPE).toBe(16.52);
+    expect(result["000660.KS"]?.peHistory.eligible).toBe(false);
+    expect(result.AAPL?.pbRatio).toBe(41.18);
+    expect(result.AAPL?.marketCapSource).toBe("price_x_shares_outstanding");
   });
 
   it("throws when all Yahoo fundamentals endpoints fail, so empty snapshots are not cached", async () => {

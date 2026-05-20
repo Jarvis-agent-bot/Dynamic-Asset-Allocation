@@ -7,7 +7,7 @@ export type AssetFundamentals = {
   normalizedSymbol: string;
   marketCap: number | null;
   marketCapCurrency: string | null;
-  marketCapSource?: "price_x_shares_outstanding" | "quote_summary_market_cap" | "fundamentals_timeseries_market_cap" | null;
+  marketCapSource?: "price_x_shares_outstanding" | "quote_summary_market_cap" | "quote_batch_market_cap" | "fundamentals_timeseries_market_cap" | null;
   marketPrice?: number | null;
   marketPriceCurrency?: string | null;
   sharesOutstanding?: number | null;

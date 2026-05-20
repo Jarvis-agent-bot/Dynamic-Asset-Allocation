@@ -64,6 +64,7 @@ export async function GET(req: Request) {
         const today = new Date().toISOString().slice(0, 10);
         const effectiveStart = start ?? addDaysIsoUtc(today, -365 * 5);
         const cacheResult = await fetchPriceSeriesWithCache(symbol, effectiveStart, {
+          market: marketRaw,
           minDbDays: start ? 15 : 100,
           maxStaleDays: 2,
           timeoutMs: 8_000,

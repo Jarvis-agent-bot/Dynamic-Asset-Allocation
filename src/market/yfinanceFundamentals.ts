@@ -18,6 +18,7 @@ type FundamentalMetricKey = (typeof FUNDAMENTAL_TYPES_)[number];
 export type YfinanceMarketCapSource =
   | "price_x_shares_outstanding"
   | "quote_summary_market_cap"
+  | "quote_batch_market_cap"
   | "fundamentals_timeseries_market_cap"
   | null;
 
@@ -89,7 +90,7 @@ export type YfinanceFundamentalSnapshot = {
   pbPeerSampleCount: number;
   pbPeerMedian: number | null;
   marketCapAsOfDate: string | null;
-  source: "yfinance_fundamentals_timeseries_quote_summary";
+  source: "yfinance_fundamentals_timeseries_quote_summary" | "yfinance_quote_batch";
   updatedAt: string;
   issues: string[];
 };
@@ -316,6 +317,54 @@ function readQuoteSummaryStats(payload: unknown): QuoteSummaryStats {
   };
 }
 
+function readQuoteBatchRows(payload: unknown): Record<string, unknown>[] {
+  const root = isRecord(payload) ? payload : {};
+  const quoteResponse = isRecord(root.quoteResponse) ? root.quoteResponse : {};
+  return Array.isArray(quoteResponse.result)
+    ? quoteResponse.result.filter(isRecord)
+    : [];
+}
+
+function readQuoteBatchStats(row: Record<string, unknown>): QuoteSummaryStats {
+  const regularMarketPrice = readPositiveNumber(row, "regularMarketPrice")
+    ?? readPositiveNumber(row, "postMarketPrice")
+    ?? readPositiveNumber(row, "preMarketPrice");
+  const quoteMarketCap = readPositiveNumber(row, "marketCap");
+  const shares = chooseSharesOutstanding({
+    price: regularMarketPrice,
+    quoteMarketCap,
+    sharesOutstanding: readPositiveNumber(row, "sharesOutstanding"),
+    impliedSharesOutstanding: readPositiveNumber(row, "impliedSharesOutstanding"),
+  });
+
+  return {
+    price: regularMarketPrice,
+    currency: readStringMetric(row, "currency"),
+    sharesOutstanding: shares.shares,
+    sharesSource: shares.source,
+    shareSelectionIssue: shares.issue,
+    marketCap: quoteMarketCap,
+    trailingPE: readPositiveNumber(row, "trailingPE"),
+    pbRatio: readPositiveNumber(row, "priceToBook"),
+    dividendYieldPct: null,
+    revenueGrowthPct: null,
+    earningsGrowthPct: null,
+    grossMarginsPct: null,
+    operatingMarginsPct: null,
+    profitMarginsPct: null,
+    totalRevenue: null,
+    freeCashflow: null,
+    operatingCashflow: null,
+    totalCash: null,
+    totalDebt: null,
+    enterpriseValue: readNumber(row, "enterpriseValue"),
+    sector: null,
+    sectorKey: null,
+    industry: null,
+    industryKey: null,
+  };
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -367,6 +416,120 @@ function buildHistoryStats(series: MetricPoint[]): FundamentalHistoryStats {
     eligible,
     reason,
   };
+}
+
+function emptyHistoryStats(reason = `insufficient_sample_count:0/${FUNDAMENTAL_PERCENTILE_MIN_SAMPLE_COUNT}`): FundamentalHistoryStats {
+  return {
+    sampleCount: 0,
+    minSampleCount: FUNDAMENTAL_PERCENTILE_MIN_SAMPLE_COUNT,
+    spanDays: null,
+    minSpanDays: FUNDAMENTAL_PERCENTILE_MIN_SPAN_DAYS,
+    percentile: null,
+    latestRank: null,
+    latestValue: null,
+    min: null,
+    median: null,
+    max: null,
+    firstAsOfDate: null,
+    latestAsOfDate: null,
+    eligible: false,
+    reason,
+  };
+}
+
+function normalizeYfinanceQuoteBatchRow(row: Record<string, unknown>, updatedAt: string): YfinanceFundamentalSnapshot | null {
+  const symbol = normalizeYfinanceSymbol(String(row.symbol || ""));
+  if (!symbol) return null;
+
+  const quoteStats = readQuoteBatchStats(row);
+  const derivedMarketCap = quoteStats.price != null && quoteStats.sharesOutstanding != null
+    ? quoteStats.price * quoteStats.sharesOutstanding
+    : null;
+  const derivedMarketCapReliable = derivedMarketCap != null
+    && (quoteStats.marketCap == null || relativeDiff(derivedMarketCap, quoteStats.marketCap) <= 0.2);
+  const marketCap = derivedMarketCapReliable
+    ? {
+      value: derivedMarketCap,
+      currency: quoteStats.currency,
+      source: "price_x_shares_outstanding" as const,
+    }
+    : {
+      value: quoteStats.marketCap,
+      currency: quoteStats.currency,
+      source: quoteStats.marketCap != null ? "quote_batch_market_cap" as const : null,
+    };
+
+  const issues: string[] = [];
+  if (quoteStats.trailingPE == null) issues.push("missing trailingPeRatio");
+  if (marketCap.value == null) issues.push("missing marketCap");
+  if (quoteStats.shareSelectionIssue) issues.push(quoteStats.shareSelectionIssue);
+  if (derivedMarketCap != null && quoteStats.marketCap != null && !derivedMarketCapReliable) {
+    issues.push(`derived marketCap diverges from quote marketCap: ${(relativeDiff(derivedMarketCap, quoteStats.marketCap) * 100).toFixed(1)}%`);
+  }
+
+  return {
+    symbol,
+    normalizedSymbol: symbol,
+    marketCap: marketCap.value,
+    marketCapCurrency: marketCap.currency,
+    marketCapSource: marketCap.source,
+    marketPrice: quoteStats.price,
+    marketPriceCurrency: quoteStats.currency,
+    sharesOutstanding: quoteStats.sharesOutstanding,
+    sharesSource: quoteStats.sharesSource,
+    trailingPE: quoteStats.trailingPE,
+    pbRatio: quoteStats.pbRatio,
+    dividendYieldPct: null,
+    revenueGrowthPct: null,
+    earningsGrowthPct: null,
+    grossMarginsPct: null,
+    operatingMarginsPct: null,
+    profitMarginsPct: null,
+    totalRevenue: null,
+    freeCashflow: null,
+    operatingCashflow: null,
+    totalCash: null,
+    totalDebt: null,
+    enterpriseValue: quoteStats.enterpriseValue,
+    sector: null,
+    sectorKey: null,
+    industry: null,
+    industryKey: null,
+    pePercentile: null,
+    peSampleCount: 0,
+    peAsOfDate: null,
+    peHistory: emptyHistoryStats(),
+    peerGroupKey: null,
+    peerGroupLabel: null,
+    peerGroupBasis: null,
+    peerSymbols: [],
+    peerMinSampleCount: FUNDAMENTAL_PEER_PERCENTILE_MIN_SAMPLE_COUNT,
+    peerReason: null,
+    pePeerPercentile: null,
+    pePeerSampleCount: 0,
+    pePeerMedian: null,
+    pbPeerPercentile: null,
+    pbPeerSampleCount: 0,
+    pbPeerMedian: null,
+    marketCapAsOfDate: null,
+    source: "yfinance_quote_batch",
+    updatedAt,
+    issues,
+  };
+}
+
+export function normalizeYfinanceQuoteBatchPayload(input: {
+  payload: unknown;
+  updatedAt?: string;
+}): Record<string, YfinanceFundamentalSnapshot> {
+  const updatedAt = input.updatedAt || new Date().toISOString();
+  const out: Record<string, YfinanceFundamentalSnapshot> = {};
+  for (const row of readQuoteBatchRows(input.payload)) {
+    const snapshot = normalizeYfinanceQuoteBatchRow(row, updatedAt);
+    if (!snapshot) continue;
+    out[snapshot.normalizedSymbol] = snapshot;
+  }
+  return out;
 }
 
 export function normalizeYfinanceFundamentalsPayload(input: {
@@ -533,4 +696,34 @@ export async function fetchYfinanceFundamentals(
   if (timeseriesResult.status === "rejected") snapshot.issues.push("failed fundamentals timeseries request");
   if (quoteSummaryResult.status === "rejected") snapshot.issues.push("failed quoteSummary request");
   return snapshot;
+}
+
+const YFINANCE_QUOTE_BATCH_SIZE_ = 50;
+
+export async function fetchYfinanceQuoteBatchSnapshots(
+  symbolsRaw: readonly string[],
+  opts: { timeoutMs?: number; now?: Date } = {},
+): Promise<Record<string, YfinanceFundamentalSnapshot>> {
+  const symbols = [...new Set(symbolsRaw.map((item) => normalizeYfinanceSymbol(item)).filter(Boolean))];
+  if (symbols.length === 0) return {};
+
+  const provider = getYahooProvider();
+  const updatedAt = (opts.now ?? new Date()).toISOString();
+  const out: Record<string, YfinanceFundamentalSnapshot> = {};
+  for (let i = 0; i < symbols.length; i += YFINANCE_QUOTE_BATCH_SIZE_) {
+    const batch = symbols.slice(i, i + YFINANCE_QUOTE_BATCH_SIZE_);
+    const result = await provider.fetchQuoteBatch({
+      symbols: batch,
+      timeoutMs: opts.timeoutMs ?? 8_000,
+      context: {
+        caller: "fetchYfinanceQuoteBatchSnapshots",
+        cacheStatus: "external_fetch",
+      },
+    });
+    Object.assign(out, normalizeYfinanceQuoteBatchPayload({
+      payload: result.payloadJson,
+      updatedAt,
+    }));
+  }
+  return out;
 }

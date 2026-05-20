@@ -580,6 +580,23 @@ const MIGRATIONS_: Migration[] = [
       }
     },
   },
+  {
+    id: "20260520_price_series_cache_scope_cleanup",
+    async apply(query) {
+      if (!(await tableExists(query, "daa_market_price_history_v1"))) return;
+      await query(`
+        DELETE FROM daa_market_price_history_v1
+        WHERE provider = 'yfinance'
+          AND source = 'price_series_cache'
+          AND market = 'US'
+          AND currency = 'USD'
+          AND (
+            symbol ~ '\\.(KS|KQ|TW|TWO|T)$'
+            OR symbol LIKE '%=X'
+          )
+      `);
+    },
+  },
 
   // ── Cognitive Agent OS ──
 
