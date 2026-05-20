@@ -11,6 +11,8 @@ export type PriceBar = {
 
 export type BacktestMetrics = {
   totalReturn: number;
+  annualizedReturn: number;
+  annualizationFactor: number;
   maxDrawdown: number;
   sharpe: number;
   winRate: number;

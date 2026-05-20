@@ -9,7 +9,7 @@ import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
-import { useFundamentals, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
+import { useFundamentalsState, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import { useTechnicalSignals } from "@/app/daa/dashboard/_hooks/useTechnicalSignals";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -50,10 +50,47 @@ function technicalBadgeClass(signal: DaaTechnicalSignal): string {
   return "bg-sky-500/12 text-sky-300";
 }
 
+function isStock(row: AssetUniverseView): boolean {
+  return row.assetClass === "EQUITY" || row.instrumentType === "STOCK";
+}
+
+function marketCapLabel(row: AssetUniverseView): string {
+  if (row.assetClass === "CRYPTO") return "总市值";
+  if (isStock(row)) return "公司市值";
+  return "市值";
+}
+
+function buildFundamentalSummary(input: {
+  row: AssetUniverseView;
+  fundamentals?: AssetFundamentals;
+  loading: boolean;
+  error: string | null;
+}): string {
+  if (input.loading && !input.fundamentals) return "基本面同步中";
+  if (input.error && !input.fundamentals) return "基本面暂不可用";
+
+  const parts: string[] = [];
+  const marketCap = formatCompanyMarketCap(
+    input.fundamentals?.marketCap,
+    input.fundamentals?.marketCapCurrency || input.row.currency,
+  );
+  if (marketCap !== "--") parts.push(`${marketCapLabel(input.row)} ${marketCap}`);
+
+  const pe = formatFundamentalRatio(input.fundamentals?.trailingPE);
+  const pb = formatFundamentalRatio(input.fundamentals?.pbRatio);
+  if (pe !== "--") parts.push(`PE ${pe}`);
+  if (pb !== "--") parts.push(`PB ${pb}`);
+
+  if (parts.length > 0) return parts.join(" · ");
+  return isStock(input.row) ? "基本面数据不足" : "基本面不适用";
+}
+
 function WatchlistRow(props: {
   row: AssetUniverseView;
   sparkData: number[] | null;
   fundamentals?: AssetFundamentals;
+  fundamentalsLoading: boolean;
+  fundamentalsError: string | null;
   technicalSignal?: DaaTechnicalSignal;
   onClick: () => void;
   onRemove?: (row: AssetUniverseView) => Promise<void> | void;
@@ -77,6 +114,12 @@ function WatchlistRow(props: {
     props.fundamentals?.marketCap,
     props.fundamentals?.marketCapCurrency || row.currency,
   );
+  const fundamentalSummary = buildFundamentalSummary({
+    row,
+    fundamentals: props.fundamentals,
+    loading: props.fundamentalsLoading,
+    error: props.fundamentalsError,
+  });
   const technicalSignal = props.technicalSignal;
 
   return (
@@ -96,8 +139,11 @@ function WatchlistRow(props: {
         <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
           {row.market} · {row.currency}
         </div>
+        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={fundamentalSummary}>
+          {fundamentalSummary}
+        </div>
         <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={`${valuation.description} ${growthRequirement.description}`}>
-          已实现估值：{valuation.reason}；增长要求：{growthRequirement.reason}
+          估值：{valuation.reason}；增长要求：{growthRequirement.reason}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--faint)]">
           {targetPct > 0 ? <span>目标 {targetPct.toFixed(1)}%</span> : null}
@@ -154,7 +200,7 @@ function WatchlistRow(props: {
 
       {/* 公司市值 */}
       <div className="hidden w-[110px] text-right lg:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">公司市值</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{marketCapLabel(row)}</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {marketCap}
         </div>
@@ -178,7 +224,7 @@ function WatchlistRow(props: {
 
       {/* 估值状态 */}
       <div className="hidden w-[96px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">已实现 / 增长</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值 / 增长</div>
         <span
           title={valuation.description}
           className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}
@@ -235,7 +281,8 @@ export function WatchlistItemList(props: {
   // 批量 sparkline（1 次 API）
   const sparklineSymbols = useMemo(() => watchRows.map((r) => r.yfinanceSymbol || r.symbol), [watchRows]);
   const sparklines = useSparklines(sparklineSymbols);
-  const fundamentals = useFundamentals(sparklineSymbols);
+  const fundamentalsState = useFundamentalsState(sparklineSymbols);
+  const fundamentals = fundamentalsState.items;
   const technicalSignals = useTechnicalSignals(sparklineSymbols);
 
   const availableCategories = useMemo(() => {
@@ -287,6 +334,8 @@ export function WatchlistItemList(props: {
             row={row}
             sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
             fundamentals={fundamentals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? fundamentals[row.symbol.toUpperCase()]}
+            fundamentalsLoading={fundamentalsState.loading}
+            fundamentalsError={fundamentalsState.error}
             technicalSignal={technicalSignals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? technicalSignals[row.symbol.toUpperCase()]}
             onClick={() => handleRowClick(row)}
             onRemove={props.onRemoveFromWatchlist}

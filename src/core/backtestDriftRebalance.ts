@@ -9,7 +9,7 @@ import {
   type RebalanceTriggerDecision,
 } from "./rebalanceCore";
 import { assertValidSeriesDates } from "./seriesContracts";
-import { toFinite } from "@/src/core/utils/number";
+import { toFinite } from "./utils/number";
 
 export type DriftRebalanceBacktestRequest = {
   /** 每个资产的历史收盘价；所有序列必须共享同一组估值日期。 */
@@ -695,7 +695,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   })();
 
   const equity = cumulativeProduct(dailyReturns, normalizationStart);
-  const metrics: BacktestMetrics = computeMetrics(equity, dailyReturns);
+  const metrics: BacktestMetrics = computeMetrics(equity, dailyReturns, { dates });
 
   const finalState = (() => {
     if (!includeEventStates) return null;

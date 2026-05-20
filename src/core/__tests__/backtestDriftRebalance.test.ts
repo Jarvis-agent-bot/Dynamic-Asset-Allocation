@@ -248,4 +248,25 @@ describe("backtestDriftRebalance", () => {
     expect(res.summary.rebalanceCount).toBe(1);
     expect(res.summary.turnoverNotional).toBeGreaterThan(0);
   });
+
+  it("annualizes metrics from the actual valuation calendar", () => {
+    const res = backtestDriftRebalance({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 101 },
+          { date: "2026-01-03", close: 102 },
+          { date: "2026-01-04", close: 103 },
+        ],
+      },
+      targetWeights: { AAA: 1 },
+      initialEquity: 100,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      trigger: { driftThresholdPct: 0, minOrderNotional: 0 },
+      execution: { feeRateBps: 0, slippageBps: 0 },
+    });
+
+    expect(res.metrics.annualizationFactor).toBeCloseTo(365.25, 8);
+    expect(res.metrics.annualizedReturn).toBeGreaterThan(res.metrics.totalReturn);
+  });
 });

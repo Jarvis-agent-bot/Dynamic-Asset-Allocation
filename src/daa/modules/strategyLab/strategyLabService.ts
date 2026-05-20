@@ -764,6 +764,9 @@ export async function runStrategyLabBacktest(
       rebalanceDates,
       executableDatesBySymbol: calendarFrame.executableDatesBySymbol,
       initialEquity: params.initialCapital || 10000,
+      constraints: {
+        minNotional: 0,
+      },
       trigger: {
         driftThresholdPct: 0,
         minOrderNotional: 50,

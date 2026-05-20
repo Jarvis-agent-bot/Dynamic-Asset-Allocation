@@ -16,7 +16,13 @@ vi.mock("@/app/daa/dashboard/_hooks/useSparklines", () => ({
 }));
 
 vi.mock("@/app/daa/dashboard/_hooks/useFundamentals", () => ({
-  useFundamentals: () => ({}),
+  useFundamentalsState: () => ({
+    items: {},
+    loading: false,
+    error: null,
+    requestedCount: 0,
+    receivedCount: 0,
+  }),
 }));
 
 vi.mock("@/app/daa/dashboard/_hooks/useTechnicalSignals", () => ({

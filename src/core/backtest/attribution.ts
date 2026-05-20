@@ -25,18 +25,21 @@ export type BacktestAttribution = {
   metrics: {
     sharpe: number;
     maxDrawdown: number;
+    annualizedReturn: number;
+    annualizationFactor: number;
     calmar: number;
     volatility: number;
     winRate: number;
   };
 };
 
-function annualizedVolatility(dailyReturns: number[]): number {
+function annualizedVolatility(dailyReturns: number[], annualizationFactor: number): number {
   const values = dailyReturns.filter((x) => Number.isFinite(x));
   if (values.length <= 1) return 0;
+  if (!(Number.isFinite(annualizationFactor) && annualizationFactor > 0)) return 0;
   const mean = values.reduce((sum, x) => sum + x, 0) / values.length;
   const variance = values.reduce((sum, x) => sum + (x - mean) * (x - mean), 0) / (values.length - 1);
-  return Math.sqrt(Math.max(0, variance)) * Math.sqrt(252);
+  return Math.sqrt(Math.max(0, variance)) * Math.sqrt(annualizationFactor);
 }
 
 function normalizeSeries(series: Array<{ date: string; close: number }>): Array<{ date: string; close: number }> {
@@ -244,9 +247,11 @@ export function computeBacktestAttribution(input: {
 
   const returnSeries = input.backtest.dailyReturns.length > 0 ? input.backtest.dailyReturns : [0];
   const winRate = returnSeries.filter((x) => x > 0).length / returnSeries.length;
-  const volatility = annualizedVolatility(input.backtest.dailyReturns);
   const maxDrawdown = toFinite(input.backtest.metrics.maxDrawdown);
-  const calmar = maxDrawdown > 1e-9 ? totalReturn / maxDrawdown : 0;
+  const annualizationFactor = toFinite(input.backtest.metrics.annualizationFactor);
+  const annualizedReturn = toFinite(input.backtest.metrics.annualizedReturn);
+  const volatility = annualizedVolatility(input.backtest.dailyReturns, annualizationFactor);
+  const calmar = maxDrawdown > 1e-9 ? annualizedReturn / maxDrawdown : 0;
 
   const rebalanceEvents = input.backtest.events
     .filter((event) => event.kind === "rebalance")
@@ -277,6 +282,8 @@ export function computeBacktestAttribution(input: {
     metrics: {
       sharpe: toFinite(input.backtest.metrics.sharpe),
       maxDrawdown,
+      annualizedReturn,
+      annualizationFactor,
       calmar,
       volatility,
       winRate,

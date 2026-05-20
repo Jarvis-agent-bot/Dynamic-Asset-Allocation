@@ -220,7 +220,7 @@ export function RebalanceProposalList(props: {
                               ) : null}
                               {row.decisionContext ? (
                                 <div className="mt-3 space-y-1.5 border-t border-[rgba(255,255,255,0.06)] pt-3 font-[var(--font-mono)] text-xs text-[var(--faint)]">
-                                  <div>信号：{signalActionLabel(row.decisionContext.signalAction)} · 评分 {row.decisionContext.signalScore ?? "—"}</div>
+                                  <div>资产信号立场：{signalActionLabel(row.decisionContext.signalAction)} · 评分 {row.decisionContext.signalScore ?? "—"}</div>
                                   <div>AI：{llmAdjustmentLabel(row.decisionContext.llmAdjustment)} · 置信度 {row.decisionContext.llmConfidence ?? "—"}%</div>
                                   {row.decisionContext.llmRationale ? (
                                     <div className="text-[var(--muted)]">AI 理由：{row.decisionContext.llmRationale}</div>

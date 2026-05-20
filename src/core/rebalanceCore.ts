@@ -114,7 +114,7 @@ type RebalanceCoreResponse = {
   trigger: RebalanceTriggerDecision;
 };
 
-import { toFinite } from "@/src/core/utils/number";
+import { toFinite } from "./utils/number";
 
 function clamp01(x: number) {
   if (!Number.isFinite(x)) return 0;

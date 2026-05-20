@@ -10,7 +10,7 @@ import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { DaaSurfaceEmptyState, DaaSurfacePanel } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
-import { useFundamentals, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
+import { useFundamentalsState, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 import {
@@ -37,11 +37,48 @@ function badgeClass(tone: ValuationTone): string {
   return "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
 }
 
+function isStock(row: AssetUniverseView): boolean {
+  return row.assetClass === "EQUITY" || row.instrumentType === "STOCK";
+}
+
+function marketCapLabel(row: AssetUniverseView): string {
+  if (row.assetClass === "CRYPTO") return "总市值";
+  if (isStock(row)) return "公司市值";
+  return "市值";
+}
+
+function buildFundamentalSummary(input: {
+  row: AssetUniverseView;
+  fundamentals?: AssetFundamentals;
+  loading: boolean;
+  error: string | null;
+}): string {
+  if (input.loading && !input.fundamentals) return "基本面同步中";
+  if (input.error && !input.fundamentals) return "基本面暂不可用";
+
+  const parts: string[] = [];
+  const companyMarketCap = formatCompanyMarketCap(
+    input.fundamentals?.marketCap,
+    input.fundamentals?.marketCapCurrency || input.row.currency,
+  );
+  if (companyMarketCap !== "--") parts.push(`${marketCapLabel(input.row)} ${companyMarketCap}`);
+
+  const pe = formatFundamentalRatio(input.fundamentals?.trailingPE);
+  const pb = formatFundamentalRatio(input.fundamentals?.pbRatio);
+  if (pe !== "--") parts.push(`PE ${pe}`);
+  if (pb !== "--") parts.push(`PB ${pb}`);
+
+  if (parts.length > 0) return parts.join(" · ");
+  return isStock(input.row) ? "基本面数据不足" : "基本面不适用";
+}
+
 function HoldingRow(props: {
   row: AssetUniverseView;
   baseCurrency: string;
   sparkData: number[] | null;
   fundamentals?: AssetFundamentals;
+  fundamentalsLoading: boolean;
+  fundamentalsError: string | null;
   onClick: () => void;
 }) {
   const { row, baseCurrency, sparkData } = props;
@@ -60,6 +97,12 @@ function HoldingRow(props: {
     props.fundamentals?.marketCap,
     props.fundamentals?.marketCapCurrency || row.currency,
   );
+  const fundamentalSummary = buildFundamentalSummary({
+    row,
+    fundamentals: props.fundamentals,
+    loading: props.fundamentalsLoading,
+    error: props.fundamentalsError,
+  });
 
   return (
     <div
@@ -78,8 +121,11 @@ function HoldingRow(props: {
         <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
           {row.market} · {row.currency}
         </div>
+        <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={fundamentalSummary}>
+          {fundamentalSummary}
+        </div>
         <div className="mt-0.5 line-clamp-1 text-[10px] text-[var(--faint)]" title={`${valuation.description} ${growthRequirement.description}`}>
-          已实现估值：{valuation.reason}；增长要求：{growthRequirement.reason}
+          估值：{valuation.reason}；增长要求：{growthRequirement.reason}
         </div>
       </div>
 
@@ -127,14 +173,14 @@ function HoldingRow(props: {
 
       {/* 公司估值 */}
       <div className="hidden w-[112px] text-right xl:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">公司市值</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{marketCapLabel(row)}</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {companyMarketCap}
         </div>
       </div>
 
       {/* PE / PB */}
-      <div className="hidden w-[82px] text-right 2xl:block">
+      <div className="hidden w-[82px] text-right xl:block">
         <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PE / PB</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {formatFundamentalRatio(props.fundamentals?.trailingPE)}
@@ -176,7 +222,7 @@ function HoldingRow(props: {
 
       {/* 估值状态 */}
       <div className="hidden w-[96px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">已实现 / 增长</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值 / 增长</div>
         <span
           title={valuation.description}
           className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}
@@ -217,7 +263,8 @@ export function PortfolioHoldingsList(props: {
     [holdingRows],
   );
   const sparklines = useSparklines(sparklineSymbols);
-  const fundamentals = useFundamentals(sparklineSymbols);
+  const fundamentalsState = useFundamentalsState(sparklineSymbols);
+  const fundamentals = fundamentalsState.items;
 
   // 自动生成有数据的分类 tab
   const availableCategories = useMemo(() => {
@@ -281,6 +328,8 @@ export function PortfolioHoldingsList(props: {
             baseCurrency={baseCurrency}
             sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
             fundamentals={fundamentals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? fundamentals[row.symbol.toUpperCase()]}
+            fundamentalsLoading={fundamentalsState.loading}
+            fundamentalsError={fundamentalsState.error}
             onClick={() => handleRowClick(row)}
           />
         ))}

@@ -102,6 +102,37 @@ describe("strategyLabService", () => {
     expect(result.warnings.some((warning) => warning.includes("交易日并集"))).toBe(true);
   });
 
+  it("首日建仓不会暴露 minOrderNotional=0.00 的微小舍入 warning", async () => {
+    const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildSeries>> = {
+      AAA: buildSeries([100, 100, 100]),
+      BBB: buildSeries([100, 100, 100]),
+      CCC: buildSeries([100, 100, 100]),
+      SPY: buildSeries([100, 100, 100]),
+    };
+
+    vi.mocked(fetchPriceSeriesWithCache).mockImplementation(async (symbol: string) => ({
+      symbol,
+      data: seriesByYfinanceSymbol[symbol] || [],
+      source: "db",
+    }));
+
+    const result = await runStrategyLabBacktest({
+      assets: ["US::AAA", "US::BBB", "US::CCC"],
+      strategies: ["equalWeight"],
+      startDate: "2026-01-01",
+      endDate: "2026-01-03",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+      feeRateBps: 0,
+      slippageBps: 0,
+    });
+
+    const warnings = result.warnings.join("\n");
+    expect(warnings).not.toMatch(/minOrderNotional=0\.00/);
+    expect(warnings).not.toMatch(/skipped 0\.00/);
+  });
+
   it("将非基准货币资产按历史 FX 序列转换为基准货币估值", async () => {
     const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildDatedSeries>> = {
       "0700.HK": buildDatedSeries([
@@ -184,6 +215,53 @@ describe("strategyLabService", () => {
     });
 
     expect(result.attribution.rebalanceEvents).toHaveLength(0);
+  });
+
+  it("动量策略只使用信号日前可见历史，不用后续全周期收益选权重", async () => {
+    const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildDatedSeries>> = {
+      AAA: buildDatedSeries([
+        ["2026-01-30", 100],
+        ["2026-01-31", 120],
+        ["2026-02-01", 130],
+        ["2026-02-02", 130],
+        ["2026-02-03", 130],
+      ]),
+      BBB: buildDatedSeries([
+        ["2026-01-30", 100],
+        ["2026-01-31", 90],
+        ["2026-02-01", 80],
+        ["2026-02-02", 500],
+        ["2026-02-03", 600],
+      ]),
+      SPY: buildDatedSeries([
+        ["2026-01-30", 100],
+        ["2026-01-31", 100],
+        ["2026-02-01", 100],
+        ["2026-02-02", 100],
+        ["2026-02-03", 100],
+      ]),
+    };
+
+    vi.mocked(fetchPriceSeriesWithCache).mockImplementation(async (symbol: string) => ({
+      symbol,
+      data: seriesByYfinanceSymbol[symbol] || [],
+      source: "db",
+    }));
+
+    const result = await runStrategyLabBacktest({
+      assets: ["US::AAA", "US::BBB"],
+      strategies: ["momentum"],
+      startDate: "2026-01-30",
+      endDate: "2026-02-03",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+      feeRateBps: 0,
+      slippageBps: 0,
+    });
+
+    expect(result.targetWeights["US::AAA"]).toBeCloseTo(1, 8);
+    expect(result.targetWeights["US::BBB"] ?? 0).toBeCloseTo(0, 8);
   });
 
   it("所有资产都没有价格历史时抛出可被 API 透传的领域错误", async () => {

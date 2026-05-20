@@ -25,11 +25,11 @@ export function classifyMarketActionByRiskOffScore(scorePct: number | null | und
 }
 
 export function marketActionLabelZh(action: DaaMarketActionLevel): string {
-  if (action === "strong_buy") return "强烈买入";
-  if (action === "buy") return "买入";
-  if (action === "sell") return "卖出";
-  if (action === "strong_sell") return "强烈卖出";
-  return "持有";
+  if (action === "strong_buy") return "适合加仓";
+  if (action === "buy") return "可以小幅加仓";
+  if (action === "sell") return "暂不加仓";
+  if (action === "strong_sell") return "明显不适合加仓";
+  return "先观察";
 }
 
 export function marketActionByRiskOffScoreLabelZh(scorePct: number | null | undefined): string {
@@ -37,9 +37,9 @@ export function marketActionByRiskOffScoreLabelZh(scorePct: number | null | unde
 }
 
 export function marketRegimeActionLabelZh(regime: DaaMarketRegime | string | null | undefined): string {
-  if (regime === "risk_on") return "买入/加仓";
-  if (regime === "risk_off") return "减仓/回避";
-  if (regime === "transitional") return "持有/观察";
+  if (regime === "risk_on") return "环境偏积极";
+  if (regime === "risk_off") return "环境偏谨慎";
+  if (regime === "transitional") return "环境中性";
   return "待计算";
 }
 
@@ -60,19 +60,19 @@ export function marketPressureLabelZh(scorePct: number | null | undefined): stri
 }
 
 export function marketScopeMetricLabelZh(scope: string | null | undefined): string {
-  if (isActionableMarketScope(scope)) return "新增买入预算";
+  if (isActionableMarketScope(scope)) return "适合加仓程度";
   if (scope === "macro_defensive") return "避险需求";
-  if (scope === "macro_global") return "宏观风险";
+  if (scope === "macro_global") return "宏观压力";
   return "风险指数";
 }
 
 export function marketScopeMeaningZh(scope: string | null | undefined): string {
-  if (scope === "us_equity") return "衡量美股是否适合继续增加风险资产，不等于目标仓位。";
-  if (scope === "hk_cn_equity") return "衡量港股和中概是否适合继续增加风险资产，不等于目标仓位。";
-  if (scope === "crypto") return "衡量加密市场是否适合继续增加风险资产，不等于目标仓位。";
+  if (scope === "us_equity") return "只说明美股市场现在是否适合加仓；不是具体订单。";
+  if (scope === "hk_cn_equity") return "只说明港股和中概现在是否适合加仓；不是具体订单。";
+  if (scope === "crypto") return "只说明加密市场现在是否适合加仓；不是具体订单。";
   if (scope === "macro_defensive") return "看是否需要额外提高现金、黄金、短债等防御仓。";
   if (scope === "macro_global") return "看通胀、美元、利率等是否正在压制整体风险资产。";
-  return "衡量当前市场环境对新交易的影响。";
+  return "衡量当前市场环境对交易节奏的影响。";
 }
 
 function marketPressureLevelZh(scorePct: number | null | undefined): string {
@@ -94,6 +94,6 @@ export function marketScopePrimaryLabelZh(input: {
   }
   const level = marketPressureLevelZh(input.riskOffScorePct);
   if (input.scope === "macro_defensive") return `避险需求${level}`;
-  if (input.scope === "macro_global") return `宏观风险${level}`;
+  if (input.scope === "macro_global") return `宏观压力${level}`;
   return `风险${level}`;
 }

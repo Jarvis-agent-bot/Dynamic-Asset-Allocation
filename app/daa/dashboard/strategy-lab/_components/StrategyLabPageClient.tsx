@@ -78,14 +78,21 @@ function strategyLabel(key: string): string {
   return STRATEGY_OPTIONS.find((s) => s.key === key)?.label ?? key;
 }
 
+function toLocalDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function defaultStartDate(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+  return toLocalDateInputValue(d);
 }
 
 function defaultEndDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateInputValue(new Date());
 }
 
 type ConfigState = {
@@ -259,7 +266,10 @@ export default function StrategyLabPageClient() {
   }, [result]);
 
   const chartData = useMemo(() => {
-    if (!strategyResults.length) return [];
+    if (!strategyResults.length || !result) return [];
+    const initialCapital = Number.isFinite(result.params.initialCapital) && result.params.initialCapital > 0
+      ? result.params.initialCapital
+      : 1;
     const rows = new Map<string, Record<string, string | number>>();
     for (const strategyResult of strategyResults) {
       for (const point of strategyResult.equityCurve || []) {
@@ -267,14 +277,14 @@ export default function StrategyLabPageClient() {
           date: point.date.slice(5, 10),
           fullDate: point.date,
         };
-        row[strategyResult.strategy] = +point.equity.toFixed(2);
+        row[strategyResult.strategy] = +(point.equity * initialCapital).toFixed(2);
         rows.set(point.date, row);
       }
     }
     return [...rows.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([, row]) => row);
-  }, [strategyResults]);
+  }, [result, strategyResults]);
 
   return (
     <div className="space-y-6 lg:space-y-7">
@@ -468,7 +478,7 @@ export default function StrategyLabPageClient() {
                 <DaaSurfaceMetricCard
                   label="总收益"
                   value={`${(result.metrics.totalReturn * 100).toFixed(2)}%`}
-                  subLabel={`夏普比率 ${result.attribution.metrics.sharpe.toFixed(2)}`}
+                  subLabel={`年化 ${(result.metrics.annualizedReturn * 100).toFixed(2)}% · 夏普 ${result.attribution.metrics.sharpe.toFixed(2)}`}
                   accent={result.metrics.totalReturn >= 0 ? "green" : "red"}
                 />
                 <DaaSurfaceMetricCard

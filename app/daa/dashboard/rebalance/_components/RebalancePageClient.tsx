@@ -4,25 +4,19 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, Gauge, ListChecks, ShieldCheck, TrendingUp, WalletCards } from "lucide-react";
+import { Bot, Gauge, ListChecks, ShieldCheck, WalletCards } from "lucide-react";
 
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { DaaSurfaceStatusPill, type DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { DaaSurfacePanel, DaaSurfaceStatusPill, type DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
-import {
-  isActionableMarketScope,
-  marketActionByRiskOffScoreLabelZh,
-  marketRegimeEnvironmentLabelZh,
-  marketScopePrimaryLabelZh,
-} from "@/src/daa/modules/marketContext/marketContextLabels";
-import type { DaaMarketContext, DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { PolicyDecision } from "@/src/daa/modules/policy-engine/policyTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import type { RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { DashboardNotificationBar } from "@/app/daa/dashboard/_shared/DashboardNotificationBar";
 import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
+import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndicatorDashboard";
 import { RebalanceProposalList } from "@/app/daa/dashboard/_shared/rebalance/RebalanceProposalList";
 import type { WhatIfPreviewProps } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
 import type { DriftBarChartProps } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
@@ -91,29 +85,6 @@ function policyActionLabel(action: string | null | undefined) {
   if (action === "observe") return "保持观察";
   if (action === "ignore") return "忽略噪声";
   return "等待决策";
-}
-
-function formatIndicatorValue(indicator: DaaMarketIndicatorSnapshot): string {
-  if (indicator.rawValue === null || indicator.rawValue === undefined) return "-";
-  const value = Math.abs(indicator.rawValue) >= 100
-    ? indicator.rawValue.toFixed(0)
-    : indicator.rawValue.toFixed(2);
-  return `${value}${indicator.unit ? ` ${indicator.unit}` : ""}`;
-}
-
-function riskScoreTone(scorePct: number | null | undefined): DaaSurfaceTone {
-  const score = Number.isFinite(scorePct) ? Number(scorePct) : 50;
-  if (score >= 80) return "red";
-  if (score >= 65) return "amber";
-  if (score <= 35) return "green";
-  return "slate";
-}
-
-function indicatorSignalLabel(indicator: DaaMarketIndicatorSnapshot): string {
-  if (isActionableMarketScope(indicator.scope)) {
-    return marketActionByRiskOffScoreLabelZh(indicator.riskOffScorePct);
-  }
-  return marketScopePrimaryLabelZh(indicator);
 }
 
 function totalProposalNotional(cycle: RebalanceCycle | null): number {
@@ -256,40 +227,6 @@ function RebalanceDecisionSummary(props: {
   );
 }
 
-function MarketEvidenceStrip({ marketContext }: { marketContext: DaaMarketContext }) {
-  const topIndicators = [...(marketContext.indicators ?? [])]
-    .sort((a, b) => Math.abs(b.riskOffScorePct - 50) - Math.abs(a.riskOffScorePct - 50))
-    .slice(0, 4);
-
-  return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.84)] px-4 py-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-[var(--primary)]" />
-          <span className="text-sm font-semibold text-[var(--text)]">市场证据摘要</span>
-        </div>
-        <DaaSurfaceStatusPill tone={marketRegimeTone(marketContext.regime)}>
-          {marketRegimeLabel(marketContext.regime)} · {marketRegimeEnvironmentLabelZh(marketContext.regime)} · 风险分 {marketContext.riskOffScorePct.toFixed(0)}
-        </DaaSurfaceStatusPill>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {topIndicators.map((indicator) => (
-          <div key={indicator.key} className="min-w-0 border-t border-[var(--border)] pt-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-sm font-semibold text-[var(--text)]">{indicator.label}</span>
-              <DaaSurfaceStatusPill tone={riskScoreTone(indicator.riskOffScorePct)} className="shrink-0">
-                {indicatorSignalLabel(indicator)}
-              </DaaSurfaceStatusPill>
-            </div>
-            <div className="mt-2 font-[var(--font-mono)] text-lg text-[var(--text)]">{formatIndicatorValue(indicator)}</div>
-            <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{indicator.reason}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function RebalancePageClient() {
   const wbModel = useDashboardPageModel();
   const searchParams = useSearchParams();
@@ -370,7 +307,7 @@ export default function RebalancePageClient() {
             />
           </div>
 
-          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
             {/* 左侧：提案列表 */}
             <div className="space-y-4">
               <SectionErrorBoundary sectionName="调仓建议">
@@ -410,6 +347,31 @@ export default function RebalancePageClient() {
                 onCancelCycle={rp.onCancelCycle}
               />
 
+              <SectionErrorBoundary sectionName="市场环境">
+                <MarketContextCard
+                  marketContext={wbModel.bootstrap.marketContext ?? null}
+                  aiSnapshot={aiSnapshot}
+                />
+              </SectionErrorBoundary>
+
+              <SectionErrorBoundary sectionName="漂移概览">
+                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                      漂移概览 ({driftCount} 项超阈值)
+                    </div>
+                    <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                      {driftCount > 0 ? "需要关注" : "目标内"}
+                    </DaaSurfaceStatusPill>
+                  </div>
+                  <LazyDriftBarChart
+                    rows={wbModel.tableProps.rows}
+                    driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
+                    maxItems={8}
+                  />
+                </div>
+              </SectionErrorBoundary>
+
               {rp.selectedProposalCount > 0 && rp.currentCycle ? (
                 <SectionErrorBoundary sectionName="执行预览">
                   <LazyWhatIfPreview
@@ -424,37 +386,24 @@ export default function RebalancePageClient() {
             </div>
           </div>
 
-          {/* ── 辅助证据区：市场环境 + 漂移分布 ── */}
-          <div className="grid items-start gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
-            <SectionErrorBoundary sectionName="市场环境">
-              <MarketContextCard
-                marketContext={wbModel.bootstrap.marketContext ?? null}
-                aiSnapshot={aiSnapshot}
-              />
-            </SectionErrorBoundary>
-
-            <SectionErrorBoundary sectionName="漂移概览">
-              <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
-                    漂移概览 ({driftCount} 项超阈值)
-                  </div>
-                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
-                    {driftCount > 0 ? "需要关注" : "目标内"}
-                  </DaaSurfaceStatusPill>
-                </div>
-                <LazyDriftBarChart
-                  rows={wbModel.tableProps.rows}
-                  driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
-                  maxItems={8}
-                />
-              </div>
-            </SectionErrorBoundary>
-          </div>
-
-          {/* ── 全宽：市场指标证据条 ── */}
+          {/* ── 全宽：完整市场指标 ── */}
           {wbModel.bootstrap.marketContext ? (
-            <MarketEvidenceStrip marketContext={wbModel.bootstrap.marketContext} />
+            <SectionErrorBoundary sectionName="完整市场指标">
+              <DaaSurfacePanel
+                title="完整市场指标"
+                subtitle="这些指标只解释当前环境是否适合加仓；真正买入或卖出哪只资产，以左侧建议清单为准。"
+                accent={marketRegimeTone(wbModel.bootstrap.marketContext.regime)}
+                action={(
+                  <DaaSurfaceStatusPill tone={marketRegimeTone(wbModel.bootstrap.marketContext.regime)}>
+                    {marketRegimeLabel(wbModel.bootstrap.marketContext.regime)}
+                    {" · 风险分 "}
+                    {wbModel.bootstrap.marketContext.riskOffScorePct.toFixed(0)}
+                  </DaaSurfaceStatusPill>
+                )}
+              >
+                <MarketIndicatorDashboard marketContext={wbModel.bootstrap.marketContext} hideClock />
+              </DaaSurfacePanel>
+            </SectionErrorBoundary>
           ) : null}
         </>
       ) : null}

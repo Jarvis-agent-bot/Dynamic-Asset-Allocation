@@ -73,18 +73,38 @@ type FundamentalsResponse = {
   items?: Record<string, AssetFundamentals>;
 };
 
+export type FundamentalsLoadState = {
+  items: Record<string, AssetFundamentals>;
+  loading: boolean;
+  error: string | null;
+  requestedCount: number;
+  receivedCount: number;
+};
+
 function normalizeSymbol(symbol: string): string {
   return String(symbol || "").trim().toUpperCase();
 }
 
-export function useFundamentals(symbols: string[]): Record<string, AssetFundamentals> {
-  const [data, setData] = useState<Record<string, AssetFundamentals>>({});
+export function useFundamentalsState(symbols: string[]): FundamentalsLoadState {
+  const [state, setState] = useState<FundamentalsLoadState>({
+    items: {},
+    loading: false,
+    error: null,
+    requestedCount: 0,
+    receivedCount: 0,
+  });
   const fetchedKey = useRef("");
 
   useEffect(() => {
     const filtered = symbols.map(normalizeSymbol).filter(Boolean);
     if (filtered.length === 0) {
-      setData({});
+      setState({
+        items: {},
+        loading: false,
+        error: null,
+        requestedCount: 0,
+        receivedCount: 0,
+      });
       fetchedKey.current = "";
       return;
     }
@@ -95,21 +115,52 @@ export function useFundamentals(symbols: string[]): Record<string, AssetFundamen
 
     const controller = new AbortController();
     const params = new URLSearchParams({ symbols: key });
+    const requestedCount = key.split(",").filter(Boolean).length;
+
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+      requestedCount,
+      receivedCount: 0,
+    }));
 
     fetch(`/api/daa/market/yfinance/fundamentals?${params}`, {
       cache: "no-store",
       signal: controller.signal,
     })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (!r.ok) throw new Error(`fundamentals request failed: ${r.status}`);
+        return r.json();
+      })
       .then((json) => {
         const payload = json?.data as FundamentalsResponse | undefined;
         const items = payload?.items;
-        if (items && typeof items === "object") setData(items);
+        const nextItems = items && typeof items === "object" ? items : {};
+        setState({
+          items: nextItems,
+          loading: false,
+          error: null,
+          requestedCount,
+          receivedCount: Object.keys(nextItems).length,
+        });
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: error instanceof Error ? error.message : "fundamentals request failed",
+          requestedCount,
+        }));
+      });
 
     return () => controller.abort();
   }, [symbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return data;
+  return state;
+}
+
+export function useFundamentals(symbols: string[]): Record<string, AssetFundamentals> {
+  return useFundamentalsState(symbols).items;
 }

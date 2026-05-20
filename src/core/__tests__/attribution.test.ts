@@ -11,6 +11,8 @@ function buildBacktestResult(overrides: Partial<DriftRebalanceBacktestResult>): 
     dailyReturns: [0],
     metrics: {
       totalReturn: 0,
+      annualizedReturn: 0,
+      annualizationFactor: 252,
       maxDrawdown: 0,
       sharpe: 0,
       winRate: 0,
@@ -52,6 +54,8 @@ describe("computeBacktestAttribution", () => {
       equity: [1, 1.1],
       metrics: {
         totalReturn: 0.1,
+        annualizedReturn: 0.1,
+        annualizationFactor: 252,
         maxDrawdown: 0,
         sharpe: 1,
         winRate: 0.5,
@@ -116,6 +120,8 @@ describe("computeBacktestAttribution", () => {
       equity: [1.05],
       metrics: {
         totalReturn: 0.05,
+        annualizedReturn: 0.05,
+        annualizationFactor: 252,
         maxDrawdown: 0,
         sharpe: 1,
         winRate: 1,
@@ -224,6 +230,8 @@ describe("computeBacktestAttribution", () => {
       equity: [1.02, 1.0506],
       metrics: {
         totalReturn: 0.0506,
+        annualizedReturn: 0.0506,
+        annualizationFactor: 252,
         maxDrawdown: 0,
         sharpe: 1,
         winRate: 1,
@@ -275,5 +283,35 @@ describe("computeBacktestAttribution", () => {
     expect(attribution.activeReturn).toBeNull();
     expect(aaa?.allocationEffect).toBeNull();
     expect(aaa?.selectionEffect).toBeNull();
+  });
+
+  it("uses annualized return instead of period return for Calmar", () => {
+    const backtest = buildBacktestResult({
+      dates: ["2026-01-02", "2026-01-03"],
+      dailyReturns: [0.02, -0.01],
+      equity: [1.02, 1.0098],
+      metrics: {
+        totalReturn: 0.1,
+        annualizedReturn: 0.24,
+        annualizationFactor: 365.25,
+        maxDrawdown: 0.12,
+        sharpe: 1,
+        winRate: 0.5,
+      },
+    });
+
+    const attribution = computeBacktestAttribution({
+      backtest,
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 102 },
+          { date: "2026-01-03", close: 101 },
+        ],
+      },
+    });
+
+    expect(attribution.metrics.annualizedReturn).toBeCloseTo(0.24, 8);
+    expect(attribution.metrics.calmar).toBeCloseTo(2, 8);
   });
 });

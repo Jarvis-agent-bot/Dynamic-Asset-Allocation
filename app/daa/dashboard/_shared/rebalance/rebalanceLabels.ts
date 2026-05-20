@@ -82,9 +82,9 @@ export function macroCyclePhaseLabel(phase: string | null | undefined): string {
 }
 
 export function signalActionLabel(action: string | null | undefined): string {
-  if (action === "open_or_add") return "可建仓/加仓";
-  if (action === "watch") return "观望";
-  if (action === "reduce_or_avoid") return "减仓/回避";
+  if (action === "open_or_add") return "偏多，允许加仓";
+  if (action === "watch") return "先观察";
+  if (action === "reduce_or_avoid") return "偏弱，谨慎处理";
   return action || "—";
 }
 
