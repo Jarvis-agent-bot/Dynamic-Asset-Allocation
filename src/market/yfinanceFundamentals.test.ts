@@ -109,6 +109,40 @@ describe("market/yfinanceFundamentals", () => {
     expect(result.issues.some((item) => item.includes("insufficient trailingPeRatio history"))).toBe(true);
   });
 
+  it("normalizes Yahoo growth ratio values greater than 1 as percentages", () => {
+    const quoteSummaryPayload = {
+      quoteSummary: {
+        result: [{
+          price: {
+            currency: "KRW",
+            regularMarketPrice: { raw: 1_748_000 },
+            marketCap: { raw: 1_238_000_000_000_000 },
+          },
+          summaryDetail: {
+            trailingPE: { raw: 27.92 },
+          },
+          defaultKeyStatistics: {
+            sharesOutstanding: { raw: 709_854_891 },
+          },
+          financialData: {
+            revenueGrowth: { raw: 1.981, fmt: "198.10%" },
+            earningsGrowth: { raw: 3.966, fmt: "396.60%" },
+          },
+        }],
+      },
+    };
+
+    const result = normalizeYfinanceFundamentalsPayload({
+      symbol: "000660.KS",
+      payload: null,
+      quoteSummaryPayload,
+      updatedAt: "2026-05-20T00:00:00.000Z",
+    });
+
+    expect(result.revenueGrowthPct).toBeCloseTo(198.1, 6);
+    expect(result.earningsGrowthPct).toBeCloseTo(396.6, 6);
+  });
+
   it("falls back to quarterly market cap when trailing market cap is empty", () => {
     const payload = {
       timeseries: {

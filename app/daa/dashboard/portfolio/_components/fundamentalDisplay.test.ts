@@ -73,14 +73,15 @@ describe("deriveValuationBadge", () => {
 
     const badge = deriveValuationBadge(row, fundamentals());
 
-    expect(badge.label).toBe("合理");
+    expect(badge.label).toBe("估值适中");
     expect(badge.reason).toContain("历史样本不足");
     expect(badge.description).toContain("样本 6/36");
+    expect(badge.description).toContain("百分位样本未达门槛");
     expect(badge.description).not.toContain("自身历史 100%");
     expect(badge.reason).not.toContain("PEG");
   });
 
-  it("自身历史不足时优先使用同业横截面分位", () => {
+  it("同业横截面样本不足时不输出同业分位强结论", () => {
     const row = buildAssetUniverseView({
       assetKey: "HK::1810",
       symbol: "1810.HK",
@@ -91,16 +92,39 @@ describe("deriveValuationBadge", () => {
 
     const badge = deriveValuationBadge(row, fundamentals({
       peerGroupLabel: "行业：Consumer Electronics",
-      peerMinSampleCount: 5,
+      peerMinSampleCount: 20,
       pePeerPercentile: 60,
       pePeerSampleCount: 8,
       pePeerMedian: 18.2,
     }));
 
-    expect(badge.label).toBe("合理");
+    expect(badge.label).toBe("估值适中");
+    expect(badge.reason).toContain("历史样本不足");
+    expect(badge.description).toContain("行业：Consumer Electronics 样本 8/20");
+    expect(badge.description).not.toContain("Yahoo 同业横截面估值判断");
+  });
+
+  it("自身历史不足但同业样本足够时使用同业横截面分位", () => {
+    const row = buildAssetUniverseView({
+      assetKey: "HK::1810",
+      symbol: "1810.HK",
+      market: "HK",
+      assetClass: "EQUITY",
+      instrumentType: "STOCK",
+    });
+
+    const badge = deriveValuationBadge(row, fundamentals({
+      peerGroupLabel: "行业：Consumer Electronics",
+      peerMinSampleCount: 20,
+      pePeerPercentile: 60,
+      pePeerSampleCount: 22,
+      pePeerMedian: 18.2,
+    }));
+
+    expect(badge.label).toBe("同业中位");
     expect(badge.reason).toContain("行业：Consumer Electronics 60% 分位");
     expect(badge.description).toContain("Yahoo 同业横截面");
-    expect(badge.description).toContain("样本 8 个");
+    expect(badge.description).toContain("样本 22 个");
   });
 
   it("用 PE 和 Yahoo 增长字段给出增长兑现要求标签", () => {

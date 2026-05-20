@@ -53,7 +53,30 @@ describe("yfinanceFundamentalsPeers", () => {
     expect(candidates).not.toContain("1810.HK");
   });
 
-  it("按 Yahoo 行业字段计算同业横截面 PE/PB 分位", () => {
+  it("同业横截面样本达到门槛后才计算 PE/PB 分位", () => {
+    const requested = {
+      "1810.HK": snapshot({ symbol: "1810.HK", pe: 18, pb: 2.7 }),
+    };
+    const peers = Object.fromEntries(
+      Array.from({ length: 20 }, (_, index) => {
+        const symbol = `PEER${index + 1}`;
+        return [symbol, snapshot({ symbol, pe: 30 + index, pb: 5 + index })];
+      }),
+    );
+
+    const enriched = enrichYfinanceFundamentalSnapshotsWithPeers(requested, peers)["1810.HK"]!;
+
+    expect(enriched.peerGroupBasis).toBe("industry");
+    expect(enriched.peerGroupLabel).toBe("行业：Consumer Electronics");
+    expect(enriched.pePeerSampleCount).toBe(21);
+    expect(enriched.pePeerPercentile).toBe(4.76);
+    expect(enriched.pePeerMedian).toBe(39);
+    expect(enriched.pbPeerSampleCount).toBe(21);
+    expect(enriched.pbPeerPercentile).toBe(4.76);
+    expect(enriched.peerReason).toBe(null);
+  });
+
+  it("同业样本不足时只保留样本说明，不给百分位", () => {
     const requested = {
       "1810.HK": snapshot({ symbol: "1810.HK", pe: 18, pb: 2.7 }),
     };
@@ -67,12 +90,9 @@ describe("yfinanceFundamentalsPeers", () => {
     const enriched = enrichYfinanceFundamentalSnapshotsWithPeers(requested, peers)["1810.HK"]!;
 
     expect(enriched.peerGroupBasis).toBe("industry");
-    expect(enriched.peerGroupLabel).toBe("行业：Consumer Electronics");
     expect(enriched.pePeerSampleCount).toBe(5);
-    expect(enriched.pePeerPercentile).toBe(60);
-    expect(enriched.pePeerMedian).toBe(18);
-    expect(enriched.pbPeerSampleCount).toBe(5);
-    expect(enriched.pbPeerPercentile).toBe(80);
-    expect(enriched.peerReason).toBe(null);
+    expect(enriched.pePeerPercentile).toBe(null);
+    expect(enriched.peerMinSampleCount).toBe(20);
+    expect(enriched.peerReason).toBe("insufficient_peer_sample_count:5/20");
   });
 });

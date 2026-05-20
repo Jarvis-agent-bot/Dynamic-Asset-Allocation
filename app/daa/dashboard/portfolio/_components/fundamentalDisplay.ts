@@ -51,7 +51,7 @@ function byHistoricalPercentile(input: {
   const reason = `${ratioText}，${percentileText}`;
   if (input.percentile <= 25) {
     return {
-      label: "偏便宜",
+      label: "历史偏低",
       tone: "cheap",
       reason,
       description: `${reason}。这是相对自身历史的估值判断，样本 ${input.sampleCount} 条。`,
@@ -59,7 +59,7 @@ function byHistoricalPercentile(input: {
   }
   if (input.percentile <= 65) {
     return {
-      label: "合理",
+      label: "历史中位",
       tone: "fair",
       reason,
       description: `${reason}。估值处在自身历史中部区域，仍需结合增长和行业景气度。`,
@@ -67,14 +67,14 @@ function byHistoricalPercentile(input: {
   }
   if (input.percentile <= 85) {
     return {
-      label: "偏贵",
+      label: "历史偏高",
       tone: "expensive",
       reason,
       description: `${reason}。估值已经高于自身大部分历史样本，买入需要更强基本面证据。`,
     };
   }
   return {
-    label: "昂贵",
+    label: "历史高位",
     tone: "danger",
     reason,
     description: `${reason}。估值处于自身历史高位，容错率较低。`,
@@ -94,7 +94,7 @@ function byPeerPercentile(input: {
   const reason = `${ratioText}，${input.groupLabel} ${formatPercentile(input.percentile)} 分位`;
   if (input.percentile <= 25) {
     return {
-      label: "偏便宜",
+      label: "同业偏低",
       tone: "cheap",
       reason,
       description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个。`,
@@ -102,7 +102,7 @@ function byPeerPercentile(input: {
   }
   if (input.percentile <= 65) {
     return {
-      label: "合理",
+      label: "同业中位",
       tone: "fair",
       reason,
       description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业处于中部区域，仍需结合增长和行业景气度。`,
@@ -110,14 +110,14 @@ function byPeerPercentile(input: {
   }
   if (input.percentile <= 85) {
     return {
-      label: "偏贵",
+      label: "同业偏高",
       tone: "expensive",
       reason,
       description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业估值已经偏高，买入需要更强基本面证据。`,
     };
   }
   return {
-    label: "昂贵",
+    label: "同业高位",
     tone: "danger",
     reason,
     description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业处于高位，容错率较低。`,
@@ -127,15 +127,15 @@ function byPeerPercentile(input: {
 function byAbsoluteFallback(input: { metricLabel: string; value: number; cheap: number; fair: number; expensive: number }): ValuationBadge {
   const reason = `${input.metricLabel} ${input.value.toFixed(2)}，自身历史样本不足`;
   if (input.value <= input.cheap) {
-    return { label: "偏便宜", tone: "cheap", reason, description: `${reason}；暂时用绝对阈值辅助判断。` };
+    return { label: "估值较低", tone: "cheap", reason, description: `${reason}；百分位样本未达门槛，暂时只用绝对阈值辅助判断。` };
   }
   if (input.value <= input.fair) {
-    return { label: "合理", tone: "fair", reason, description: `${reason}；暂时用绝对阈值辅助判断。` };
+    return { label: "估值适中", tone: "fair", reason, description: `${reason}；百分位样本未达门槛，暂时只用绝对阈值辅助判断。` };
   }
   if (input.value <= input.expensive) {
-    return { label: "偏贵", tone: "expensive", reason, description: `${reason}；暂时用绝对阈值辅助判断。` };
+    return { label: "估值较高", tone: "expensive", reason, description: `${reason}；百分位样本未达门槛，暂时只用绝对阈值辅助判断。` };
   }
-  return { label: "昂贵", tone: "danger", reason, description: `${reason}；暂时用绝对阈值辅助判断。` };
+  return { label: "估值很高", tone: "danger", reason, description: `${reason}；百分位样本未达门槛，暂时只用绝对阈值辅助判断。` };
 }
 
 function historyStatsText(stats: AssetFundamentals["peHistory"]): string | null {

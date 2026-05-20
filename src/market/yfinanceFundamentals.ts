@@ -11,7 +11,7 @@ const FUNDAMENTAL_TYPES_ = [
 
 export const FUNDAMENTAL_PERCENTILE_MIN_SAMPLE_COUNT = 36;
 export const FUNDAMENTAL_PERCENTILE_MIN_SPAN_DAYS = 720;
-export const FUNDAMENTAL_PEER_PERCENTILE_MIN_SAMPLE_COUNT = 5;
+export const FUNDAMENTAL_PEER_PERCENTILE_MIN_SAMPLE_COUNT = 20;
 
 type FundamentalMetricKey = (typeof FUNDAMENTAL_TYPES_)[number];
 
@@ -195,7 +195,7 @@ function readPositiveNumber(row: Record<string, unknown>, key: string): number |
 function readPctFromRatio(row: Record<string, unknown>, key: string): number | null {
   const n = readNumber(row, key);
   if (n == null) return null;
-  return Math.abs(n) <= 1 ? n * 100 : n;
+  return n * 100;
 }
 
 type QuoteSummaryStats = {

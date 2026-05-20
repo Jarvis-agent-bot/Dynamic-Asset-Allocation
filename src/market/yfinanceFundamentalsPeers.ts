@@ -6,7 +6,7 @@ import {
   type YfinanceFundamentalSnapshot,
 } from "@/src/market/yfinanceFundamentals";
 
-export const YFINANCE_FUNDAMENTALS_PEER_MAX_EXTRA_SYMBOLS = 36;
+export const YFINANCE_FUNDAMENTALS_PEER_MAX_EXTRA_SYMBOLS = 80;
 
 type PeerBasket = {
   key: string;
@@ -43,7 +43,48 @@ const CURATED_PEER_BASKETS_: PeerBasket[] = [
   {
     key: "semiconductors",
     label: "半导体产业链同业",
-    symbols: ["NVDA", "AMD", "AVGO", "TSM", "ASML", "ARM", "MU", "000660.KS", "005930.KS", "INTC", "QCOM", "TXN", "AMAT", "LRCX", "KLAC", "MRVL", "ON"],
+    symbols: [
+      "NVDA",
+      "AMD",
+      "AVGO",
+      "TSM",
+      "ASML",
+      "ARM",
+      "MU",
+      "000660.KS",
+      "005930.KS",
+      "INTC",
+      "QCOM",
+      "TXN",
+      "AMAT",
+      "LRCX",
+      "KLAC",
+      "MRVL",
+      "ON",
+      "ADI",
+      "MCHP",
+      "MPWR",
+      "NXPI",
+      "STM",
+      "GFS",
+      "UMC",
+      "ALAB",
+      "MTSI",
+      "LSCC",
+      "QRVO",
+      "SWKS",
+      "TER",
+      "ACLS",
+      "COHR",
+      "ENTG",
+      "MKSI",
+      "ASX",
+      "WDC",
+      "STX",
+      "2454.TW",
+      "2303.TW",
+      "2408.TW",
+    ],
   },
   {
     key: "mega_cap_platforms",
@@ -238,8 +279,8 @@ function scoreGroup(target: YfinanceFundamentalSnapshot, group: PeerGroup): { pe
 function enrichSnapshot(target: YfinanceFundamentalSnapshot, snapshots: YfinanceFundamentalSnapshot[]): YfinanceFundamentalSnapshot {
   const groups = [
     sameProfileGroup(target, snapshots, "industry"),
-    sameProfileGroup(target, snapshots, "sector"),
     curatedGroup(target, snapshots),
+    sameProfileGroup(target, snapshots, "sector"),
   ].filter((group): group is PeerGroup => group != null);
 
   if (groups.length === 0) {
