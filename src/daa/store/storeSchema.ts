@@ -882,8 +882,8 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_symbol_asof_desc
           ON daa_market_price_history_v1(symbol, as_of_ts DESC);
-        CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_upper_symbol_date_asof_desc
-          ON daa_market_price_history_v1(UPPER(symbol), (as_of_ts::date), as_of_ts DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_upper_symbol_asof_desc
+          ON daa_market_price_history_v1(UPPER(symbol), as_of_ts DESC);
 
         CREATE TABLE IF NOT EXISTS daa_fx_rate_history_v1 (
           provider TEXT NOT NULL,
