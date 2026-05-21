@@ -96,22 +96,22 @@ export function AgentViewPanel({ assetKey }: { assetKey: string }) {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-4">
+    <div className="p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-indigo-300" />
-          <h3 className="text-sm font-medium text-[var(--text)]">Agent 观点</h3>
+          <Brain className="h-4 w-4 text-[#a3ff12]" />
+          <h3 className="text-sm font-semibold text-[#f3f6f8]">研究观点</h3>
         </div>
         <Link
           href="/daa/dashboard/today"
-          className="flex items-center gap-1 text-[10px] text-[var(--faint)] hover:text-indigo-300"
+          className="flex items-center gap-1 text-[10px] text-[#59636f] hover:text-[#a3ff12]"
         >
           日报 <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2 py-3 text-xs text-[var(--muted)]">
+        <div className="flex items-center gap-2 py-3 text-xs text-[#8a939f]">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> 加载 Agent 论点…
         </div>
       )}
@@ -124,7 +124,7 @@ export function AgentViewPanel({ assetKey }: { assetKey: string }) {
       )}
 
       {!loading && !error && data && data.theses.length === 0 && (
-        <div className="rounded-md border border-dashed border-[rgba(255,255,255,0.08)] px-3 py-4 text-center text-[11px] text-[var(--faint)]">
+        <div className="rounded-[8px] border border-dashed border-[#252d36] bg-[#050607] px-3 py-4 text-center text-[11px] text-[#8a939f]">
           Agent 尚未针对此资产建立论点
         </div>
       )}
@@ -145,10 +145,10 @@ export function AgentViewPanel({ assetKey }: { assetKey: string }) {
                       {badge.label}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium text-[var(--text)] group-hover:text-indigo-300 transition-colors line-clamp-2">
+                      <div className="line-clamp-2 text-xs font-medium text-[#d6dde5] transition-colors group-hover:text-[#a3ff12]">
                         {t.title}
                       </div>
-                      <div className="mt-0.5 text-[10px] text-[var(--faint)]">
+                      <div className="mt-0.5 text-[10px] text-[#59636f]">
                         {daysSince(t.updatedAt)}
                       </div>
                     </div>
@@ -157,11 +157,11 @@ export function AgentViewPanel({ assetKey }: { assetKey: string }) {
 
                 {/* 最新证据片段 */}
                 {latestEvidence.length > 0 ? (
-                  <ul className="ml-2 border-l border-[rgba(255,255,255,0.06)] pl-3 space-y-1">
+                  <ul className="ml-2 space-y-1 border-l border-[#151b22] pl-3">
                     {latestEvidence.map((e) => {
                       const quality = deriveEvidenceQuality(e);
                       return (
-                        <li key={e.id} className="text-[11px] text-[var(--muted)] line-clamp-2">
+                        <li key={e.id} className="line-clamp-2 text-[11px] text-[#8a939f]">
                           <span className={cn("font-medium mr-1", evidenceTone(e.evidenceType))}>
                             {e.evidenceType === "supporting" ? "↑" : e.evidenceType === "contradicting" ? "↓" : "·"}
                           </span>
@@ -177,7 +177,7 @@ export function AgentViewPanel({ assetKey }: { assetKey: string }) {
                     })}
                   </ul>
                 ) : t.conviction === "uncertain" ? (
-                  <div className="ml-2 border-l border-[rgba(255,255,255,0.06)] pl-3 text-[11px] text-[var(--faint)]">
+                  <div className="ml-2 border-l border-[#151b22] pl-3 text-[11px] text-[#59636f]">
                     暂无可用证据，等待下一轮调查确认。
                   </div>
                 ) : null}

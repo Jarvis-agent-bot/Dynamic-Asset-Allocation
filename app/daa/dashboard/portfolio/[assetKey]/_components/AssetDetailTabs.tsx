@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Activity, Bot, Newspaper, ReceiptText, Settings2 } from "lucide-react";
 
-import { DaaSurfaceFilterChip } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { cn } from "@/lib/utils";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { AgentViewPanel } from "./AgentViewPanel";
@@ -20,9 +20,9 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
   const tabs = useMemo(() => {
     const items: Array<{ key: TabKey; label: string; count?: string; icon: ReactNode }> = [
       { key: "technical", label: "技术指标", icon: <Activity className="h-3.5 w-3.5" /> },
-      { key: "news", label: "新闻", icon: <Newspaper className="h-3.5 w-3.5" /> },
-      { key: "agent", label: "Agent", icon: <Bot className="h-3.5 w-3.5" /> },
-      { key: "orders", label: "订单", icon: <ReceiptText className="h-3.5 w-3.5" /> },
+      { key: "orders", label: "交易活动", icon: <ReceiptText className="h-3.5 w-3.5" /> },
+      { key: "news", label: "市场资讯", icon: <Newspaper className="h-3.5 w-3.5" /> },
+      { key: "agent", label: "研究观点", icon: <Bot className="h-3.5 w-3.5" /> },
     ];
     if (row.watchEnabled && row.holdingQty === 0) {
       items.push({ key: "auto-entry", label: "自动建仓", icon: <Settings2 className="h-3.5 w-3.5" /> });
@@ -35,25 +35,31 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
   }, [active, tabs]);
 
   return (
-    <div className="space-y-3">
-      <div role="tablist" aria-label="资产详情信息" className="flex gap-2 overflow-x-auto pb-1">
+    <div className="overflow-hidden rounded-[14px] border border-[#1a222a] bg-[#080b0e]">
+      <div role="tablist" aria-label="资产详情信息" className="flex gap-0 overflow-x-auto border-b border-[#151b22] bg-[#0b0f13] px-2">
         {tabs.map((tab) => (
-          <DaaSurfaceFilterChip
+          <button
+            type="button"
             key={tab.key}
-            active={active === tab.key}
             role="tab"
             aria-selected={active === tab.key}
             onClick={() => setActive(tab.key)}
-            className="gap-1.5"
+            className={cn(
+              "relative inline-flex h-10 shrink-0 items-center gap-1.5 px-3 text-xs font-semibold transition-colors",
+              active === tab.key
+                ? "text-[#f3f6f8]"
+                : "text-[#8a939f] hover:text-[#d6dde5]",
+            )}
           >
             {tab.icon}
             {tab.label}
             {tab.count ? <span className="text-[var(--faint)]">{tab.count}</span> : null}
-          </DaaSurfaceFilterChip>
+            {active === tab.key ? <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-[#a3ff12]" /> : null}
+          </button>
         ))}
       </div>
 
-      <div role="tabpanel">
+      <div role="tabpanel" className="bg-[#080b0e]">
         {active === "technical" ? (
           <AssetTechnicalPanel symbol={row.yfinanceSymbol || row.symbol} currency={row.currency} />
         ) : null}

@@ -55,14 +55,14 @@ function statusTone(status: "bullish" | "bearish" | "neutral" | "unavailable" | 
 function MetricGroup({ title, rows }: { title: string; rows: MetricRow[] }) {
   return (
     <div className="min-w-0">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{title}</div>
-      <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+      <div className="mb-2 text-[11px] font-semibold text-[#59636f]">{title}</div>
+      <div className="divide-y divide-[#151b22] border-y border-[#151b22]">
         {rows.map((row) => (
           <div key={row.label} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] gap-3 py-2.5 text-sm">
-            <div className="min-w-0 text-[var(--muted)]">{row.label}</div>
-            <div className={cn("min-w-0 text-right font-[var(--font-mono)] text-[var(--text)]", row.tone === "green" && "text-emerald-300", row.tone === "red" && "text-red-300", row.tone === "amber" && "text-amber-300")}>
+            <div className="min-w-0 text-[#8a939f]">{row.label}</div>
+            <div className={cn("min-w-0 text-right font-[var(--font-mono)] text-[#d6dde5]", row.tone === "green" && "text-[#00c076]", row.tone === "red" && "text-[#f84960]", row.tone === "amber" && "text-[#f7b500]")}>
               {row.value}
-              {row.hint ? <span className="ml-1 font-sans text-[11px] text-[var(--faint)]">{row.hint}</span> : null}
+              {row.hint ? <span className="ml-1 font-sans text-[11px] text-[#59636f]">{row.hint}</span> : null}
             </div>
           </div>
         ))}
@@ -143,11 +143,11 @@ export function AssetTechnicalPanel({
   const signal = data?.signal ?? null;
 
   return (
-    <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.78)] p-4">
+    <div className="p-4">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-[var(--primary)]" />
-          <h3 className="text-sm font-semibold text-[var(--text)]">技术指标</h3>
+          <Activity className="h-4 w-4 text-[#a3ff12]" />
+          <h3 className="text-sm font-semibold text-[#f3f6f8]">技术指标</h3>
           {signal ? (
             <>
               <DaaSurfaceStatusPill tone={scoreTone(signal.scorePct)}>评分 {signal.scorePct.toFixed(0)}</DaaSurfaceStatusPill>
@@ -159,7 +159,7 @@ export function AssetTechnicalPanel({
           type="button"
           onClick={() => void load(true)}
           disabled={refreshing || loading}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-[var(--faint)] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--text)] disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-[6px] px-2 py-1 text-[11px] text-[#59636f] transition-colors hover:bg-[#151b22] hover:text-[#d6dde5] disabled:opacity-50"
           aria-label="刷新技术指标"
         >
           {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -168,7 +168,7 @@ export function AssetTechnicalPanel({
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-8 text-sm text-[var(--muted)]">
+        <div className="flex items-center gap-2 py-8 text-sm text-[#8a939f]">
           <Loader2 className="h-4 w-4 animate-spin" />
           加载技术指标…
         </div>
@@ -182,7 +182,7 @@ export function AssetTechnicalPanel({
       ) : null}
 
       {!loading && !error && !signal ? (
-        <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] px-4 py-8 text-center text-sm text-[var(--muted)]">
+        <div className="rounded-[10px] border border-dashed border-[#252d36] bg-[#050607] px-4 py-8 text-center text-sm text-[#8a939f]">
           历史行情不足，暂时无法生成技术指标。
         </div>
       ) : null}
@@ -197,10 +197,10 @@ export function AssetTechnicalPanel({
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <div>
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">信号理由</div>
+              <div className="mb-2 text-[11px] font-semibold text-[#59636f]">信号理由</div>
               <div className="flex flex-wrap gap-2">
                 {signal.reasons.map((reason) => (
-                  <span key={reason} className="rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-1 text-xs text-[var(--muted)]">
+                  <span key={reason} className="rounded-[6px] border border-[#1a222a] bg-[#050607] px-3 py-1 text-xs text-[#8a939f]">
                     {reason}
                   </span>
                 ))}
@@ -208,16 +208,16 @@ export function AssetTechnicalPanel({
             </div>
 
             <div>
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">资产特化指标</div>
-              <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+              <div className="mb-2 text-[11px] font-semibold text-[#59636f]">资产特化指标</div>
+              <div className="divide-y divide-[#151b22] border-y border-[#151b22]">
                 {signal.specific.map((item) => (
                   <div key={item.key} className="grid grid-cols-[minmax(0,0.9fr)_auto] gap-3 py-2.5 text-sm">
                     <div className="min-w-0">
-                      <div className="truncate text-[var(--text)]">{item.label}</div>
-                      {item.description ? <div className="mt-0.5 line-clamp-1 text-xs text-[var(--faint)]">{item.description}</div> : null}
+                      <div className="truncate text-[#d6dde5]">{item.label}</div>
+                      {item.description ? <div className="mt-0.5 line-clamp-1 text-xs text-[#59636f]">{item.description}</div> : null}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-[var(--font-mono)] text-[var(--text)]">
+                      <span className="font-[var(--font-mono)] text-[#d6dde5]">
                         {typeof item.value === "number" ? formatNumber(item.value, 2) : item.value}
                         {item.unit ? ` ${item.unit}` : ""}
                       </span>

@@ -67,18 +67,18 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
   const summary = items[0]?.signalSummary ?? null;
 
   return (
-    <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-4">
+    <div className="p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Newspaper className="h-4 w-4 text-sky-300" />
-          <h3 className="text-sm font-medium text-[var(--text)]">近 7 天新闻</h3>
-          <span className="text-[10px] text-[var(--faint)]">{items.length} 条</span>
+          <Newspaper className="h-4 w-4 text-[#a3ff12]" />
+          <h3 className="text-sm font-semibold text-[#f3f6f8]">市场资讯</h3>
+          <span className="text-[10px] text-[#59636f]">{items.length} 条</span>
         </div>
         <button
           type="button"
           onClick={() => load(true)}
           disabled={refreshing}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-[var(--faint)] hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.06)] disabled:opacity-50"
+          className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-[10px] text-[#59636f] hover:bg-[#151b22] hover:text-[#d6dde5] disabled:opacity-50"
           aria-label="刷新"
         >
           {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
@@ -87,13 +87,13 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
 
       {/* 整体情感摘要 */}
       {summary && (
-        <div className="mb-3 rounded-md border border-[rgba(255,255,255,0.06)] bg-[rgba(56,189,248,0.03)] px-3 py-2 text-[11px] leading-relaxed text-[var(--muted)]">
+        <div className="mb-3 rounded-[8px] border border-[#1a222a] bg-[#050607] px-3 py-2 text-[11px] leading-relaxed text-[#8a939f]">
           {summary}
         </div>
       )}
 
       {loading && (
-        <div className="flex items-center gap-2 py-3 text-xs text-[var(--muted)]">
+        <div className="flex items-center gap-2 py-3 text-xs text-[#8a939f]">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> 加载新闻…
         </div>
       )}
@@ -112,7 +112,7 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
       )}
 
       {!loading && items.length > 0 && (
-        <ul className="divide-y divide-[rgba(255,255,255,0.06)] max-h-[360px] overflow-y-auto">
+        <ul className="max-h-[360px] divide-y divide-[#151b22] overflow-y-auto">
           {items.map((it, idx) => {
             const badge = providerBadge(it.provider);
             const isMajor = it.majorEvent?.impact === "high";
@@ -133,15 +133,15 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
                         href={it.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-[var(--text)] hover:text-indigo-300 line-clamp-2 flex items-start gap-1"
+                        className="line-clamp-2 flex items-start gap-1 text-xs text-[#d6dde5] hover:text-[#a3ff12]"
                       >
                         {it.title}
                         <ExternalLink className="mt-0.5 h-2.5 w-2.5 shrink-0 opacity-40" />
                       </a>
                     ) : (
-                      <span className="text-xs text-[var(--text)] line-clamp-2">{it.title}</span>
+                      <span className="line-clamp-2 text-xs text-[#d6dde5]">{it.title}</span>
                     )}
-                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--faint)]">
+                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[#59636f]">
                       <span className={`rounded px-1 py-0.5 ${badge.color}`}>{badge.label}</span>
                       <span>{formatAgo(it.publishedAt)}</span>
                     </div>

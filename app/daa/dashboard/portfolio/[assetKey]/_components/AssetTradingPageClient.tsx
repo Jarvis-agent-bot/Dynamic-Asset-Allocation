@@ -12,6 +12,7 @@ import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { buildManualExecutionInput } from "@/app/daa/dashboard/_hooks/dashboard/assetActionCommands";
+import { cn } from "@/lib/utils";
 import { getAssetDetailReadModel } from "@/src/daa/modules/read/readApi";
 import { executeWorkbenchOrder, previewWorkbenchExecution } from "@/src/daa/modules/workbench/workbenchApi";
 import type { AssetDetailReadModel } from "@/src/daa/modules/read/readModels";
@@ -44,32 +45,64 @@ function AssetTradeContextPanel(props: {
   const { row, baseCurrency } = props;
   const targetPct = row.targetWeightPct ?? row.targetWeightHint ?? 0;
   const gapPct = row.gapPct ?? 0;
+  const absGap = Math.abs(gapPct);
+  const gapTone = absGap >= 5 ? "text-[#f84960]" : absGap >= 2 ? "text-[#f7b500]" : "text-[#00c076]";
+  const actualBarWidth = `${Math.min(100, Math.max(0, row.actualWeightPct ?? 0))}%`;
+  const targetBarLeft = `${Math.min(100, Math.max(0, targetPct))}%`;
+  const rows = [
+    { label: "价格时间", value: formatDateTime(row.priceUpdatedAt) },
+    { label: "市值", value: formatCurrency(row.valuationBase ?? 0, baseCurrency) },
+    { label: "当前 / 目标", value: `${row.actualWeightPct.toFixed(2)}% / ${targetPct.toFixed(2)}%` },
+    { label: "价格源", value: row.priceSource || "--" },
+    { label: "FX", value: row.fxMissing ? "缺失" : row.fxRateToBase ? row.fxRateToBase.toFixed(6) : "--" },
+  ];
+
   return (
-    <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.76)] p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-[var(--text)]">交易上下文</h3>
-        <DaaSurfaceStatusPill tone={priceStatusTone(row.priceStatus)}>
+    <div className="overflow-hidden rounded-[14px] border border-[#1a222a] bg-[#0b0f13]">
+      <div className="flex items-center justify-between border-b border-[#151b22] px-3 py-2.5">
+        <h3 className="text-sm font-semibold text-[#f3f6f8]">市场摘要</h3>
+        <DaaSurfaceStatusPill tone={priceStatusTone(row.priceStatus)} className="rounded-[6px] px-2 py-0.5 text-[10px] normal-case tracking-normal">
           {priceStatusLabel(row.priceStatus)}
         </DaaSurfaceStatusPill>
       </div>
-      <div className="divide-y divide-[var(--border)] border-y border-[var(--border)] text-sm">
-        <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] gap-3 py-2.5">
-          <span className="text-[var(--muted)]">价格时间</span>
-          <span className="text-right font-[var(--font-mono)] text-[var(--text)]">{formatDateTime(row.priceUpdatedAt)}</span>
+      <div className="p-3">
+        <div className="mb-3 rounded-[10px] border border-[#1a222a] bg-[#050607] p-3">
+          <div className="mb-2 flex items-center justify-between text-xs">
+            <span className="text-[#8a939f]">组合权重</span>
+            <span className={cn("font-[var(--font-mono)]", gapTone)}>偏离 {gapPct.toFixed(2)}%</span>
+          </div>
+          <div className="relative h-2 overflow-hidden rounded-full bg-[#151b22]">
+            <div className="absolute inset-y-0 left-0 bg-[#a3ff12]" style={{ width: actualBarWidth }} />
+            <div
+              className="absolute inset-y-[-3px] w-px bg-[#f3f6f8]"
+              style={{ left: targetBarLeft }}
+              title={`目标 ${targetPct.toFixed(2)}%`}
+            />
+          </div>
+          <div className="mt-1.5 flex items-center justify-between font-[var(--font-mono)] text-[10px] text-[#59636f]">
+            <span>当前 {row.actualWeightPct.toFixed(2)}%</span>
+            <span>目标 {targetPct.toFixed(2)}%</span>
+          </div>
         </div>
-        <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] gap-3 py-2.5">
-          <span className="text-[var(--muted)]">市值</span>
-          <span className="text-right font-[var(--font-mono)] text-[var(--text)]">{formatCurrency(row.valuationBase ?? 0, baseCurrency)}</span>
-        </div>
-        <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] gap-3 py-2.5">
-          <span className="text-[var(--muted)]">当前 / 目标</span>
-          <span className="text-right font-[var(--font-mono)] text-[var(--text)]">{row.actualWeightPct.toFixed(2)}% / {targetPct.toFixed(2)}%</span>
-        </div>
-        <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] gap-3 py-2.5">
-          <span className="text-[var(--muted)]">偏离</span>
-          <span className={`text-right font-[var(--font-mono)] ${Math.abs(gapPct) >= 5 ? "text-red-300" : Math.abs(gapPct) >= 2 ? "text-amber-300" : "text-[var(--text)]"}`}>
-            {gapPct.toFixed(2)}%
-          </span>
+        <div className="divide-y divide-[#151b22] text-xs">
+          {rows.map((item) => (
+            <div key={item.label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 py-2">
+              <span className="text-[#8a939f]">{item.label}</span>
+              <span className="truncate text-right font-[var(--font-mono)] text-[#d6dde5]">{item.value}</span>
+            </div>
+          ))}
+          <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 py-2">
+            <span className="text-[#8a939f]">漂移状态</span>
+            <span className={cn("text-right font-[var(--font-mono)]", gapTone)}>
+              {absGap >= 5 ? "显著偏离" : absGap >= 2 ? "中度偏离" : "贴近目标"}
+            </span>
+          </div>
+          <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 py-2">
+            <span className="text-[#8a939f]">价格年龄</span>
+            <span className="text-right font-[var(--font-mono)] text-[#d6dde5]">
+              {row.priceAgeSec == null ? "--" : `${Math.round(row.priceAgeSec / 60)}m`}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -200,14 +233,14 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
       <AssetInfoBar row={row} baseCurrency={baseCurrency} sparkData={sparkData} />
 
       {/* 主体：左 K 线 + 右交易区 */}
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_410px]">
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_386px]">
         {/* 左侧：K 线图 */}
         <SectionErrorBoundary sectionName="K线图">
-          <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-2">
+          <div className="overflow-hidden rounded-[14px] border border-[#1a222a] bg-[#050607]">
             <AssetKlineChart
               symbol={row.yfinanceSymbol || row.symbol}
               market={row.market}
-              className="min-h-[560px]"
+              className="min-h-[520px]"
               tradeMarkers={tradeMarkers}
               costBasisPerShare={costBasisPerShare}
             />
@@ -215,7 +248,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
         </SectionErrorBoundary>
 
         {/* 右侧：交易面板 + 持仓上下文 */}
-        <div className="space-y-4">
+        <div className="space-y-3 xl:sticky xl:top-3">
           <SectionErrorBoundary sectionName="交易面板">
             <InlineTradePanel
               row={row}
