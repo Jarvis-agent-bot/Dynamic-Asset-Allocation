@@ -5,7 +5,7 @@ import { runHistoryBackfill, type BackfillRange, type BackfillInterval } from "@
 export const runtime = "nodejs";
 
 const VALID_RANGES: BackfillRange[] = ["1y", "2y", "5y"];
-const VALID_INTERVALS: BackfillInterval[] = ["1d", "1h"];
+const VALID_INTERVALS: BackfillInterval[] = ["1d"];
 
 export async function POST(req: Request) {
   return withApiHandler(async () => {
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     // 验证 interval
     const interval = String(body?.interval || "1d").trim() as BackfillInterval;
     if (!VALID_INTERVALS.includes(interval)) {
-      return fail("VALIDATION_FAILED", `interval 必须是 ${VALID_INTERVALS.join(" | ")}`, { status: 400 });
+      return fail("VALIDATION_FAILED", "interval 当前仅支持 1d", { status: 400 });
     }
 
     // 验证 assetKeys（可选）

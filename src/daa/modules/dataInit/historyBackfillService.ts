@@ -1,15 +1,15 @@
 /**
- * 历史数据回填服务 — 批量从 yfinance 拉取 OHLCV 数据并写入 daa_price_history。
+ * 历史数据回填服务 — 批量从 Yahoo 拉取真实 OHLCV candle 并写入统一行情缓存。
  */
 
-import { createMarketDataClient } from "@/src/market/marketDataClient";
-import { appendAssetPriceHistoryRows } from "@/src/daa/store/portfolioStore";
 import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
 
 export type BackfillRange = "1y" | "2y" | "5y";
-export type BackfillInterval = "1d" | "1h";
+export type BackfillInterval = "1d";
 
 type BackfillRequest = {
   assetKeys?: string[];
@@ -22,6 +22,9 @@ type BackfillResult = {
   completed: number;
   failed: Array<{ assetKey: string; error: string }>;
   rowsInserted: number;
+  rowsWritten: number;
+  rowsCovered: number;
+  rowsReused: number;
 };
 
 const RANGE_DAYS: Record<BackfillRange, number> = {
@@ -31,9 +34,18 @@ const RANGE_DAYS: Record<BackfillRange, number> = {
 };
 
 const MAX_CONCURRENCY = 4;
+const START_COVERAGE_TOLERANCE_DAYS = 7;
 
 function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function coversStartDate(firstDate: string | undefined, requestedStart: string): boolean {
+  if (!firstDate) return false;
+  const first = Date.parse(firstDate.slice(0, 10));
+  const requested = Date.parse(requestedStart.slice(0, 10));
+  if (!Number.isFinite(first) || !Number.isFinite(requested)) return false;
+  return first <= requested + START_COVERAGE_TOLERANCE_DAYS * 86_400_000;
 }
 
 /**
@@ -59,34 +71,31 @@ async function runWithConcurrency<T>(
 
 export async function runHistoryBackfill(req: BackfillRequest): Promise<BackfillResult> {
   // 1. 确定要回填的资产列表
+  const universe = await listDaaAssetUniverse();
   let assetKeys: string[];
   if (req.assetKeys && req.assetKeys.length > 0) {
     assetKeys = req.assetKeys;
   } else {
-    const universe = await listDaaAssetUniverse();
     assetKeys = universe.map((r) => r.assetKey);
   }
 
   if (assetKeys.length === 0) {
-    return { total: 0, completed: 0, failed: [], rowsInserted: 0 };
+    return { total: 0, completed: 0, failed: [], rowsInserted: 0, rowsWritten: 0, rowsCovered: 0, rowsReused: 0 };
   }
 
   // 2. 计算日期范围
   const days = RANGE_DAYS[req.range] ?? 365;
   const now = new Date();
   const startDate = toIsoDate(new Date(now.getTime() - days * 86_400_000));
-  const endDate = toIsoDate(now);
-
-  // 3. 创建 market data client（走内部 API 路由）
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || "http://localhost:3000";
-  const baseUrl = origin.startsWith("http") ? origin : `https://${origin}`;
-  const client = createMarketDataClient({ endpointBase: baseUrl });
 
   const result: BackfillResult = {
     total: assetKeys.length,
     completed: 0,
     failed: [],
     rowsInserted: 0,
+    rowsWritten: 0,
+    rowsCovered: 0,
+    rowsReused: 0,
   };
 
   // 4. 并发回填
@@ -98,30 +107,43 @@ export async function runHistoryBackfill(req: BackfillRequest): Promise<Backfill
     }
 
     try {
-      const bars = await client.yfinance.priceSeriesBars({
-        symbol: parsed.symbol,
-        start: startDate,
-        end: endDate,
-      });
-
-      if (bars.length === 0) {
-        result.failed.push({ assetKey, error: "yfinance 返回 0 条数据" });
+      const universeRow = universe.find((row) => row.assetKey.toUpperCase() === assetKey.toUpperCase()) ?? null;
+      const market = universeRow?.market || parsed.market;
+      const currency = universeRow?.currency || "USD";
+      const yfinanceSymbol = toYfinanceSymbolByMarket(universeRow?.symbol || parsed.symbol, market);
+      if (!yfinanceSymbol) {
+        result.failed.push({ assetKey, error: "无法映射 Yahoo symbol" });
         return;
       }
 
-      const rows = bars.map((bar) => ({
-        assetKey,
-        ts: `${bar.date}T00:00:00.000Z`,
-        price: bar.close,
-        source: "backfill",
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        volume: bar.volume,
-      }));
+      const cacheResult = await fetchPriceSeriesWithCache(yfinanceSymbol, startDate, {
+        market,
+        currency,
+        interval: req.interval,
+        adjusted: false,
+        requireOhlcv: true,
+        minDbDays: 15,
+        maxStaleDays: 2,
+        timeoutMs: 12_000,
+        writeMode: "sync",
+      });
 
-      const inserted = await appendAssetPriceHistoryRows(rows);
-      result.rowsInserted += inserted;
+      if (cacheResult.data.length === 0) {
+        result.failed.push({ assetKey, error: cacheResult.error || "Yahoo 返回 0 条 OHLCV 数据" });
+        return;
+      }
+
+      if (!coversStartDate(cacheResult.data[0]?.date, startDate)) {
+        result.failed.push({ assetKey, error: `OHLCV 数据未覆盖目标起始日期 ${startDate}` });
+        return;
+      }
+
+      const rowsWritten = cacheResult.rowsWritten ?? 0;
+      const rowsCovered = cacheResult.rowsCovered ?? cacheResult.data.length;
+      result.rowsWritten += rowsWritten;
+      result.rowsInserted += rowsWritten;
+      result.rowsCovered += rowsCovered;
+      result.rowsReused += Math.max(0, rowsCovered - rowsWritten);
       result.completed += 1;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

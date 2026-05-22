@@ -13,13 +13,15 @@ import {
 /* ---------- types ---------- */
 
 type BackfillRange = "1y" | "2y" | "5y";
-type BackfillInterval = "1d" | "1h";
+type BackfillInterval = "1d";
 
 interface BackfillResult {
   totalAssets: number;
   completedAssets: number;
   failedAssets: string[];
   totalRows: number;
+  rowsWritten: number;
+  rowsReused: number;
   durationMs: number;
 }
 
@@ -28,6 +30,9 @@ type RawBackfillResult = {
   completed?: unknown;
   failed?: unknown;
   rowsInserted?: unknown;
+  rowsWritten?: unknown;
+  rowsCovered?: unknown;
+  rowsReused?: unknown;
   totalAssets?: unknown;
   completedAssets?: unknown;
   failedAssets?: unknown;
@@ -45,7 +50,6 @@ const RANGE_OPTIONS: { value: BackfillRange; label: string; tradingDays: number 
 
 const INTERVAL_OPTIONS: { value: BackfillInterval; label: string; multiplier: number }[] = [
   { value: "1d", label: "日线", multiplier: 1 },
-  { value: "1h", label: "小时线", multiplier: 7 },
 ];
 
 const TOTAL_ASSETS = 78;
@@ -78,12 +82,15 @@ function normalizeFailedAssets(value: unknown): string[] {
 }
 
 function normalizeBackfillResult(payload: unknown, fallbackDurationMs: number): BackfillResult {
-  const raw = (isRecord(payload) && isRecord(payload.data) ? payload.data : payload) as RawBackfillResult;
+  const source = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
+  const raw = (isRecord(source) ? source : {}) as RawBackfillResult;
   return {
     totalAssets: toFiniteNumber(raw.totalAssets ?? raw.total),
     completedAssets: toFiniteNumber(raw.completedAssets ?? raw.completed),
     failedAssets: normalizeFailedAssets(raw.failedAssets ?? raw.failed),
-    totalRows: toFiniteNumber(raw.totalRows ?? raw.rowsInserted),
+    totalRows: toFiniteNumber(raw.totalRows ?? raw.rowsCovered ?? raw.rowsInserted),
+    rowsWritten: toFiniteNumber(raw.rowsWritten ?? raw.rowsInserted),
+    rowsReused: toFiniteNumber(raw.rowsReused),
     durationMs: toFiniteNumber(raw.durationMs, fallbackDurationMs),
   };
 }
@@ -140,7 +147,7 @@ export function SettingsDataInitSection() {
     <section id="settings-data-init" className="scroll-mt-28">
       <DaaSurfacePanel
         title="历史数据初始化"
-        subtitle="一键回填资产池的历史行情数据，用于回测引擎和技术信号计算。首次使用或切换数据源后建议执行。"
+        subtitle="一键回填资产池的真实 OHLCV 行情，用于 K 线、技术指标和回测引擎。首次使用或切换数据源后建议执行。"
         accent="cyan"
       >
         <div className="space-y-5">
@@ -191,12 +198,6 @@ export function SettingsDataInitSection() {
               预计: <span className="font-semibold text-[var(--text)]">{TOTAL_ASSETS}</span> 资产
               {" \u00d7 "}
               <span className="font-semibold text-[var(--text)]">{days.toLocaleString()}</span> 交易日
-              {interval === "1h" ? (
-                <>
-                  {" \u00d7 "}
-                  <span className="font-semibold text-[var(--text)]">7</span> 小时/日
-                </>
-              ) : null}
               {" \u2248 "}
               <span className="font-semibold text-[var(--primary)]">{rows.toLocaleString()}</span> 条记录
             </div>
@@ -247,7 +248,7 @@ export function SettingsDataInitSection() {
                   {running
                     ? `${progress?.completed ?? 0}/${progress?.total ?? TOTAL_ASSETS} 资产完成`
                     : result
-                      ? `${result.completedAssets}/${result.totalAssets} 资产完成，共 ${result.totalRows.toLocaleString()} 条记录`
+                      ? `${result.completedAssets}/${result.totalAssets} 资产完成，覆盖 ${result.totalRows.toLocaleString()} 条，写入 ${result.rowsWritten.toLocaleString()} 条，复用 ${result.rowsReused.toLocaleString()} 条`
                       : ""}
                 </span>
                 {result && !running ? (
@@ -264,7 +265,7 @@ export function SettingsDataInitSection() {
             <div className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-[var(--primary-border)] bg-[var(--primary-bg)] px-4 py-3">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
               <div className="text-sm text-[var(--primary)]">
-                全部 {result.completedAssets} 个资产的历史数据已成功写入，共 {result.totalRows.toLocaleString()} 条记录。
+                全部 {result.completedAssets} 个资产的历史数据已完成覆盖，共 {result.totalRows.toLocaleString()} 条记录，本次写入/更新 {result.rowsWritten.toLocaleString()} 条，复用缓存 {result.rowsReused.toLocaleString()} 条。
               </div>
             </div>
           ) : null}

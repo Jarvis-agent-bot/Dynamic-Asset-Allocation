@@ -114,6 +114,7 @@ export async function buildDailyReportText(bootstrap: WorkbenchBootstrap): Promi
 
   if (withGap.length > 0) {
     const driftThresholdPct = bootstrap.policy.drift.outerBandPct * 100;
+    const driftInnerBandPct = bootstrap.policy.drift.innerBandPct * 100;
     lines.push("⚖️ <b>偏移监控</b>");
 
     for (const a of withGap.slice(0, 5)) {
@@ -123,6 +124,19 @@ export async function buildDailyReportText(bootstrap: WorkbenchBootstrap): Promi
     }
     lines.push(`  <i>阈值: ${fmtNum(driftThresholdPct)}%</i>`);
     lines.push("");
+
+    const actionable = withGap
+      .filter((a) => Math.abs(a.gapPct ?? 0) >= driftInnerBandPct)
+      .slice(0, 4);
+    if (actionable.length > 0) {
+      lines.push("🎯 <b>调仓关注</b>");
+      for (const a of actionable) {
+        const gap = a.gapPct ?? 0;
+        const action = gap > 0 ? "买入/加仓" : "卖出/减仓";
+        lines.push(`  ${h(a.symbol)}: ${action} (${gap >= 0 ? "+" : ""}${fmtNum(gap)}%)`);
+      }
+      lines.push("");
+    }
   }
 
   // ─── Top movers ───

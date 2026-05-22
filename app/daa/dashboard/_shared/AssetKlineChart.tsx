@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Crosshair, Magnet, MoveDiagonal2, PencilLine, Ruler, SlidersHorizontal, ZoomIn } from "lucide-react";
 import {
   createChart,
   createSeriesMarkers,
@@ -79,6 +78,12 @@ type IndicatorSnapshot = {
   kdjJ?: number;
 };
 
+type KlineDataSource = {
+  source: string;
+  upstream: string;
+  rawCount: number;
+};
+
 export type KlineTradeMarker = {
   date: string;
   side: "BUY" | "SELL";
@@ -111,16 +116,6 @@ const INDICATOR_LABELS: { key: IndicatorKey; label: string }[] = [
   { key: "macd", label: "MACD" },
   { key: "kdj", label: "KDJ" },
 ];
-
-const CHART_TOOLS = [
-  { label: "十字光标", icon: Crosshair },
-  { label: "趋势线", icon: MoveDiagonal2 },
-  { label: "画笔", icon: PencilLine },
-  { label: "标尺", icon: Ruler },
-  { label: "缩放", icon: ZoomIn },
-  { label: "磁吸", icon: Magnet },
-  { label: "设置", icon: SlidersHorizontal },
-] as const;
 
 const COLORS = {
   bg: "#050607",
@@ -402,7 +397,7 @@ function setPaddedVisibleRange(chart: IChartApi, candles: CandlestickData[]) {
   if (candles.length <= 0) return;
   const leftPadding = Math.min(8, Math.max(2, Math.round(candles.length * 0.03)));
   const rightPadding = Math.min(10, Math.max(4, Math.round(candles.length * 0.05)));
-  const minVisibleBars = 42;
+  const minVisibleBars = 80;
   const visibleBars = candles.length + leftPadding + rightPadding;
   const extraPadding = Math.max(0, minVisibleBars - visibleBars);
   chart.timeScale().setVisibleLogicalRange({
@@ -444,6 +439,7 @@ export function AssetKlineChart({
   const [bars, setBars] = useState<PriceBar[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [dataSource, setDataSource] = useState<KlineDataSource | null>(null);
   const [crosshairData, setCrosshairData] = useState<CrosshairSnapshot | null>(null);
   const [indicatorVisibility, setIndicatorVisibility] = useState<Record<IndicatorKey, boolean>>({
     ma: true,
@@ -465,7 +461,7 @@ export function AssetKlineChart({
     setLoading(true);
     setError("");
     try {
-      const qs = new URLSearchParams({ symbol, adjusted: "0" });
+      const qs = new URLSearchParams({ symbol, adjusted: "0", requireOhlcv: "1", interval: "1d" });
       if (market) qs.set("market", market);
       if (startDate) qs.set("start", startDate);
 
@@ -481,11 +477,18 @@ export function AssetKlineChart({
       const json = await res.json();
       const data = json?.data ?? json;
       const series: PriceBar[] = Array.isArray(data.series) ? data.series : [];
+      const completeSeries = series.filter(hasCompleteOhlc);
       if (series.length === 0) setError("暂无行情数据");
-      else if (!series.some(hasCompleteOhlc)) setError("行情缺少 OHLC，不能绘制真实 K 线");
-      setBars(series);
+      else if (completeSeries.length === 0) setError("行情缺少真实 OHLCV，不能绘制蜡烛线");
+      setBars(completeSeries);
+      setDataSource({
+        source: typeof data.source === "string" ? data.source : "--",
+        upstream: typeof data.upstream === "string" ? data.upstream : "--",
+        rawCount: Number.isFinite(Number(data.rawCount)) ? Number(data.rawCount) : completeSeries.length,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载行情失败");
+      setDataSource(null);
     } finally {
       setLoading(false);
     }
@@ -606,8 +609,8 @@ export function AssetKlineChart({
         timeVisible: false,
         secondsVisible: false,
         rightOffset: 8,
-        barSpacing: 8,
-        minBarSpacing: 4,
+        barSpacing: 6,
+        minBarSpacing: 3,
       },
       localization: {
         locale: "zh-CN",
@@ -947,13 +950,9 @@ export function AssetKlineChart({
             </button>
           </div>
           <div className="hidden items-center gap-2 font-[var(--font-mono)] text-[11px] text-[#8a939f] lg:flex">
-            <button type="button" className="rounded-[5px] border border-[#202832] px-2 py-1 transition-colors hover:text-[#d6dde5]">
-              多图表
-            </button>
-            <div className="flex rounded-[5px] border border-[#202832] bg-[#050607] p-0.5">
-              <button type="button" className="rounded-[4px] bg-[#1a222a] px-2 py-1 text-[#d6dde5]">价格</button>
-              <button type="button" className="rounded-[4px] px-2 py-1 transition-colors hover:text-[#d6dde5]">市值</button>
-            </div>
+            <span className="rounded-[5px] border border-[#202832] bg-[#050607] px-2 py-1 text-[#d6dde5]">
+              价格图
+            </span>
           </div>
         </div>
 
@@ -996,23 +995,7 @@ export function AssetKlineChart({
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <div className="absolute inset-y-0 left-0 z-[4] hidden w-11 flex-col items-center border-r border-[#111820] bg-[#070a0d] py-3 md:flex">
-          {CHART_TOOLS.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                title={item.label}
-                className="mb-2 flex h-8 w-8 items-center justify-center rounded-[6px] text-[#6d7783] transition-colors hover:bg-[#141a20] hover:text-[#d6dde5]"
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="pointer-events-none absolute left-3 top-3 z-[5] max-w-[calc(100%-1.5rem)] space-y-1 rounded-[6px] bg-[rgba(5,6,7,0.44)] px-2 py-1.5 font-[var(--font-mono)] text-[11px] leading-tight backdrop-blur-sm md:left-14">
+        <div className="pointer-events-none absolute left-3 top-3 z-[5] max-w-[calc(100%-1.5rem)] space-y-1 rounded-[6px] bg-[rgba(5,6,7,0.44)] px-2 py-1.5 font-[var(--font-mono)] text-[11px] leading-tight backdrop-blur-sm">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span className="font-semibold text-[#d6dde5]">{symbol} · 1D · {market || "MARKET"}</span>
             <span className="text-[#8a939f]">开 <b className="font-normal text-[#b8c0ca]">{formatPrice(displayData?.open)}</b></span>
@@ -1050,7 +1033,9 @@ export function AssetKlineChart({
         </div>
 
         <div className="absolute right-3 top-3 z-[5] hidden items-center gap-2 rounded-[6px] bg-[rgba(5,6,7,0.54)] px-2 py-1.5 font-[var(--font-mono)] text-[10px] text-[#8a939f] backdrop-blur-sm lg:flex">
-          <span>OHLCV</span>
+          <span title={dataSource ? `${dataSource.source} · ${dataSource.upstream}` : undefined}>
+            OHLCV {dataSource ? `${dataSource.rawCount}` : ""}
+          </span>
           {visibleCostBasis != null ? <span className="text-[#f7b500]">成本 {formatPrice(visibleCostBasis)}</span> : null}
           {tradeSummary.total > 0 ? (
             <span>
@@ -1069,9 +1054,7 @@ export function AssetKlineChart({
             <span className="text-sm text-[#8a939f]">{error}</span>
           </div>
         )}
-        <div className="md:pl-11">
-          <div ref={containerRef} className="h-[560px] w-full xl:h-[640px]" />
-        </div>
+        <div ref={containerRef} className="h-[560px] w-full xl:h-[640px]" />
       </div>
     </div>
   );

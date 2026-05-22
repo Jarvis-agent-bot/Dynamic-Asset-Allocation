@@ -597,6 +597,39 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260522_market_candles_v1",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_market_candles_v1 (
+          provider TEXT NOT NULL,
+          market TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          interval TEXT NOT NULL CHECK (interval IN ('1d','1h')),
+          ts TIMESTAMPTZ NOT NULL,
+          open NUMERIC NOT NULL,
+          high NUMERIC NOT NULL,
+          low NUMERIC NOT NULL,
+          close NUMERIC NOT NULL,
+          volume NUMERIC,
+          adj_close NUMERIC,
+          currency TEXT NOT NULL DEFAULT 'USD',
+          source TEXT NOT NULL DEFAULT 'market_cache',
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          raw_ref_id TEXT,
+          PRIMARY KEY (provider, market, symbol, interval, ts)
+        )
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_daa_market_candles_v1_symbol_interval_ts_desc
+        ON daa_market_candles_v1(symbol, interval, ts DESC)
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_daa_market_candles_v1_upper_symbol_interval_ts_desc
+        ON daa_market_candles_v1(UPPER(symbol), interval, ts DESC)
+      `);
+    },
+  },
 
   // ── Cognitive Agent OS ──
 

@@ -175,6 +175,26 @@ export type DaaStoreMarketPriceHistory = {
   rawRefId: string | null;
 };
 
+export type DaaStoreMarketCandleInterval = "1d" | "1h";
+
+export type DaaStoreMarketCandle = {
+  provider: string;
+  market: string;
+  symbol: string;
+  interval: DaaStoreMarketCandleInterval;
+  ts: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number | null;
+  adjClose: number | null;
+  currency: string;
+  source: string;
+  rawRefId: string | null;
+  fetchedAt: string;
+};
+
 export type DaaStoreFxRateHistory = {
   provider: string;
   baseCcy: string;
