@@ -23,6 +23,18 @@ interface BackfillResult {
   durationMs: number;
 }
 
+type RawBackfillResult = {
+  total?: unknown;
+  completed?: unknown;
+  failed?: unknown;
+  rowsInserted?: unknown;
+  totalAssets?: unknown;
+  completedAssets?: unknown;
+  failedAssets?: unknown;
+  totalRows?: unknown;
+  durationMs?: unknown;
+};
+
 /* ---------- constants ---------- */
 
 const RANGE_OPTIONS: { value: BackfillRange; label: string; tradingDays: number }[] = [
@@ -45,6 +57,44 @@ function estimateRows(range: BackfillRange, interval: BackfillInterval): { days:
   return { days: rangeOption.tradingDays, rows };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeFailedAssets(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (isRecord(item) && typeof item.assetKey === "string") return item.assetKey;
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function normalizeBackfillResult(payload: unknown, fallbackDurationMs: number): BackfillResult {
+  const raw = (isRecord(payload) && isRecord(payload.data) ? payload.data : payload) as RawBackfillResult;
+  return {
+    totalAssets: toFiniteNumber(raw.totalAssets ?? raw.total),
+    completedAssets: toFiniteNumber(raw.completedAssets ?? raw.completed),
+    failedAssets: normalizeFailedAssets(raw.failedAssets ?? raw.failed),
+    totalRows: toFiniteNumber(raw.totalRows ?? raw.rowsInserted),
+    durationMs: toFiniteNumber(raw.durationMs, fallbackDurationMs),
+  };
+}
+
+function extractErrorMessage(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  if (typeof payload.error === "string") return payload.error;
+  if (isRecord(payload.error) && typeof payload.error.message === "string") return payload.error.message;
+  return null;
+}
+
 /* ---------- component ---------- */
 
 export function SettingsDataInitSection() {
@@ -64,18 +114,19 @@ export function SettingsDataInitSection() {
     setProgress({ completed: 0, total: TOTAL_ASSETS });
 
     try {
+      const startedAt = performance.now();
       const res = await fetch("/api/daa/store/data-init/backfill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ range, interval }),
       });
+      const body: unknown = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || `请求失败 (${res.status})`);
+        throw new Error(extractErrorMessage(body) || `请求失败 (${res.status})`);
       }
 
-      const data = (await res.json()) as BackfillResult;
+      const data = normalizeBackfillResult(body, performance.now() - startedAt);
       setResult(data);
       setProgress({ completed: data.completedAssets, total: data.totalAssets });
     } catch (e) {

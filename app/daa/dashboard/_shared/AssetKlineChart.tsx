@@ -402,8 +402,11 @@ function setPaddedVisibleRange(chart: IChartApi, candles: CandlestickData[]) {
   if (candles.length <= 0) return;
   const leftPadding = Math.min(8, Math.max(2, Math.round(candles.length * 0.03)));
   const rightPadding = Math.min(10, Math.max(4, Math.round(candles.length * 0.05)));
+  const minVisibleBars = 42;
+  const visibleBars = candles.length + leftPadding + rightPadding;
+  const extraPadding = Math.max(0, minVisibleBars - visibleBars);
   chart.timeScale().setVisibleLogicalRange({
-    from: -leftPadding,
+    from: -leftPadding - extraPadding,
     to: candles.length - 1 + rightPadding,
   });
 }
@@ -437,7 +440,7 @@ export function AssetKlineChart({
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const costLineRef = useRef<IPriceLine | null>(null);
 
-  const [range, setRange] = useState<RangeKey>("6M");
+  const [range, setRange] = useState<RangeKey>("1M");
   const [bars, setBars] = useState<PriceBar[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -934,8 +937,6 @@ export function AssetKlineChart({
     setIndicatorVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  const priceTone = displayData && displayData.change >= 0 ? "text-[#00c076]" : "text-[#f84960]";
-
   return (
     <div className={`flex min-h-[520px] flex-col bg-[#050607] text-[#d6dde5] ${className ?? ""}`}>
       <div className="border-b border-[#161b20] bg-[#090d10]">
@@ -943,9 +944,6 @@ export function AssetKlineChart({
           <div className="flex items-center gap-5 text-sm font-semibold">
             <button type="button" className="border-b-2 border-[#d6dde5] py-3 text-[#d6dde5]">
               图表
-            </button>
-            <button type="button" className="py-3 text-[#6d7783] transition-colors hover:text-[#d6dde5]">
-              社媒热度
             </button>
           </div>
           <div className="hidden items-center gap-2 font-[var(--font-mono)] text-[11px] text-[#8a939f] lg:flex">
@@ -962,12 +960,6 @@ export function AssetKlineChart({
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#111820] px-3 py-2">
           <div className="flex flex-wrap items-center gap-1">
             <span className="mr-1 font-[var(--font-mono)] text-[11px] text-[#59636f]">周期</span>
-            <button
-              type="button"
-              className="h-6 rounded-[4px] bg-[#15202a] px-2 font-[var(--font-mono)] text-[11px] text-[#d6dde5]"
-            >
-              1日
-            </button>
             {TIME_RANGES.map((item) => (
               <button
                 key={item.key}

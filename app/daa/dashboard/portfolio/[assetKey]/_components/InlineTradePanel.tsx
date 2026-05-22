@@ -86,32 +86,13 @@ export function InlineTradePanel(props: {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-1">
-        {["市价", "限价", "拆单"].map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            disabled={mode !== "市价"}
-            className={cn(
-              "h-7 rounded-[6px] border text-[11px] font-medium transition-colors",
-              mode === "市价"
-                ? "border-[#2a333d] bg-[#151c23] text-[#d6dde5]"
-                : "cursor-not-allowed border-[#151b22] bg-[#080b0e] text-[#59636f]",
-            )}
-            title={mode === "市价" ? "当前执行模式" : "后续接入对应订单类型"}
-          >
-            {mode}
-          </button>
-        ))}
-      </div>
-
       <div className="rounded-[10px] border border-[#1a222a] bg-[#050607] px-3 py-2.5">
         <div className="flex items-center justify-between text-xs text-[#8a939f]">
           <span>成交价</span>
           <span className="font-[var(--font-mono)] text-sm text-[#d6dde5]">{row.lastPrice.toFixed(4)}</span>
         </div>
         <div className="mt-1 flex items-center justify-between text-[11px] text-[#59636f]">
-          <span>市价单 · {row.currency}</span>
+          <span>本地模拟执行 · {row.currency}</span>
           <span className="font-[var(--font-mono)]">{slippageBps.toFixed(0)} bps</span>
         </div>
       </div>
