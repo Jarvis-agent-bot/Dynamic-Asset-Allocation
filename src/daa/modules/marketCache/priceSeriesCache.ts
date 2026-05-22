@@ -10,6 +10,7 @@ import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { getYahooProvider } from "@/src/market/yahooProvider";
+import { ensureDaaMarketCacheSchemaPg } from "@/src/daa/store/storeSchema";
 
 export type CachedPricePoint = {
   date: string;
@@ -88,6 +89,8 @@ export async function fetchPriceSeriesWithCache(
   const maxStaleDays = opts.maxStaleDays ?? DEFAULT_MAX_STALE_DAYS;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const writeMode = opts.writeMode ?? "async";
+
+  await ensureDaaMarketCacheSchemaPg();
 
   let dbData: CachedPricePoint[] = [];
   let dbUpstream: PriceSeriesCacheResult["upstream"] = "daa_market_candles_v1";

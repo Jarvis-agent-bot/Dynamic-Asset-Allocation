@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   fetchChart: vi.fn(),
+  ensureDaaMarketCacheSchemaPg: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/src/daa/pg/daaPg", () => ({
@@ -15,6 +16,10 @@ vi.mock("@/src/market/yahooProvider", () => ({
   getYahooProvider: vi.fn(() => ({
     fetchChart: mocks.fetchChart,
   })),
+}));
+
+vi.mock("@/src/daa/store/storeSchema", () => ({
+  ensureDaaMarketCacheSchemaPg: mocks.ensureDaaMarketCacheSchemaPg,
 }));
 
 import { fetchPriceSeriesWithCache } from "./priceSeriesCache";
@@ -79,6 +84,7 @@ function candleRow(date: string, close = 100) {
 describe("priceSeriesCache", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.ensureDaaMarketCacheSchemaPg.mockResolvedValue(undefined);
     mocks.query.mockImplementation(async (sql: string) => {
       if (sql.includes("SELECT DISTINCT ON")) return { rows: [] };
       return { rows: [], rowCount: 1 };
