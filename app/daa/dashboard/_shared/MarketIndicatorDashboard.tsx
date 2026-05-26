@@ -9,8 +9,11 @@ import {
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { SkeletonIndicatorGrid } from "@/app/daa/dashboard/_components/SkeletonPatterns";
 import { cn } from "@/lib/utils";
-import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
-import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type {
+  DaaAssetBudgetOverlayKey,
+  DaaMarketContext,
+  DaaMarketIndicatorKey,
+} from "@/src/daa/modules/marketContext/marketContextTypes";
 import { MARKET_INDICATOR_META_CATALOG_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import {
   isActionableMarketScope,
@@ -47,6 +50,7 @@ const SCOPE_LABEL_ZH: Record<string, string> = {
   crypto: "加密市场",
   macro_defensive: "宏观防御",
   macro_global: "宏观全局",
+  macro_policy: "宏观政策",
 };
 
 function scopeLabelZh(scope: string): string {
@@ -136,6 +140,26 @@ function sparklineColor(data: number[]): string {
   return data[data.length - 1] >= data[0] ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)";
 }
 
+function assetBudgetStanceLabel(stance: string): string {
+  if (stance === "increase") return "提高预算";
+  if (stance === "reduce") return "降低预算";
+  return "维持中性";
+}
+
+function asAssetBudgetKey(scope: string): DaaAssetBudgetOverlayKey | null {
+  if (
+    scope === "us_equity"
+    || scope === "hk_cn_equity"
+    || scope === "crypto"
+    || scope === "duration_bonds"
+    || scope === "short_bonds_cash"
+    || scope === "gold_commodities"
+  ) {
+    return scope;
+  }
+  return null;
+}
+
 /* ---------- component ---------- */
 
 export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketIndicatorDashboardProps & { hideClock?: boolean }) {
@@ -148,6 +172,9 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
   }
 
   const macro = marketContext.macroCycle ?? null;
+  const macroPolicy = marketContext.macroPolicy ?? null;
+  const assetBudgets = marketContext.assetBudgets || [];
+  const assetBudgetByScope = new Map(assetBudgets.map((budget) => [budget.key, budget] as const));
   const clockPhase = normalizePhase(macro?.phase);
   const scopes = marketContext.scopes || [];
 
@@ -184,13 +211,93 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
         </div>
       )}
 
+      {macroPolicy ? (
+        <div>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">宏观政策</div>
+            <div className="max-w-[520px] text-[11px] leading-5 text-[var(--muted)]">
+              PPI、降息路径、缩表/流动性只作为政策环境输入；不会单独触发订单。
+            </div>
+          </div>
+          <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-4")}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-[var(--text)]">{macroPolicy.label}</div>
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  政策压力 {macroPolicy.pressurePct.toFixed(0)}/100 · 置信度 {macroPolicy.confidencePct.toFixed(0)}%
+                </div>
+              </div>
+              <DaaSurfaceStatusPill tone={riskScoreTone(macroPolicy.pressurePct)}>
+                {marketRegimeEnvironmentLabelZh(macroPolicy.regime)}
+              </DaaSurfaceStatusPill>
+            </div>
+            {macroPolicy.reasons.length > 0 ? (
+              <div className="mt-3 text-xs leading-5 text-[var(--muted)]">{macroPolicy.reasons[0]}</div>
+            ) : null}
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              {macroPolicy.dimensions.map((dimension) => (
+                <div
+                  key={dimension.key}
+                  className="rounded-[10px] border border-[rgba(255,255,255,0.06)] bg-[rgba(8,12,20,0.42)] px-3 py-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-[var(--text)]">{dimension.label}</span>
+                    <DaaSurfaceStatusPill tone={riskScoreTone(dimension.pressurePct)}>
+                      {dimension.pressurePct.toFixed(0)}
+                    </DaaSurfaceStatusPill>
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--faint)]">
+                    置信度 {dimension.confidencePct.toFixed(0)}% · {dimension.sourceIndicators.length} 个输入
+                  </div>
+                  {dimension.reasons[0] ? (
+                    <div className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{dimension.reasons[0]}</div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {assetBudgets.length > 0 ? (
+        <div>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">资产预算倾斜</div>
+            <div className="max-w-[520px] text-[11px] leading-5 text-[var(--muted)]">
+              这里是宏观政策和市场区域合成后的预算建议；当前阶段只用于解释和审阅。
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {assetBudgets.map((budget) => (
+              <div key={budget.key} className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-[var(--text)]">{budget.label}</span>
+                  <DaaSurfaceStatusPill tone={riskScoreTone(budget.pressurePct)}>
+                    {assetBudgetStanceLabel(budget.stance)}
+                  </DaaSurfaceStatusPill>
+                </div>
+                <div className="mt-2 font-[var(--font-mono)] text-base text-[var(--text)]">
+                  预算系数 {Math.round(budget.budgetScale * 100)}%
+                </div>
+                <div className="mt-1 text-[11px] text-[var(--faint)]">
+                  压力 {budget.pressurePct.toFixed(0)}/100 · 置信度 {budget.confidencePct.toFixed(0)}%
+                </div>
+                {budget.reasons[0] ? (
+                  <div className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{budget.reasons[0]}</div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {/* Section 2: 指标概览 */}
       {indicators.length > 0 ? (
         <div>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">指标概览</div>
             <div className="max-w-[520px] text-[11px] leading-5 text-[var(--muted)]">
-              单项指标解释风险来源；下方市场区域才把同一市场的指标合成为加仓环境。
+              单项指标解释风险来源；资产预算倾斜才是给调仓审阅使用的统一预算口径。
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -283,9 +390,12 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                   </DaaSurfaceStatusPill>
                 </div>
                 <div className="mt-2 font-[var(--font-mono)] text-base text-[var(--text)]">
-                  {marketScopeMetricLabelZh(s.scope)} {isActionableMarketScope(s.scope)
-                    ? `${Math.round(s.buyScale * 100)}%`
-                    : `${Math.round(s.riskOffScorePct)}/100`}
+                  {(() => {
+                    const budgetKey = asAssetBudgetKey(s.scope);
+                    const budget = budgetKey ? assetBudgetByScope.get(budgetKey) : null;
+                    if (budget) return `资产预算 ${Math.round(budget.budgetScale * 100)}%`;
+                    return `${marketScopeMetricLabelZh(s.scope)} ${Math.round(s.riskOffScorePct)}/100`;
+                  })()}
                 </div>
                 <div className="mt-1 text-[11px] text-[var(--faint)]">
                   {marketRegimeEnvironmentLabelZh(s.regime)}

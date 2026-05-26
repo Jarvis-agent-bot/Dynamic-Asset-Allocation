@@ -209,15 +209,14 @@ export type GenerateRebalanceCycleInput = {
   triggerReason?: string;
   manual?: boolean;
   /**
-   * Agent 目标权重覆盖（0-1），用于全权调仓。
-   * 只影响本次周期生成，不直接写入系统配置。
+   * Agent 目标配置计划（0-1），只影响本次周期生成，不直接写入系统配置。
    */
-  targetWeightOverrides?: Record<string, number>;
-  /**
-   * Agent 生成目标前的目标权重基线（0-1）。
-   * 用于交易稳定器判断目标变化幅度，避免目标池先写入后丢失旧基线。
-   */
-  targetWeightBaseline?: Record<string, number>;
+  targetAllocationPlan?: {
+    targetWeights: Record<string, number>;
+    baselineTargetWeights?: Record<string, number>;
+    summary?: string | null;
+    reason?: string | null;
+  };
 };
 
 /**

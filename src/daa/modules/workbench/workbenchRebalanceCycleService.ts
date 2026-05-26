@@ -43,7 +43,7 @@ import type {
 } from "./workbenchTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
-  applyTargetWeightOverridesToBootstrap,
+  applyTargetAllocationWeightsToBootstrap,
   buildEmptyAutoTriggerSkipMessage,
   filterAutoTradeStability,
   filterRecentAutoTradeReversals,
@@ -64,6 +64,7 @@ import { assertCycleExecutable, assertCycleMutable } from "./cycleGuards";
 import { calcHoldingCostPerUnit } from "./executionCost";
 import type { RebalanceProposal, RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import {
+  attachMacroBudgetShadowSizing,
   buildCycleDraftFromBootstrap,
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
@@ -110,18 +111,18 @@ function relabelAgentEntryProposals(input: {
   return input.proposals.map((proposal) => {
     if (proposal.proposalType === "watchlist_entry") return proposal;
     if (proposal.side !== "BUY" || holdingKeys.has(proposal.assetKey.toUpperCase())) return proposal;
-    if (!proposal.reason.startsWith("观察列表目标建仓")) return proposal;
+    if (!proposal.reason.startsWith("观察列表目标入场")) return proposal;
     return {
       ...proposal,
-      reason: proposal.reason.replace(/^观察列表目标建仓/, "Agent 目标建仓"),
+      reason: proposal.reason.replace(/^观察列表目标入场/, "Agent 目标入场"),
     };
   });
 }
 
-function normalizeTargetWeightOverridesSnapshot(
-  targetWeightOverrides: Record<string, number> | null | undefined,
+function normalizeTargetAllocationWeightsSnapshot(
+  targetWeights: Record<string, number> | null | undefined,
 ): Record<string, number> | null {
-  const entries = Object.entries(targetWeightOverrides || {})
+  const entries = Object.entries(targetWeights || {})
     .map(([assetKey, value]) => [
       assetKey.trim().toUpperCase(),
       Math.max(0, Math.min(1, Number(value) || 0)),
@@ -130,12 +131,16 @@ function normalizeTargetWeightOverridesSnapshot(
   return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
-function readAgentTargetWeightOverridesFromCycle(
+function readAgentTargetAllocationWeightsFromCycle(
   cycle: Pick<DaaStoreRebalanceCycle, "agentDecisionSnapshot">,
 ): Record<string, number> | null {
   const snapshot = cycle.agentDecisionSnapshot;
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
-  const raw = (snapshot as Record<string, unknown>).targetWeightOverrides;
+  const snapshotRecord = snapshot as Record<string, unknown>;
+  const plan = snapshotRecord.targetAllocationPlan;
+  const raw = plan && typeof plan === "object" && !Array.isArray(plan)
+    ? (plan as Record<string, unknown>).targetWeights
+    : null;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const entries = Object.entries(raw as Record<string, unknown>)
     .map(([assetKey, value]) => [
@@ -164,8 +169,8 @@ export function buildExecutedTargetWeightPatches(input: {
   if (executedAssetKeys.size === 0) return [];
 
   const patches = new Map<string, ExecutedTargetWeightPatch>();
-  const targetWeightOverrides = readAgentTargetWeightOverridesFromCycle(input.cycle);
-  for (const [assetKey, targetWeightHint] of Object.entries(targetWeightOverrides || {})) {
+  const targetWeights = readAgentTargetAllocationWeightsFromCycle(input.cycle);
+  for (const [assetKey, targetWeightHint] of Object.entries(targetWeights || {})) {
     const normalizedKey = assetKey.toUpperCase();
     if (!executedAssetKeys.has(normalizedKey)) continue;
     patches.set(normalizedKey, {
@@ -262,8 +267,12 @@ export async function generateWorkbenchRebalanceCycle(
     getDaaSystemConfig(),
     listDaaRebalanceCycles(120),
   ]);
-  const hasAgentTargetOverrides = Object.keys(input.targetWeightOverrides || {}).length > 0;
-  const bootstrap = applyTargetWeightOverridesToBootstrap(rawBootstrap, input.targetWeightOverrides);
+  const targetAllocationWeights = input.targetAllocationPlan?.targetWeights;
+  const targetAllocationBaseline = input.targetAllocationPlan?.baselineTargetWeights;
+  const normalizedTargetAllocationWeights = normalizeTargetAllocationWeightsSnapshot(targetAllocationWeights);
+  const normalizedTargetAllocationBaseline = normalizeTargetAllocationWeightsSnapshot(targetAllocationBaseline);
+  const hasAgentTargetPlan = Object.keys(normalizedTargetAllocationWeights || {}).length > 0;
+  const bootstrap = applyTargetAllocationWeightsToBootstrap(rawBootstrap, normalizedTargetAllocationWeights);
 
   const latestCycle = recentCycles[0] || null;
   const policy = resolvePolicyConfig(systemRow.config);
@@ -379,10 +388,10 @@ export async function generateWorkbenchRebalanceCycle(
   const draft = buildCycleDraftFromBootstrap({
     bootstrap,
     triggerReason: input.triggerReason,
-    allowUnheldBuyTargets: hasAgentTargetOverrides,
+    allowUnheldBuyTargets: hasAgentTargetPlan,
   });
 
-  // ── Step A.5: Watchlist 自动建仓（信号达标则为 watchlist 资产生成 BUY 提案） ──
+  // ── Step A.5: Watchlist 入场候选（信号达标则为 watchlist 资产生成 BUY 提案） ──
   let watchlistEntryProposals: RebalanceProposal[] = [];
   try {
     const watchlistResult = await generateWatchlistEntryProposals({
@@ -397,8 +406,8 @@ export async function generateWorkbenchRebalanceCycle(
         (p) => !existingKeys.has(p.assetKey.toUpperCase()),
       );
       draft.proposals.push(...watchlistEntryProposals);
-      if (watchlistEntryProposals.length > 0 && !draft.triggerReason.includes("自动建仓")) {
-        const extra = `；观察列表自动建仓 ${watchlistEntryProposals.length} 条`;
+      if (watchlistEntryProposals.length > 0 && !draft.triggerReason.includes("入场候选")) {
+        const extra = `；观察列表入场候选 ${watchlistEntryProposals.length} 条`;
         draft.triggerReason = (draft.triggerReason || "组合检查") + extra;
       }
     }
@@ -526,7 +535,7 @@ export async function generateWorkbenchRebalanceCycle(
 
   // ── Step B-E: Cognitive Agent 驱动调仓 ──
   // Agent thesis conviction → 提案量调整
-  const agentResult = hasAgentTargetOverrides && triggerSource === "agent_trigger"
+  const agentResult = hasAgentTargetPlan && triggerSource === "agent_trigger"
     ? {
       proposals: draft.proposals,
       llmSummary: `Agent 目标权重计划已进入执行层，生成 ${draft.proposals.length} 个 BUY/SELL 提案。`,
@@ -542,7 +551,7 @@ export async function generateWorkbenchRebalanceCycle(
     });
 
   draft.proposals = agentResult.proposals;
-  if (hasAgentTargetOverrides && triggerSource === "agent_trigger") {
+  if (hasAgentTargetPlan && triggerSource === "agent_trigger") {
     draft.proposals = relabelAgentEntryProposals({ proposals: draft.proposals, bootstrap });
   }
 
@@ -571,7 +580,7 @@ export async function generateWorkbenchRebalanceCycle(
     proposals: mergedProposals,
     maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
   });
-  const isAgentTargetWeightCycle = triggerSource === "agent_trigger" && hasAgentTargetOverrides;
+  const isAgentTargetWeightCycle = triggerSource === "agent_trigger" && hasAgentTargetPlan;
   const recentExecutedTrades = !manual && triggerSource !== "risk"
     ? await listDaaTradeTickets({ status: "executed", limit: 300 })
     : [];
@@ -584,7 +593,7 @@ export async function generateWorkbenchRebalanceCycle(
       currentTargetWeightPctByAssetKey: Object.fromEntries(
         rawBootstrap.assetUniverse.map((row) => {
           const assetKey = row.assetKey.toUpperCase();
-          const baselineTargetWeight = input.targetWeightBaseline?.[assetKey];
+          const baselineTargetWeight = normalizedTargetAllocationBaseline?.[assetKey];
           return [
             assetKey,
             baselineTargetWeight == null
@@ -615,12 +624,20 @@ export async function generateWorkbenchRebalanceCycle(
       { attachLatestCycle: true },
     );
   }
+  mergedProposals = attachMacroBudgetShadowSizing({
+    proposals: mergedProposals,
+    bootstrap,
+  });
+  const macroShadowProposalCount = mergedProposals.filter((proposal) => (
+    proposal.decisionContext?.assetBudgetKey
+    && proposal.decisionContext.macroShadowNotional != null
+  )).length;
   const intents = buildInvestmentIntents({
     triggerSource,
     triggerReason: draft.triggerReason,
     signals,
     manual,
-    hasAgentTargetOverrides,
+    hasAgentTargetPlan,
   });
   const policyDecision = evaluatePortfolioPolicy({
     portfolioState,
@@ -690,6 +707,9 @@ export async function generateWorkbenchRebalanceCycle(
     policyDecision.reasons.length > 0 ? `策略理由: ${policyDecision.reasons.join("；").slice(0, 240)}` : null,
     `Agent(${agentResult.agentStatus}): ${agentResult.proposals.length} 个提案`,
     marketContext ? `市场环境: ${marketRegimeLabelZh(marketContext.regime)} / 风险分 ${marketContext.riskOffScorePct.toFixed(1)}` : null,
+    macroShadowProposalCount > 0
+      ? `宏观预算影子: ${macroShadowProposalCount} 条建议带预算系数，仅供审阅，不影响执行金额`
+      : null,
     agentResult.llmSummary ? `Agent摘要: ${agentResult.llmSummary.slice(0, 120)}` : null,
     reversalGuard.blocked.length > 0
       ? `反向交易冷却: ${reversalGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
@@ -705,15 +725,18 @@ export async function generateWorkbenchRebalanceCycle(
       : null,
   ].filter(Boolean).join("\n");
 
-  const normalizedAgentTargetWeightOverrides = normalizeTargetWeightOverridesSnapshot(input.targetWeightOverrides);
   const agentDecisionSnapshot: Record<string, unknown> | null = {
     status: agentResult.agentStatus,
     summary: agentResult.llmSummary,
     marketRegime: agentResult.marketRegime,
     tokensUsed: agentResult.tokensUsed,
-    targetWeightOverrides: normalizedAgentTargetWeightOverrides,
-    targetWeightBaseline: normalizeTargetWeightOverridesSnapshot(input.targetWeightBaseline),
-    targetWeightLifecycle: normalizedAgentTargetWeightOverrides
+    targetAllocationPlan: normalizedTargetAllocationWeights ? {
+      targetWeights: normalizedTargetAllocationWeights,
+      baselineTargetWeights: normalizedTargetAllocationBaseline,
+      summary: input.targetAllocationPlan?.summary ?? null,
+      reason: input.targetAllocationPlan?.reason ?? null,
+    } : null,
+    targetWeightLifecycle: normalizedTargetAllocationWeights
       ? (systemRow.config.watchlistEntry?.aiTargetWeightPool.enabled
         ? "persisted_to_watchlist_target_pool"
         : "persist_after_successful_execution")

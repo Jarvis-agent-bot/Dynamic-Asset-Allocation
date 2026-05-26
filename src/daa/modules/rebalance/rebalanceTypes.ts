@@ -1,4 +1,6 @@
 import type {
+  DaaAssetBudgetOverlayKey,
+  DaaAssetBudgetStance,
   DaaMarketIndicatorScope,
   DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
@@ -57,6 +59,14 @@ export type ProposalDecisionContext = {
   marketIndicatorFlags?: string[];
   conflictFlags: string[];
   finalQtyMultiplier: number;
+  assetBudgetKey?: DaaAssetBudgetOverlayKey | null;
+  assetBudgetLabel?: string | null;
+  assetBudgetStance?: DaaAssetBudgetStance | null;
+  assetBudgetScale?: number | null;
+  macroShadowNotional?: number | null;
+  macroShadowQty?: number | null;
+  macroShadowDeltaNotional?: number | null;
+  macroShadowReason?: string | null;
 };
 
 export type ProposalType = "drift" | "watchlist_entry" | "tax_loss_harvest";

@@ -10,7 +10,6 @@ import {
 } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { nextReviewDueDate } from "@/src/daa/modules/workbench/reviewSchedule";
-import { isActionableMarketScope, marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import type {
@@ -101,19 +100,19 @@ function buildSignals(input: {
     });
   }
 
-  const riskOffScopes = (input.bootstrap.marketContext?.scopes || []).filter(
-    (scope) => isActionableMarketScope(scope.scope) && scope.regime === "risk_off",
+  const reducedBudgets = (input.bootstrap.marketContext?.assetBudgets || []).filter(
+    (budget) => budget.stance === "reduce" && budget.budgetScale < 0.95,
   );
-  if (riskOffScopes.length > 0) {
-    const labels = riskOffScopes.map((scope) => scope.label).filter(Boolean);
-    const strongestScope = [...riskOffScopes].sort((a, b) => (b.buyScale + b.highRiskBuyScale) - (a.buyScale + a.highRiskBuyScale))[0] || riskOffScopes[0];
+  if (reducedBudgets.length > 0) {
+    const strongestBudget = [...reducedBudgets].sort((a, b) => a.budgetScale - b.budgetScale)[0] || reducedBudgets[0];
+    const labels = reducedBudgets.slice(0, 3).map((budget) => budget.label).filter(Boolean);
     push({
       id: "alert:market:risk-off-summary",
       level: "warn",
       source: "alert",
-      text: `${labels.join(" / ")}进入${marketRegimeActionLabelZh("risk_off")}，常规标的买入预算系数 ${Math.round(strongestScope.buyScale * 100)}%，高波动标的买入预算系数 ${Math.round(strongestScope.highRiskBuyScale * 100)}%。`,
+      text: `${labels.join(" / ")}预算下调，最低预算系数 ${Math.round(strongestBudget.budgetScale * 100)}%。${strongestBudget.reasons[0] ? ` ${strongestBudget.reasons[0]}` : ""}`,
       actionHref: "/daa/dashboard/rebalance",
-      createdAt: strongestScope.generatedAt || createdAt,
+      createdAt: input.bootstrap.marketContext?.generatedAt || createdAt,
     });
   }
 

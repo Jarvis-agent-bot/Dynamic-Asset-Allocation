@@ -13,7 +13,6 @@ import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modul
 import { getMarketIndicatorRefreshSymbols } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import {
-  appendAssetPriceHistoryRows,
   getDaaSystemConfig,
   listDaaAssetUniverse,
 } from "@/src/daa/store/daaStorePg";
@@ -145,7 +144,6 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
 
         // P1-3 性能优化：收集待更新项，然后批量 UPDATE（替代 N+1 查询）
         const batchItems: Array<{ assetKey: string; lastPrice: number; priceUpdatedAt: string }> = [];
-        const historyRows: Array<{ assetKey: string; ts?: string; price: number; source?: string }> = [];
         for (const row of assetRows) {
           const key = `${normalizeUpper(row.market, "US")}::${normalizeUpper(row.symbol)}`;
           const priced = result.results[key];
@@ -156,22 +154,12 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
             lastPrice: priced.price,
             priceUpdatedAt: priced.priceUpdatedAt,
           });
-          historyRows.push({
-            assetKey: row.assetKey,
-            price: priced.price,
-            ts: priced.priceUpdatedAt,
-            source: "cron_price_refresh",
-          });
         }
 
         // 单次事务批量更新所有价格
         const refreshedAssetKeys = batchItems.length > 0
           ? await batchUpdateDaaAssetUniverseLastPrices(batchItems)
           : [];
-
-        if (historyRows.length > 0) {
-          await appendAssetPriceHistoryRows(historyRows);
-        }
 
         // Extract dividends from raw payloads stored during this refresh (last 10 days window)
         let dividendExtracted = 0;

@@ -5,7 +5,6 @@ import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { getCurrentMarketContext } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import {
-  appendAssetPriceHistoryRows,
   createDaaRebalanceCycle,
   getDaaAccountState,
   getDaaLedgerStartTs,
@@ -202,7 +201,6 @@ async function syncWorkbenchPrices(opts: {
   });
 
   let updated = 0;
-  const historyRows: Array<{ assetKey: string; price: number; ts: string; source: string }> = [];
 
   for (const current of targets) {
     const key = `${String(current.market || "").toUpperCase()}::${String(current.symbol || "").toUpperCase()}`;
@@ -216,20 +214,6 @@ async function syncWorkbenchPrices(opts: {
     });
     if (!saved) continue;
     updated += 1;
-    historyRows.push({
-      assetKey: current.assetKey,
-      price: priceRow.price,
-      ts: updatedAt,
-      source: "workbench_bootstrap",
-    });
-  }
-
-  if (historyRows.length > 0) {
-    try {
-      await appendAssetPriceHistoryRows(historyRows);
-    } catch (err) {
-      logSwallowed("workbenchReadService.attachPriceHistory", err);
-    }
   }
 
   return {

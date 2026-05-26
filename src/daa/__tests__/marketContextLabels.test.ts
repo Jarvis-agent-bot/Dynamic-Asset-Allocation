@@ -38,10 +38,13 @@ describe("market-context-labels", () => {
     expect(marketScopeMetricLabelZh("us_equity")).toBe("加仓环境");
     expect(marketScopeMetricLabelZh("macro_defensive")).toBe("避险需求");
     expect(marketScopeMetricLabelZh("macro_global")).toBe("宏观压力");
+    expect(marketScopeMetricLabelZh("macro_policy")).toBe("政策压力");
     expect(marketScopePrimaryLabelZh({ scope: "macro_defensive", riskOffScorePct: 27 })).toBe("避险需求偏低");
     expect(marketScopePrimaryLabelZh({ scope: "macro_global", riskOffScorePct: 70 })).toBe("宏观压力偏高");
+    expect(marketScopePrimaryLabelZh({ scope: "macro_policy", riskOffScorePct: 70 })).toBe("政策压力偏高");
     expect(marketScopeMeaningZh("macro_defensive")).toContain("防御仓");
     expect(marketScopeMeaningZh("macro_global")).toContain("整体风险资产");
+    expect(marketScopeMeaningZh("macro_policy")).toContain("缩表");
   });
 
   it("store 层支持 catalog 中的全部市场指标 key", () => {

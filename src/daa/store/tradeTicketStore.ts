@@ -27,7 +27,13 @@ import type {
   DaaStoreRebalanceTriggerSource,
   DaaStorePreTradeRiskCheck, DaaStorePreTradeRiskCheckItem,
 } from "./storeTypes";
-import type { DaaMarketContext, DaaMarketRegime, DaaMarketIndicatorSnapshot, DaaMarketIndicatorScope } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type {
+  DaaAssetBudgetOverlay,
+  DaaMarketContext,
+  DaaMarketRegime,
+  DaaMarketIndicatorSnapshot,
+  DaaMarketIndicatorScope,
+} from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaStoreRebalanceCycleStatus, DaaStoreRiskRule } from "@/src/daa/store/storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
 import { buildFxLookupMap, resolveFxRateToBase, normalizeCcyCode } from "./fxStore";
@@ -491,6 +497,19 @@ function normalizeRiskStatus(value: unknown): "pass" | "warn" | "block" {
 
 function normalizeProposalDecisionContext(value: unknown): ProposalDecisionContext | null {
   if (!isRecord(value)) return null;
+  const assetBudgetKeyRaw = normalizeText(value.assetBudgetKey);
+  const assetBudgetKey = assetBudgetKeyRaw === "us_equity"
+    || assetBudgetKeyRaw === "hk_cn_equity"
+    || assetBudgetKeyRaw === "crypto"
+    || assetBudgetKeyRaw === "duration_bonds"
+    || assetBudgetKeyRaw === "short_bonds_cash"
+    || assetBudgetKeyRaw === "gold_commodities"
+    ? assetBudgetKeyRaw
+    : null;
+  const assetBudgetStanceRaw = normalizeText(value.assetBudgetStance);
+  const assetBudgetStance = assetBudgetStanceRaw === "increase" || assetBudgetStanceRaw === "reduce" || assetBudgetStanceRaw === "neutral"
+    ? assetBudgetStanceRaw
+    : null;
   return {
     driftReason: normalizeText(value.driftReason, ""),
     signalAction: value.signalAction === "open_or_add" || value.signalAction === "watch" || value.signalAction === "reduce_or_avoid"
@@ -516,6 +535,14 @@ function normalizeProposalDecisionContext(value: unknown): ProposalDecisionConte
     marketIndicatorFlags: normalizeStringArray(value.marketIndicatorFlags),
     conflictFlags: normalizeStringArray(value.conflictFlags),
     finalQtyMultiplier: clampNumber(toFiniteNumber(value.finalQtyMultiplier, 1), 0, 1),
+    assetBudgetKey,
+    assetBudgetLabel: value.assetBudgetLabel == null ? null : normalizeText(value.assetBudgetLabel) || null,
+    assetBudgetStance,
+    assetBudgetScale: value.assetBudgetScale == null ? null : clampNumber(toFiniteNumber(value.assetBudgetScale, 1), 0.25, 1.25),
+    macroShadowNotional: value.macroShadowNotional == null ? null : Math.max(0, toFiniteNumber(value.macroShadowNotional, 0)),
+    macroShadowQty: value.macroShadowQty == null ? null : Math.max(0, toFiniteNumber(value.macroShadowQty, 0)),
+    macroShadowDeltaNotional: value.macroShadowDeltaNotional == null ? null : toFiniteNumber(value.macroShadowDeltaNotional, 0),
+    macroShadowReason: value.macroShadowReason == null ? null : normalizeText(value.macroShadowReason) || null,
   };
 }
 
@@ -524,6 +551,8 @@ function normalizeMarketIndicatorScopeStore(value: unknown): DaaMarketIndicatorS
   if (text === "hk_cn_equity") return "hk_cn_equity";
   if (text === "crypto") return "crypto";
   if (text === "macro_defensive") return "macro_defensive";
+  if (text === "macro_global") return "macro_global";
+  if (text === "macro_policy") return "macro_policy";
   return "us_equity";
 }
 
@@ -534,7 +563,9 @@ function normalizeMarketIndicatorSnapshotJson(value: unknown): DaaMarketIndicato
   return {
     key,
     label: normalizeText(value.label, "市场指标"),
-    category: value.category === "relative_value" || value.category === "sentiment" ? value.category : "volatility",
+    category: value.category === "relative_value" || value.category === "sentiment" || value.category === "macro"
+      ? value.category
+      : "volatility",
     scope: normalizeMarketIndicatorScopeStore(value.scope),
     stance: normalizeMarketRegimeStore(value.stance),
     riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
@@ -573,6 +604,38 @@ function normalizeMarketScopeContextJson(value: unknown): DaaMarketContext["scop
   };
 }
 
+function normalizeAssetBudgetOverlayJson(value: unknown): DaaAssetBudgetOverlay | null {
+  if (!isRecord(value)) return null;
+  const key = normalizeText(value.key, "");
+  const validKey = key === "us_equity"
+    || key === "hk_cn_equity"
+    || key === "crypto"
+    || key === "duration_bonds"
+    || key === "short_bonds_cash"
+    || key === "gold_commodities"
+    ? key
+    : null;
+  if (!validKey) return null;
+  const stanceRaw = normalizeText(value.stance, "neutral");
+  const stance = stanceRaw === "increase" || stanceRaw === "reduce" ? stanceRaw : "neutral";
+  return {
+    key: validKey,
+    label: normalizeText(value.label, validKey),
+    stance,
+    budgetScale: clampNumber(toFiniteNumber(value.budgetScale, 1), 0.25, 1.25),
+    pressurePct: clampNumber(toFiniteNumber(value.pressurePct, 50), 0, 100),
+    confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
+    reasons: normalizeStringArray(value.reasons),
+    sourceScopes: normalizeStringArray(value.sourceScopes)
+      .map((item) => normalizeMarketIndicatorScopeStore(item)),
+    sourceMacroDimensions: normalizeStringArray(value.sourceMacroDimensions)
+      .map((item) => {
+        const text = normalizeText(item, "inflation");
+        return text === "rates" || text === "liquidity" ? text : "inflation";
+      }),
+  };
+}
+
 function normalizeMarketContextJson(value: unknown): DaaMarketContext | null {
   if (!isRecord(value)) return null;
   const indicatorsRaw = Array.isArray(value.indicators) ? value.indicators : [];
@@ -583,6 +646,9 @@ function normalizeMarketContextJson(value: unknown): DaaMarketContext | null {
   const scopes = scopesRaw
     .map((item) => normalizeMarketScopeContextJson(item))
     .filter((item): item is DaaMarketContext["scopes"][number] => Boolean(item));
+  const assetBudgets = (Array.isArray(value.assetBudgets) ? value.assetBudgets : [])
+    .map((item) => normalizeAssetBudgetOverlayJson(item))
+    .filter((item): item is DaaAssetBudgetOverlay => Boolean(item));
   const reasons = normalizeStringArray(value.reasons);
   const hasPayload = indicators.length > 0
     || scopes.length > 0
@@ -600,6 +666,37 @@ function normalizeMarketContextJson(value: unknown): DaaMarketContext | null {
     reasons,
     indicators,
     scopes,
+    macroPolicy: isRecord(value.macroPolicy)
+      ? {
+        generatedAt: toIsoString(value.macroPolicy.generatedAt, new Date().toISOString()),
+        regime: normalizeMarketRegimeStore(value.macroPolicy.regime) === "neutral"
+          ? "transitional"
+          : (normalizeMarketRegimeStore(value.macroPolicy.regime) as DaaMarketRegime),
+        pressurePct: clampNumber(toFiniteNumber(value.macroPolicy.pressurePct, 50), 0, 100),
+        confidencePct: clampNumber(toFiniteNumber(value.macroPolicy.confidencePct, 40), 0, 100),
+        label: normalizeText(value.macroPolicy.label, "政策环境"),
+        reasons: normalizeStringArray(value.macroPolicy.reasons),
+        dimensions: (Array.isArray(value.macroPolicy.dimensions) ? value.macroPolicy.dimensions : [])
+          .filter(isRecord)
+          .map((dimension) => {
+            const key = normalizeText(dimension.key, "inflation");
+            return {
+              key: key === "rates" || key === "liquidity" ? key : "inflation",
+              label: normalizeText(dimension.label, "宏观政策"),
+              pressurePct: clampNumber(toFiniteNumber(dimension.pressurePct, 50), 0, 100),
+              confidencePct: clampNumber(toFiniteNumber(dimension.confidencePct, 40), 0, 100),
+              regime: normalizeMarketRegimeStore(dimension.regime) === "neutral"
+                ? "transitional"
+                : (normalizeMarketRegimeStore(dimension.regime) as DaaMarketRegime),
+              reasons: normalizeStringArray(dimension.reasons),
+              sourceIndicators: normalizeStringArray(dimension.sourceIndicators)
+                .map((item) => normalizeMarketIndicatorKey(item))
+                .filter((item): item is DaaMarketIndicatorSnapshot["key"] => Boolean(item)),
+            };
+          }),
+      }
+      : null,
+    assetBudgets,
   };
 }
 

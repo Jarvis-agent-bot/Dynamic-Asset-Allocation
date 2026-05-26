@@ -296,17 +296,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             ON daa_portfolio_ledger_events(owner_account_id, ticket_id)
             WHERE ticket_id IS NOT NULL;
 
-          CREATE TABLE IF NOT EXISTS daa_price_history (
-            symbol TEXT NOT NULL,
-            ts TIMESTAMPTZ NOT NULL,
-            price NUMERIC NOT NULL,
-            source TEXT NOT NULL DEFAULT 'yfinance',
-            PRIMARY KEY (symbol, ts)
-          );
-
-          CREATE INDEX IF NOT EXISTS idx_daa_price_history_symbol_ts_desc
-            ON daa_price_history(symbol, ts DESC);
-
           CREATE TABLE IF NOT EXISTS daa_trade_journal (
             owner_account_id TEXT NOT NULL DEFAULT 'default',
             id TEXT PRIMARY KEY,

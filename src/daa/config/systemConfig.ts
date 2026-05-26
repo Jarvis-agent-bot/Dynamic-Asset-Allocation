@@ -24,7 +24,22 @@ type DaaHfFundTrack = {
   enabled: boolean;
 };
 
-export type DaaMarketIndicatorConfigKey = "vix" | "qqqSpyRatio" | "fxiVolatility" | "kwebFxiRatio" | "btcEthRatio" | "btcVolatility" | "goldSilverRatio" | "yieldCurveSpread" | "usdStrength" | "creditSpread" | "inflationExpectation" | "marketBreadth";
+export type DaaMarketIndicatorConfigKey =
+  | "vix"
+  | "qqqSpyRatio"
+  | "fxiVolatility"
+  | "kwebFxiRatio"
+  | "btcEthRatio"
+  | "btcVolatility"
+  | "goldSilverRatio"
+  | "yieldCurveSpread"
+  | "usdStrength"
+  | "creditSpread"
+  | "inflationExpectation"
+  | "marketBreadth"
+  | "ppiInflation"
+  | "fedPolicyRate"
+  | "fedBalanceSheet";
 
 type DaaMarketIndicatorConfigItem = {
   enabled: boolean;
@@ -144,11 +159,11 @@ export type DaaSystemConfig = {
     /** medium+ conviction thesis 超过此天数未被调查时，强制占用 1 个调查槽位（默认 7 天，防止 LLM 永远只调查 uncertain） */
     thesisStalenessDays?: number;
   };
-  /** 观察列表自动建仓 — 信号达标时为 watchlist 资产生成 BUY 提案 */
+  /** 观察列表入场候选过滤器 — 信号达标时为 watchlist 资产生成 BUY 提案 */
   watchlistEntry?: {
-    /** 全局开关（默认 false，单资产还要 auto_entry_enabled 才会触发） */
+    /** 全局开关（默认 false，单资产还要纳入入场候选才会触发） */
     enabled: boolean;
-    /** 单次 cron 最多触发的建仓数，防止现金一次耗尽 */
+    /** 单次 cron 最多生成的入场候选提案数，防止现金一次耗尽 */
     maxPerCycle: number;
     /** 全局默认阈值，单资产 entry_rules_json 未覆盖时使用 */
     defaultRules: {
@@ -162,10 +177,10 @@ export type DaaSystemConfig = {
     aiTargetWeightPool: {
       enabled: boolean;
       minConfidence: number;
-      /** 写入目标权重时同步打开该资产的 auto-entry，让信号/风控链路继续接管买入 */
+      /** 写入目标权重时同步纳入入场候选，让信号/风控链路继续接管买入 */
       autoEnableEntry: boolean;
     };
-    /** 单次建仓金额上限（以可用现金的百分比为上限，0-1） */
+    /** 单次入场金额上限（以可用现金的百分比为上限，0-1） */
     notionalCashCapPct: number;
   };
   notification: {
@@ -337,6 +352,9 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
         creditSpread: { enabled: true, weight: 0.6 },
         inflationExpectation: { enabled: true, weight: 0.5 },
         marketBreadth: { enabled: true, weight: 0.45 },
+        ppiInflation: { enabled: true, weight: 0.4 },
+        fedPolicyRate: { enabled: true, weight: 0.35 },
+        fedBalanceSheet: { enabled: true, weight: 0.4 },
       },
       overlays: {
         transitionalBuyScale: 0.85,

@@ -19,6 +19,22 @@ import type { RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workb
 import { cycleStatusTone, llmAdjustmentLabel, marketRegimeLabel, riskOverallTone, riskStatusLabel, signalActionLabel } from "./rebalanceLabels";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
+function assetBudgetStanceLabel(value: string | null | undefined): string {
+  if (value === "increase") return "增配";
+  if (value === "reduce") return "降配";
+  return "中性";
+}
+
+function formatBudgetScale(value: number | null | undefined): string {
+  if (!Number.isFinite(value)) return "—";
+  return `${((value ?? 1) * 100).toFixed(0)}%`;
+}
+
+function formatSignedCurrency(value: number, currency: string): string {
+  if (Math.abs(value) < 0.01) return "0";
+  return `${value > 0 ? "+" : ""}${formatCurrency(value, currency)}`;
+}
+
 export function RebalanceProposalList(props: {
   bootstrap: WorkbenchBootstrap;
   currentCycle: RebalanceCycle | null;
@@ -162,6 +178,10 @@ export function RebalanceProposalList(props: {
                 {props.currentCycle.proposals.map((row) => {
                   const proposalKey = `${row.assetKey}-${row.side}`;
                   const decisionExpanded = Boolean(props.expandedProposalDecisionKeys[proposalKey]);
+                  const decisionContext = row.decisionContext;
+                  const macroShadowDelta = decisionContext?.macroShadowDeltaNotional ?? 0;
+                  const hasMacroShadowDelta = decisionContext?.macroShadowNotional != null && Math.abs(macroShadowDelta) >= 0.01;
+                  const hasAssetBudgetContext = Boolean(decisionContext?.assetBudgetKey);
                   return (
                     <div
                       key={proposalKey}
@@ -187,6 +207,11 @@ export function RebalanceProposalList(props: {
                             <DaaSurfaceStatusPill tone={row.side === "BUY" ? "green" : "amber"}>{row.side === "BUY" ? "买入" : "卖出"}</DaaSurfaceStatusPill>
                             {/* 金额直接显示 */}
                             <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">{formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)}</span>
+                            {hasMacroShadowDelta ? (
+                              <DaaSurfaceStatusPill tone={macroShadowDelta < 0 ? "amber" : "cyan"} className="max-w-full normal-case tracking-normal">
+                                宏观影子 {formatCurrency(decisionContext?.macroShadowNotional ?? 0, props.bootstrap.baseCurrency)} ({formatSignedCurrency(macroShadowDelta, props.bootstrap.baseCurrency)})
+                              </DaaSurfaceStatusPill>
+                            ) : null}
                             {/* 漂移（仅超阈值时显示） */}
                             {(() => {
                               const drift = driftMap.get(row.assetKey);
@@ -236,6 +261,26 @@ export function RebalanceProposalList(props: {
                                       <span className="text-amber-400/80">(AI判断: {marketRegimeLabel(row.decisionContext.llmMarketRegime)})</span>
                                     ) : null}
                                   </div>
+                                  {hasAssetBudgetContext ? (
+                                    <div className="space-y-1.5 rounded-[10px] border border-[rgba(56,189,248,0.18)] bg-[rgba(56,189,248,0.06)] px-3 py-2 font-sans text-[11px] leading-5 text-[var(--muted)]">
+                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <span className="font-semibold text-[var(--text)]">资产预算：{row.decisionContext.assetBudgetLabel || row.decisionContext.assetBudgetKey}</span>
+                                        <span>{assetBudgetStanceLabel(row.decisionContext.assetBudgetStance)} · 影子系数 {formatBudgetScale(row.decisionContext.assetBudgetScale)}</span>
+                                        <span className="text-[var(--faint)]">仅供审阅，不影响本次执行金额</span>
+                                      </div>
+                                      {row.decisionContext.macroShadowNotional != null ? (
+                                        <div>
+                                          原始执行 {formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)} → 宏观影子 {formatCurrency(row.decisionContext.macroShadowNotional, props.bootstrap.baseCurrency)}
+                                          {Math.abs(row.decisionContext.macroShadowDeltaNotional ?? 0) >= 0.01
+                                            ? `（${formatSignedCurrency(row.decisionContext.macroShadowDeltaNotional ?? 0, props.bootstrap.baseCurrency)}）`
+                                            : ""}
+                                        </div>
+                                      ) : null}
+                                      {row.decisionContext.macroShadowReason ? (
+                                        <div className="text-[var(--faint)]">{row.decisionContext.macroShadowReason}</div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
                                   {(row.decisionContext.conflictFlags ?? []).length > 0 ? (
                                     <div className="text-amber-400/80">冲突：{row.decisionContext.conflictFlags.join(" / ")}</div>
                                   ) : null}

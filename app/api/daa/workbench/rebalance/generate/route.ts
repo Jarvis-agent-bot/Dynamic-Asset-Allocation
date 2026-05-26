@@ -9,10 +9,10 @@ type Body = {
   triggerSource?: unknown;
   triggerReason?: unknown;
   manual?: unknown;
-  targetWeightOverrides?: unknown;
+  targetAllocationPlan?: unknown;
 };
 
-function toTargetWeightOverrides(value: unknown): Record<string, number> | undefined {
+function toTargetWeights(value: unknown): Record<string, number> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const out: Record<string, number> = {};
   for (const [rawKey, rawValue] of Object.entries(value)) {
@@ -22,6 +22,24 @@ function toTargetWeightOverrides(value: unknown): Record<string, number> | undef
     out[key] = Math.max(0, weight);
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+function toTargetAllocationPlan(value: unknown): {
+  targetWeights: Record<string, number>;
+  baselineTargetWeights?: Record<string, number>;
+  summary?: string | null;
+  reason?: string | null;
+} | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const targetWeights = toTargetWeights(row.targetWeights);
+  if (!targetWeights) return undefined;
+  return {
+    targetWeights,
+    baselineTargetWeights: toTargetWeights(row.baselineTargetWeights),
+    summary: row.summary == null ? null : String(row.summary),
+    reason: row.reason == null ? null : String(row.reason),
+  };
 }
 
 export async function POST(req: Request) {
@@ -35,7 +53,7 @@ export async function POST(req: Request) {
       triggerSource: normalizeRebalanceTriggerSource(payload.triggerSource),
       triggerReason: String(payload.triggerReason || "").trim(),
       manual: payload.manual === true || payload.manual === "1" || payload.manual === "true",
-      targetWeightOverrides: toTargetWeightOverrides(payload.targetWeightOverrides),
+      targetAllocationPlan: toTargetAllocationPlan(payload.targetAllocationPlan),
     });
     return ok(data);
   });

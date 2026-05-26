@@ -101,12 +101,12 @@ describe("auth-routes-api-response-v1", () => {
     const response = await loginPost(new Request("http://localhost/api/daa/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: "admin@example.com", password: "pw-1", returnTo: "/daa/dashboard/workbench?from=login" }),
+      body: JSON.stringify({ username: "admin@example.com", password: "pw-1", returnTo: "/daa/dashboard/unknown?from=login" }),
     }));
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.redirectTo).toBe("/daa/dashboard/portfolio?notice=signed_in");
+    expect(json.data.redirectTo).toBe("/daa/dashboard?notice=signed_in");
   });
 
   it("me silent 未登录时返回 not_authenticated", async () => {

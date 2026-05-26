@@ -12,7 +12,12 @@ type MacroCycleResult = {
 export type FredMacroInput = {
   gdpGrowthPct: number | null;  // e.g. 2.5 means 2.5% growth
   cpiYoYPct: number | null;     // e.g. 3.1 means 3.1% inflation
+  ppiYoYPct?: number | null;
   unemploymentPct: number | null;
+  policyRatePct?: number | null;
+  policyRate3mChangePct?: number | null;
+  fedBalanceSheetUsdT?: number | null;
+  fedBalanceSheet13wChangePct?: number | null;
 };
 
 const PHASE_META: Record<MacroCyclePhase, { label: string; favoredAssets: string[] }> = {
@@ -41,7 +46,8 @@ export function classifyMacroCycleWithFred(
   // 判断 FRED 数据可用性
   const hasGdp = fredData?.gdpGrowthPct != null && Number.isFinite(fredData.gdpGrowthPct);
   const hasCpi = fredData?.cpiYoYPct != null && Number.isFinite(fredData.cpiYoYPct);
-  const hasAnyFred = hasGdp || hasCpi;
+  const hasPpi = fredData?.ppiYoYPct != null && Number.isFinite(fredData.ppiYoYPct);
+  const hasAnyFred = hasGdp || hasCpi || hasPpi;
 
   // 如果既没有 FRED 数据也没有足够的代理指标，无法分类
   if (!hasAnyFred && !inflation) return null;
@@ -75,11 +81,17 @@ export function classifyMacroCycleWithFred(
   let inflationProxy: number;
   let inflationConfidence: number;
 
-  if (hasCpi) {
+  if (hasCpi || hasPpi) {
     // FRED CPI YoY：>3% 视为高通胀 (映射到 0-100 范围)
     // 0% → 10, 2% → 40, 3% → 55, 5% → 85, 8% → 100
-    inflationProxy = Math.max(0, Math.min(100, fredData!.cpiYoYPct! * 12.5));
-    inflationConfidence = 80;
+    const cpiScore = hasCpi ? Math.max(0, Math.min(100, fredData!.cpiYoYPct! * 12.5)) : null;
+    const ppiScore = hasPpi ? Math.max(0, Math.min(100, 10 + fredData!.ppiYoYPct! * 13.5)) : null;
+    if (cpiScore != null && ppiScore != null) {
+      inflationProxy = cpiScore * 0.65 + ppiScore * 0.35;
+    } else {
+      inflationProxy = cpiScore ?? ppiScore ?? 50;
+    }
+    inflationConfidence = hasCpi && hasPpi ? 85 : 75;
   } else if (inflation) {
     inflationProxy = inflation.percentile252 ?? 50;
     inflationConfidence = inflation.confidencePct ?? 50;

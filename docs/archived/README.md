@@ -11,7 +11,5 @@
 | 文件 | 归档原因 | 替代位置 |
 |------|---------|---------|
 | `architecture-2026-03-25.md` | 早于 Cognitive Agent V2 和 `_shared` 目录重构，多处与现状不符 | `../ARCHITECTURE.md` |
-| `design-specs-v2.md` | 早期 UI 特性白名单，与当前 Today / Portfolio / Rebalance 页面实现已偏离 | 查看实际页面 `app/daa/dashboard/` |
-| `daa-workbench-ux-whitelist-v1.md` | `workbench` 顶级路由已拆分，白名单不再适用 | `../ARCHITECTURE.md` §UI 层 |
 | `模拟执行模型说明.md` | 模拟执行模型在 README 中已有概述 | `../../README.md`、`../ARCHITECTURE.md` §再平衡引擎 |
 | `brain-architecture-stage1.md` | 早期“全权大脑”阶段一规划，当前实现已收敛到 Cognitive Agent OS + 权限门禁 | `../COGNITIVE_AGENT.md`、`../ARCHITECTURE.md` |

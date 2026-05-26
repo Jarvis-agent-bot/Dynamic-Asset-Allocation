@@ -403,17 +403,6 @@ const MIGRATIONS_: Migration[] = [
     },
   },
   {
-    id: "20260326_price_history_ohlcv",
-    async apply(query) {
-      const hasPriceHistory = await tableExists(query, "daa_price_history");
-      if (!hasPriceHistory) return;
-      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS open_price NUMERIC");
-      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS high_price NUMERIC");
-      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS low_price NUMERIC");
-      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS volume BIGINT");
-    },
-  },
-  {
     id: "20260327_macro_cycle_snapshots",
     async apply(query) {
       await query(`
@@ -805,7 +794,7 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260417_watchlist_auto_entry",
     async apply(query) {
-      // 观察列表自动建仓字段
+      // 观察列表入场候选字段
       await query(`
         ALTER TABLE daa_watchlist_entries
           ADD COLUMN IF NOT EXISTS auto_entry_enabled BOOLEAN NOT NULL DEFAULT FALSE,

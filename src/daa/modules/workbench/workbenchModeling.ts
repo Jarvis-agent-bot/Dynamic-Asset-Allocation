@@ -1,6 +1,10 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
-import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import type {
+  DaaAssetBudgetOverlayKey,
+  DaaMarketContext,
+} from "@/src/daa/modules/marketContext/marketContextTypes";
 import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import {
   getDaaCycleReport,
@@ -15,6 +19,7 @@ import type {
   PreTradeRiskCheck,
   PreTradeRiskCheckItem,
   PreTradeRiskRule,
+  ProposalDecisionContext,
   RebalanceProposal,
 } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import type {
@@ -544,11 +549,156 @@ function mapStoreCycleToView(cycle: DaaStoreRebalanceCycle | null): RebalanceCyc
 function buildMarketFacts(marketContext: DaaMarketContext | null | undefined): string[] {
     if (!marketContext)
         return [];
-    return marketContext.scopes.slice(0, 4).map((scope) => {
+    const scopeFacts = marketContext.scopes.slice(0, 4).map((scope) => {
         const lead = scope.indicators[0] || null;
         const value = lead?.rawValue == null ? "N/A" : `${lead.rawValue}${lead.unit || ""}`;
         const percentile = lead?.percentile252 == null ? "N/A" : `${lead.percentile252.toFixed(1)}%`;
-        return `${scope.label} ${marketRegimeLabelZh(scope.regime)} / 买入预算系数 ${Math.round(scope.buyScale * 100)}% / ${lead?.label || "指标"} ${value} / 近一年位置 ${percentile}`;
+        return `${scope.label} ${marketRegimeLabelZh(scope.regime)} / 压力 ${Math.round(scope.riskOffScorePct)}/100 / ${lead?.label || "指标"} ${value} / 近一年位置 ${percentile}`;
+    });
+    const assetBudgetFacts = (marketContext.assetBudgets || []).slice(0, 4).map((budget) => (
+        `${budget.label} 预算系数 ${Math.round(budget.budgetScale * 100)}% / ${budget.reasons[0] || "暂无具体原因"}`
+    ));
+    if (!marketContext.macroPolicy) return [...scopeFacts, ...assetBudgetFacts];
+    return [
+        ...scopeFacts,
+        `宏观政策 ${marketContext.macroPolicy.label} / 压力 ${marketContext.macroPolicy.pressurePct.toFixed(0)}/100 / ${marketContext.macroPolicy.reasons[0] || "暂无具体原因"}`,
+        ...assetBudgetFacts,
+    ];
+}
+
+const SHORT_BOND_CASH_SYMBOLS = new Set(["SGOV", "BIL", "SHV", "MINT", "JPST", "CASH", "USFR", "TFLO", "BILS", "GBIL"]);
+const GOLD_COMMODITY_SYMBOLS = new Set(["GLD", "IAU", "SLV", "GC=F", "SI=F", "DBC", "GOLD", "XAUUSD", "XAGUSD"]);
+
+function normalizeUpper(value: unknown): string {
+    return normalizeText(value).toUpperCase();
+}
+
+function uniqueAppend(list: string[] | undefined, item: string): string[] {
+    const current = Array.isArray(list) ? list.filter(Boolean) : [];
+    return current.includes(item) ? current : [...current, item];
+}
+
+function resolveAssetBudgetKeyForProposal(input: {
+    proposal: RebalanceProposal;
+    asset?: WorkbenchBootstrap["assetUniverse"][number] | null;
+}): DaaAssetBudgetOverlayKey | null {
+    const parsed = parseDaaAssetKey(input.proposal.assetKey);
+    const symbol = normalizeUpper(input.asset?.symbol || input.proposal.symbol || parsed?.symbol);
+    const market = normalizeUpper(input.asset?.market || parsed?.market);
+    const assetClass = normalizeUpper(input.asset?.assetClass);
+    const instrumentType = normalizeUpper(input.asset?.instrumentType);
+    const marketGroup = normalizeUpper(input.asset?.marketGroup);
+
+    if (market === "CRYPTO" || assetClass === "CRYPTO" || instrumentType === "CRYPTO" || marketGroup.includes("CRYPTO") || symbol.endsWith("-USD")) {
+        return "crypto";
+    }
+    if (assetClass === "CASH" || instrumentType === "CASH" || marketGroup.includes("CASH") || SHORT_BOND_CASH_SYMBOLS.has(symbol)) {
+        return "short_bonds_cash";
+    }
+    if (assetClass === "BOND" || instrumentType === "BOND" || marketGroup.includes("BOND")) {
+        return "duration_bonds";
+    }
+    if (market === "COMMODITY" || assetClass === "COMMODITY" || instrumentType === "COMMODITY" || marketGroup.includes("COMMODITY") || GOLD_COMMODITY_SYMBOLS.has(symbol) || symbol.endsWith("=F")) {
+        return "gold_commodities";
+    }
+    if (market === "HK" || market === "CN" || marketGroup.includes("HK") || marketGroup.includes("CN") || symbol.endsWith(".HK") || symbol.endsWith(".SS") || symbol.endsWith(".SZ")) {
+        return "hk_cn_equity";
+    }
+    if (market === "US" && (
+        assetClass === "EQUITY"
+        || assetClass === "ETF"
+        || instrumentType === "STOCK"
+        || instrumentType === "ETF"
+        || marketGroup.includes("US_EQUITY")
+        || marketGroup.includes("US_STOCK")
+    )) {
+        return "us_equity";
+    }
+    return null;
+}
+
+function buildProposalDecisionContextWithMacroBudget(input: {
+    proposal: RebalanceProposal;
+    overlay: NonNullable<DaaMarketContext["assetBudgets"]>[number];
+    appliedScale: number;
+    macroShadowNotional: number;
+    macroShadowQty: number | null;
+    macroShadowDeltaNotional: number;
+    reason: string;
+}): ProposalDecisionContext {
+    const current = input.proposal.decisionContext;
+    const flag = input.proposal.side === "BUY"
+        ? `宏观预算影子系数 ${Math.round(input.appliedScale * 100)}%`
+        : "宏观预算仅影响买入，卖出按原金额审阅";
+    return {
+        driftReason: current?.driftReason || input.proposal.reason,
+        signalAction: current?.signalAction ?? null,
+        signalScore: current?.signalScore ?? null,
+        signalConfidence: current?.signalConfidence ?? null,
+        signalConflict: current?.signalConflict ?? false,
+        llmAdjustment: current?.llmAdjustment ?? null,
+        llmConfidence: current?.llmConfidence ?? null,
+        llmRationale: current?.llmRationale ?? null,
+        ruleBasedMarketRegime: current?.ruleBasedMarketRegime ?? null,
+        llmMarketRegime: current?.llmMarketRegime ?? null,
+        effectiveMarketRegime: current?.effectiveMarketRegime ?? null,
+        marketScope: current?.marketScope ?? null,
+        marketScopeLabel: current?.marketScopeLabel ?? null,
+        marketIndicatorFlags: uniqueAppend(current?.marketIndicatorFlags, flag),
+        conflictFlags: current?.conflictFlags ?? [],
+        finalQtyMultiplier: current?.finalQtyMultiplier ?? 1,
+        assetBudgetKey: input.overlay.key,
+        assetBudgetLabel: input.overlay.label,
+        assetBudgetStance: input.overlay.stance,
+        assetBudgetScale: input.appliedScale,
+        macroShadowNotional: input.macroShadowNotional,
+        macroShadowQty: input.macroShadowQty,
+        macroShadowDeltaNotional: input.macroShadowDeltaNotional,
+        macroShadowReason: input.reason,
+    };
+}
+
+function attachMacroBudgetShadowSizing(input: {
+    proposals: RebalanceProposal[];
+    bootstrap: WorkbenchBootstrap;
+}): RebalanceProposal[] {
+    const overlays = input.bootstrap.marketContext?.assetBudgets || [];
+    if (!input.proposals.length || !overlays.length) return input.proposals;
+    const overlayByKey = new Map(overlays.map((overlay) => [overlay.key, overlay] as const));
+    const assetByKey = new Map(input.bootstrap.assetUniverse.map((asset) => [asset.assetKey.toUpperCase(), asset] as const));
+
+    return input.proposals.map((proposal) => {
+        const asset = assetByKey.get(proposal.assetKey.toUpperCase()) || null;
+        const budgetKey = resolveAssetBudgetKeyForProposal({ proposal, asset });
+        const overlay = budgetKey ? overlayByKey.get(budgetKey) : null;
+        if (!overlay) return proposal;
+
+        const suggestedNotional = Math.max(0, toFinite(proposal.suggestedNotional, 0));
+        const budgetScale = Math.max(0.25, Math.min(1.25, toFinite(overlay.budgetScale, 1)));
+        const appliedScale = proposal.side === "BUY" ? budgetScale : 1;
+        const macroShadowNotional = suggestedNotional * appliedScale;
+        const price = Math.max(0, toFinite(proposal.price, 0));
+        const fxRateToBase = Math.max(0, toFinite(proposal.fxRateToBase, 0));
+        const macroShadowQty = price > 0 && fxRateToBase > 0
+            ? (macroShadowNotional / fxRateToBase) / price
+            : null;
+        const macroShadowDeltaNotional = macroShadowNotional - suggestedNotional;
+        const reason = proposal.side === "BUY"
+            ? (overlay.reasons[0] || `${overlay.label} 当前预算系数 ${Math.round(budgetScale * 100)}%`)
+            : `${overlay.label} 预算只折扣买入；本条为卖出，影子金额保持原执行金额`;
+
+        return {
+            ...proposal,
+            decisionContext: buildProposalDecisionContextWithMacroBudget({
+                proposal,
+                overlay,
+                appliedScale,
+                macroShadowNotional,
+                macroShadowQty,
+                macroShadowDeltaNotional,
+                reason,
+            }),
+        };
     });
 }
 
@@ -703,7 +853,7 @@ function buildCycleDraftFromBootstrap(input: {
         }
         const targetSource = row.holdingQty > 0
             ? "持仓目标权重回归"
-            : "观察列表目标建仓";
+            : "观察列表目标入场";
         proposals.push({
             assetKey: row.assetKey,
             symbol: row.symbol,
@@ -960,6 +1110,7 @@ export {
   buildManualPreTradeRiskCheck,
   mapStoreCycleToView,
   buildMarketFacts,
+  attachMacroBudgetShadowSizing,
   mapStoreCycleReportToView,
   priceAgeSec,
   buildWorkbenchMarketDataHealth,

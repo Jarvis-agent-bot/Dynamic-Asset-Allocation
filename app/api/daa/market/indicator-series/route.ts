@@ -6,7 +6,10 @@ import {
   MARKET_INDICATOR_KEYS_,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { resolveSecret } from "@/src/daa/config/secretsManager";
+import { listMarketIndicatorHistorySeries } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { fetchMultiplePriceSeriesWithCache, type CachedPricePoint } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { fetchFredIndicatorSeries, type FredIndicatorSeriesKey } from "@/src/market/fredClient";
 
 export const runtime = "nodejs";
 
@@ -39,6 +42,42 @@ export async function GET(req: Request) {
     const meta = MARKET_INDICATOR_META_CATALOG_[key];
     if (!meta) {
       return fail("NOT_FOUND", `未找到指标元数据: ${key}`, { status: 404 });
+    }
+
+    if (isFredIndicatorKey(key)) {
+      const startMs = Date.parse(start);
+      const days = Number.isFinite(startMs)
+        ? Math.max(30, Math.ceil((Date.now() - startMs) / 86_400_000))
+        : 395;
+      const fredApiKey = await resolveSecret("fred_api_key");
+      let series = fredApiKey
+        ? await fetchFredIndicatorSeries(fredApiKey, key, { start, limit: Math.max(60, Math.min(1040, days + 24)) })
+        : [];
+      if (series.length <= 0) {
+        const history = await listMarketIndicatorHistorySeries({ keys: [key], days });
+        series = (history[key] || [])
+          .filter((item) => item.rawValue != null && Number.isFinite(item.rawValue))
+          .map((item) => ({ date: item.generatedAt.slice(0, 10), value: Number(item.rawValue) }));
+      }
+      const recentValues = series.slice(-252).map((p) => p.value).filter(Number.isFinite);
+      const distribution = computeDistribution(recentValues, 20);
+      const currentValue = series.length > 0 ? series[series.length - 1].value : null;
+
+      return ok({
+        key,
+        label: meta.label,
+        category: meta.category,
+        scope: meta.scope,
+        unit: meta.unit || "",
+        meaning: meta.meaning,
+        symbols: [meta.source],
+        isRatio: false,
+        isVolatility: false,
+        series,
+        currentValue,
+        distribution,
+        sources: ["daa_market_indicator_snapshot_v1"],
+      });
     }
 
     const symbols = meta.fixedSymbols;
@@ -93,6 +132,10 @@ export async function GET(req: Request) {
 }
 
 // ─── Helpers ────────────────────────────────────────────────
+
+function isFredIndicatorKey(key: DaaMarketIndicatorKey): key is FredIndicatorSeriesKey {
+  return key === "ppi_inflation" || key === "fed_policy_rate" || key === "fed_balance_sheet";
+}
 
 function defaultStart(): string {
   const d = new Date();

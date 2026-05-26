@@ -16,9 +16,9 @@ describe("agentTargetWeightPool", () => {
     });
   });
 
-  it("会把 Agent 目标权重转换为观察池目标权重与 auto-entry 百分比", () => {
+  it("会把 Agent 目标权重转换为观察池目标权重与入场候选百分比", () => {
     const patches = buildAgentTargetWeightPoolPatches({
-      targetWeightOverrides: {
+      targetWeights: {
         "us::nvda": 0.0833333,
         "US::QQQ": 0,
       },
@@ -41,9 +41,9 @@ describe("agentTargetWeightPool", () => {
     ]);
   });
 
-  it("关闭同步 auto-entry 时只写目标权重，不打开单资产自动建仓", () => {
+  it("关闭同步入场候选时只写目标权重，不纳入单资产入场候选", () => {
     const patches = buildAgentTargetWeightPoolPatches({
-      targetWeightOverrides: { "US::AAPL": 0.05 },
+      targetWeights: { "US::AAPL": 0.05 },
       autoEnableEntry: false,
     });
 

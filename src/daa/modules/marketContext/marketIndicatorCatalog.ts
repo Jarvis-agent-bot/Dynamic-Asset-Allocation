@@ -11,6 +11,7 @@ export const MARKET_SCOPE_LABEL_ZH_: Record<DaaMarketIndicatorScope, string> = {
   crypto: "加密市场",
   macro_defensive: "宏观防御",
   macro_global: "宏观全局",
+  macro_policy: "宏观政策",
 };
 
 export type DaaMarketIndicatorMeaning = {
@@ -34,6 +35,9 @@ export const MARKET_INDICATOR_KEYS_: DaaMarketIndicatorKey[] = [
   "credit_spread",
   "inflation_expectation",
   "market_breadth",
+  "ppi_inflation",
+  "fed_policy_rate",
+  "fed_balance_sheet",
 ];
 
 export const MARKET_INDICATOR_CONFIG_KEYS_: DaaMarketIndicatorConfigKey[] = [
@@ -49,6 +53,9 @@ export const MARKET_INDICATOR_CONFIG_KEYS_: DaaMarketIndicatorConfigKey[] = [
   "creditSpread",
   "inflationExpectation",
   "marketBreadth",
+  "ppiInflation",
+  "fedPolicyRate",
+  "fedBalanceSheet",
 ];
 
 export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY_: Record<DaaMarketIndicatorConfigKey, DaaMarketIndicatorKey> = {
@@ -64,6 +71,9 @@ export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY_: Record<DaaMarketIndicatorConfi
   creditSpread: "credit_spread",
   inflationExpectation: "inflation_expectation",
   marketBreadth: "market_breadth",
+  ppiInflation: "ppi_inflation",
+  fedPolicyRate: "fed_policy_rate",
+  fedBalanceSheet: "fed_balance_sheet",
 };
 
 export const MARKET_INDICATOR_CONFIG_KEY_BY_KEY_: Record<DaaMarketIndicatorKey, DaaMarketIndicatorConfigKey> = {
@@ -79,6 +89,9 @@ export const MARKET_INDICATOR_CONFIG_KEY_BY_KEY_: Record<DaaMarketIndicatorKey, 
   credit_spread: "creditSpread",
   inflation_expectation: "inflationExpectation",
   market_breadth: "marketBreadth",
+  ppi_inflation: "ppiInflation",
+  fed_policy_rate: "fedPolicyRate",
+  fed_balance_sheet: "fedBalanceSheet",
 };
 
 export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
@@ -269,6 +282,51 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
       usage: "和 VIX、QQQ/SPY 一起看美股环境，避免被头部权重股单独误导。",
     },
   },
+  ppi_inflation: {
+    label: "生产者价格指数 (PPI)",
+    category: "macro",
+    scope: "macro_policy",
+    unit: "%",
+    source: "fred:PPIACO",
+    fixedSymbols: [],
+    meaning: {
+      measurement: "PPI 同比变化，用来观察上游通胀压力是否会继续压制利润率、估值和降息空间。",
+      highSignal: "PPI 高位或重新上行，通常意味着通胀粘性更强，风险资产估值和降息预期承压。",
+      lowSignal: "PPI 低位或持续回落，通常意味着通胀压力缓和，政策转松空间更大。",
+      neutralSignal: "中性区间表示生产端价格压力没有形成新的宏观约束。",
+      usage: "这是宏观政策维度的通胀压力输入，不直接给出单资产交易指令。",
+    },
+  },
+  fed_policy_rate: {
+    label: "政策利率路径 (FEDFUNDS)",
+    category: "macro",
+    scope: "macro_policy",
+    unit: "%",
+    source: "fred:FEDFUNDS",
+    fixedSymbols: [],
+    meaning: {
+      measurement: "联邦基金有效利率及其近期变化，用来判断实际加息、维持高利率或降息路径。",
+      highSignal: "利率水平高且没有明显回落时，现金和短债吸引力更高，高估值资产折现压力更大。",
+      lowSignal: "利率水平较低或已经进入降息趋势时，久期资产和风险资产的外部压力下降。",
+      neutralSignal: "中性区间表示政策利率没有给组合节奏带来强约束。",
+      usage: "它衡量政策利率环境，不等同于市场对下一次 FOMC 的精确定价。",
+    },
+  },
+  fed_balance_sheet: {
+    label: "美联储资产负债表 (WALCL)",
+    category: "macro",
+    scope: "macro_policy",
+    unit: "$T",
+    source: "fred:WALCL",
+    fixedSymbols: [],
+    meaning: {
+      measurement: "美联储资产负债表规模及近期变化，用来观察缩表或扩表带来的系统流动性方向。",
+      highSignal: "资产负债表持续收缩，代表流动性被抽离，风险资产的流动性折扣应提高。",
+      lowSignal: "资产负债表企稳或扩张，代表流动性约束缓和。",
+      neutralSignal: "中性区间表示缩表/扩表没有形成明显方向性压力。",
+      usage: "这是流动性背景指标，应和美元、信用利差、波动率一起看，而不是单独触发交易。",
+    },
+  },
 };
 
 export const MARKET_SCOPE_KEY_ORDER_: DaaMarketIndicatorScope[] = [
@@ -277,6 +335,7 @@ export const MARKET_SCOPE_KEY_ORDER_: DaaMarketIndicatorScope[] = [
   "crypto",
   "macro_defensive",
   "macro_global",
+  "macro_policy",
 ];
 
 export function getMarketIndicatorRefreshSymbols(config: DaaMarketIndicatorsConfig): string[] {

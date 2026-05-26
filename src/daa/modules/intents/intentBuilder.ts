@@ -12,7 +12,7 @@ export function buildInvestmentIntents(input: {
   triggerReason: string;
   signals: PortfolioSignal[];
   manual: boolean;
-  hasAgentTargetOverrides?: boolean;
+  hasAgentTargetPlan?: boolean;
 }): InvestmentIntent[] {
   const out: InvestmentIntent[] = [];
   const now = new Date().toISOString();
@@ -91,7 +91,7 @@ export function buildInvestmentIntents(input: {
     });
   }
 
-  if (input.triggerSource === "agent_trigger" || input.hasAgentTargetOverrides) {
+  if (input.triggerSource === "agent_trigger" || input.hasAgentTargetPlan) {
     out.push({
       intentId: `intent:agent:${now}`,
       source: "agent_thesis",

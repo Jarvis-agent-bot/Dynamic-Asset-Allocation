@@ -140,14 +140,14 @@ describe("generateWatchlistEntryProposals", () => {
     expect(result.evaluations).toHaveLength(0);
   });
 
-  it("未启用自动建仓时，即使已有目标权重也不会自动买入", async () => {
+  it("未纳入入场候选时，即使已有目标权重也不会自动买入", async () => {
     vi.mocked(listActiveWatchlistAutoEntries).mockResolvedValue([]);
     const result = await generateWatchlistEntryProposals({
       bootstrap: mockBootstrap([mockAsset({ targetWeightHint: 0.05 })]),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(0);
-    expect(result.evaluations[0]?.rejectReason).toMatch(/未启用自动建仓/);
+    expect(result.evaluations[0]?.rejectReason).toMatch(/未纳入入场候选/);
   });
 
   it("已持仓 → 跳过并记录 rejectReason", async () => {

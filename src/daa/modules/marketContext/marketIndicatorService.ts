@@ -1,7 +1,7 @@
 import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
-import { fetchFredMacroSnapshot } from "@/src/market/fredClient";
+import { fetchFredMacroSnapshot, type FredMacroSnapshot } from "@/src/market/fredClient";
 import type { FredMacroInput } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
   MARKET_INDICATOR_KEY_BY_CONFIG_KEY_,
@@ -48,6 +48,13 @@ type ComputedIndicatorRow = {
   subjectKey: string;
 };
 
+type FredPolicyIndicatorKey = "ppi_inflation" | "fed_policy_rate" | "fed_balance_sheet";
+
+const FRED_POLICY_INDICATOR_KEYS_: FredPolicyIndicatorKey[] = [
+  "ppi_inflation",
+  "fed_policy_rate",
+  "fed_balance_sheet",
+];
 
 function round(value: number, digits = 2): number {
   if (!Number.isFinite(value)) return 0;
@@ -234,6 +241,169 @@ function finalizeIndicatorRow(input: {
   };
 }
 
+function isFredPolicyIndicatorEnabled(config: DaaMarketIndicatorsConfig, key: FredPolicyIndicatorKey): boolean {
+  if (key === "ppi_inflation") return config.indicators.ppiInflation?.enabled === true;
+  if (key === "fed_policy_rate") return config.indicators.fedPolicyRate?.enabled === true;
+  return config.indicators.fedBalanceSheet?.enabled === true;
+}
+
+function buildUnavailableFredIndicatorRow(key: FredPolicyIndicatorKey, reason: string): ComputedIndicatorRow {
+  return finalizeIndicatorRow({
+    key,
+    scorePct: 50,
+    confidencePct: 0,
+    rawValue: null,
+    percentile252: null,
+    zscore60: null,
+    trend1dPct: null,
+    trend7dPct: null,
+    trend30dPct: null,
+    reason: `${MARKET_INDICATOR_META_CATALOG_[key].label} 暂不可用：${reason}`,
+    componentsJson: {
+      unavailable: true,
+      reason,
+    },
+  });
+}
+
+function scorePpiInflation(ppiYoY: number): number {
+  return clamp(10 + ppiYoY * 13.5, 0, 100);
+}
+
+function scorePolicyRate(policyRate: number, rate3mChange: number | null): number {
+  const levelScore = clamp(20 + (policyRate - 1) * 18, 10, 90);
+  const trendAdjustment = rate3mChange == null
+    ? 0
+    : rate3mChange < -0.05
+      ? -Math.min(20, Math.abs(rate3mChange) * 20)
+      : rate3mChange > 0.05
+        ? Math.min(20, rate3mChange * 20)
+        : 0;
+  return clamp(levelScore + trendAdjustment, 0, 100);
+}
+
+function scoreFedBalanceSheet(change13wPct: number): number {
+  return clamp(50 - change13wPct * 8, 15, 90);
+}
+
+function buildFredPolicyIndicatorRows(input: {
+  config: DaaMarketIndicatorsConfig;
+  fredMacro: FredMacroSnapshot | null;
+  fredConfigured: boolean;
+}): ComputedIndicatorRow[] {
+  const rows: ComputedIndicatorRow[] = [];
+  for (const key of FRED_POLICY_INDICATOR_KEYS_) {
+    if (!isFredPolicyIndicatorEnabled(input.config, key)) continue;
+
+    if (!input.fredConfigured) {
+      rows.push(buildUnavailableFredIndicatorRow(key, "未配置 FRED API Key，系统只能使用市场代理指标"));
+      continue;
+    }
+
+    if (key === "ppi_inflation") {
+      const ppiYoY = input.fredMacro?.ppiYoY;
+      if (ppiYoY == null || !Number.isFinite(ppiYoY)) {
+        rows.push(buildUnavailableFredIndicatorRow(key, "FRED 未返回有效 PPI 序列"));
+        continue;
+      }
+      const score = scorePpiInflation(ppiYoY);
+      const reason = score >= 65
+        ? `PPI 同比 ${ppiYoY.toFixed(1)}%，生产端通胀压力偏高，降息空间受约束`
+        : score <= 40
+          ? `PPI 同比 ${ppiYoY.toFixed(1)}%，生产端通胀压力缓和`
+          : `PPI 同比 ${ppiYoY.toFixed(1)}%，生产端通胀处于中性区间`;
+      rows.push(finalizeIndicatorRow({
+        key,
+        scorePct: score,
+        confidencePct: 82,
+        rawValue: ppiYoY,
+        percentile252: null,
+        zscore60: null,
+        trend1dPct: null,
+        trend7dPct: null,
+        trend30dPct: null,
+        reason,
+        componentsJson: { ppiYoYPct: ppiYoY },
+      }));
+      continue;
+    }
+
+    if (key === "fed_policy_rate") {
+      const policyRate = input.fredMacro?.policyRate;
+      if (policyRate == null || !Number.isFinite(policyRate)) {
+        rows.push(buildUnavailableFredIndicatorRow(key, "FRED 未返回有效联邦基金利率"));
+        continue;
+      }
+      const change3m = input.fredMacro?.policyRate3mChange ?? null;
+      const score = scorePolicyRate(policyRate, change3m);
+      const changeText = change3m == null
+        ? "近期变化未知"
+        : change3m < -0.05
+          ? `近 3 个月下降 ${Math.abs(change3m).toFixed(2)} 个百分点`
+          : change3m > 0.05
+            ? `近 3 个月上升 ${change3m.toFixed(2)} 个百分点`
+            : "近 3 个月基本持平";
+      const reason = score >= 65
+        ? `联邦基金利率 ${policyRate.toFixed(2)}%，${changeText}，高利率仍压制风险资产估值`
+        : score <= 40
+          ? `联邦基金利率 ${policyRate.toFixed(2)}%，${changeText}，政策利率压力缓和`
+          : `联邦基金利率 ${policyRate.toFixed(2)}%，${changeText}，政策利率处于观察区间`;
+      rows.push(finalizeIndicatorRow({
+        key,
+        scorePct: score,
+        confidencePct: 88,
+        rawValue: policyRate,
+        percentile252: null,
+        zscore60: null,
+        trend1dPct: null,
+        trend7dPct: null,
+        trend30dPct: null,
+        reason,
+        componentsJson: {
+          policyRatePct: policyRate,
+          policyRate3mChangePct: change3m,
+        },
+      }));
+      continue;
+    }
+
+    const balanceSheetUsdT = input.fredMacro?.fedBalanceSheetUsdT;
+    const change13w = input.fredMacro?.fedBalanceSheet13wChangePct;
+    if (
+      balanceSheetUsdT == null
+      || !Number.isFinite(balanceSheetUsdT)
+      || change13w == null
+      || !Number.isFinite(change13w)
+    ) {
+      rows.push(buildUnavailableFredIndicatorRow(key, "FRED 未返回有效资产负债表或 13 周变化"));
+      continue;
+    }
+    const score = scoreFedBalanceSheet(change13w);
+    const reason = score >= 65
+      ? `美联储资产负债表约 ${balanceSheetUsdT.toFixed(2)} 万亿美元，近 13 周收缩 ${Math.abs(change13w).toFixed(1)}%，缩表压力偏高`
+      : score <= 40
+        ? `美联储资产负债表约 ${balanceSheetUsdT.toFixed(2)} 万亿美元，近 13 周变化 ${change13w.toFixed(1)}%，流动性约束缓和`
+        : `美联储资产负债表约 ${balanceSheetUsdT.toFixed(2)} 万亿美元，近 13 周变化 ${change13w.toFixed(1)}%，缩表压力中性`;
+    rows.push(finalizeIndicatorRow({
+      key,
+      scorePct: score,
+      confidencePct: 82,
+      rawValue: balanceSheetUsdT,
+      percentile252: null,
+      zscore60: null,
+      trend1dPct: null,
+      trend7dPct: null,
+      trend30dPct: null,
+      reason,
+      componentsJson: {
+        fedBalanceSheetUsdT: balanceSheetUsdT,
+        fedBalanceSheet13wChangePct: change13w,
+      },
+    }));
+  }
+  return rows;
+}
+
 async function computeVixIndicator(getBars: (symbol: string, days: number) => Promise<DailyCloseBar[]>): Promise<ComputedIndicatorRow | null> {
   const bars = await getBars("^VIX", 270);
   const closes = bars.map((item) => item.close).filter((item) => item > 0);
@@ -346,7 +516,12 @@ async function computeRealizedVolIndicator(input: {
   });
 }
 
-async function computeEnabledIndicators(config: DaaMarketIndicatorsConfig): Promise<ComputedIndicatorRow[]> {
+async function computeEnabledIndicators(input: {
+  config: DaaMarketIndicatorsConfig;
+  fredMacro: FredMacroSnapshot | null;
+  fredConfigured: boolean;
+}): Promise<ComputedIndicatorRow[]> {
+  const { config } = input;
   const barCache = new Map<string, Promise<DailyCloseBar[]>>();
   const getBars = (symbol: string, days: number) => {
     const key = `${normalizeYfinanceSymbol(symbol)}::${days}`;
@@ -488,9 +663,11 @@ async function computeEnabledIndicators(config: DaaMarketIndicatorsConfig): Prom
 
   const resolved = await Promise.all(rows);
   const expireAt = buildExpireAt(config.refreshIntervalMinutes, new Date().toISOString());
-  return resolved
+  const marketRows = resolved
     .filter((item): item is ComputedIndicatorRow => Boolean(item))
     .map((item) => ({ ...item, expireAt }));
+  const fredRows = buildFredPolicyIndicatorRows(input).map((item) => ({ ...item, expireAt }));
+  return [...marketRows, ...fredRows];
 }
 
 function hasFreshCoverage(input: {
@@ -530,25 +707,36 @@ export async function refreshMarketIndicators(): Promise<RefreshMarketIndicators
     return { marketContext: null, indicators: [], refreshedCount: 0 };
   }
 
-  const computed = await computeEnabledIndicators(config);
-  if (computed.length <= 0) {
-    return { marketContext: null, indicators: [], refreshedCount: 0 };
-  }
-
   // 尝试获取 FRED 宏观数据
   let fredMacro: FredMacroInput | null = null;
+  let fredSnapshot: FredMacroSnapshot | null = null;
   const fredApiKey = await resolveSecret("fred_api_key");
   if (fredApiKey) {
     try {
       const snapshot = await fetchFredMacroSnapshot(fredApiKey);
+      fredSnapshot = snapshot;
       fredMacro = {
         gdpGrowthPct: snapshot.gdpGrowth,
         cpiYoYPct: snapshot.cpiYoY,
+        ppiYoYPct: snapshot.ppiYoY,
         unemploymentPct: snapshot.unemployment,
+        policyRatePct: snapshot.policyRate,
+        policyRate3mChangePct: snapshot.policyRate3mChange,
+        fedBalanceSheetUsdT: snapshot.fedBalanceSheetUsdT,
+        fedBalanceSheet13wChangePct: snapshot.fedBalanceSheet13wChangePct,
       };
     } catch (err) {
       logSwallowed("refreshMarketIndicators.fred", err);
     }
+  }
+
+  const computed = await computeEnabledIndicators({
+    config,
+    fredMacro: fredSnapshot,
+    fredConfigured: Boolean(fredApiKey),
+  });
+  if (computed.length <= 0) {
+    return { marketContext: null, indicators: [], refreshedCount: 0 };
   }
 
   const refreshedCount = await upsertDaaMarketIndicatorSnapshots(computed.map((item) => buildStoredRowPayload(item)));
@@ -558,6 +746,12 @@ export async function refreshMarketIndicators(): Promise<RefreshMarketIndicators
   // 持久化宏观周期快照（fire-and-forget，不阻塞刷新流程）
   const macroCycle = marketContext?.macroCycle;
   if (macroCycle) {
+    const hasFredMacroData = Boolean(fredMacro && [
+      fredMacro.gdpGrowthPct,
+      fredMacro.cpiYoYPct,
+      fredMacro.ppiYoYPct,
+      fredMacro.unemploymentPct,
+    ].some((item) => item != null && Number.isFinite(item)));
     upsertMacroCycleSnapshot({
       phase: macroCycle.phase,
       growthProxy: macroCycle.growthProxy,
@@ -565,7 +759,7 @@ export async function refreshMarketIndicators(): Promise<RefreshMarketIndicators
       confidence: macroCycle.confidence,
       label: macroCycle.label,
       favoredAssets: macroCycle.favoredAssets,
-      dataSource: fredMacro ? "fred" : "proxy",
+      dataSource: hasFredMacroData ? "fred" : "proxy",
       fredGdpPct: fredMacro?.gdpGrowthPct,
       fredCpiPct: fredMacro?.cpiYoYPct,
       fredUnemploymentPct: fredMacro?.unemploymentPct,

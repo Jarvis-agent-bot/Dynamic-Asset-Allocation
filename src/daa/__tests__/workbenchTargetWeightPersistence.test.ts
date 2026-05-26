@@ -14,9 +14,11 @@ describe("buildExecutedTargetWeightPatches", () => {
     const patches = buildExecutedTargetWeightPatches({
       cycle: {
         agentDecisionSnapshot: {
-          targetWeightOverrides: {
-            "US::NVDA": 0.08,
-            "US::QQQ": 0,
+          targetAllocationPlan: {
+            targetWeights: {
+              "US::NVDA": 0.08,
+              "US::QQQ": 0,
+            },
           },
         },
         proposals: [
@@ -29,7 +31,7 @@ describe("buildExecutedTargetWeightPatches", () => {
             suggestedQty: 1,
             suggestedNotional: 100,
             price: 100,
-            reason: "Agent 目标建仓",
+            reason: "Agent 目标入场",
             selected: true,
             hfContribution: null,
             targetWeightPct: 5,
@@ -46,7 +48,7 @@ describe("buildExecutedTargetWeightPatches", () => {
     expect(patches[0]?.reason).toBe("agent_target");
   });
 
-  it("观察列表自动建仓成交后用 proposal 目标权重补写持久目标", () => {
+  it("观察列表入场候选成交后用 proposal 目标权重补写持久目标", () => {
     const patches = buildExecutedTargetWeightPatches({
       cycle: {
         agentDecisionSnapshot: null,
@@ -60,7 +62,7 @@ describe("buildExecutedTargetWeightPatches", () => {
             suggestedQty: 1,
             suggestedNotional: 500,
             price: 500,
-            reason: "观察列表自动建仓 tech=80 val=70 fusion=75 目标 5.0%",
+            reason: "观察列表入场候选 tech=80 val=70 fusion=75 目标 5.0%",
             selected: true,
             hfContribution: null,
             targetWeightPct: 5,

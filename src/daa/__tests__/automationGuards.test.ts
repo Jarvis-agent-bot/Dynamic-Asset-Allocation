@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyTargetWeightOverridesToBootstrap,
-  buildAgentTargetWeightOverrides,
+  applyTargetAllocationWeightsToBootstrap,
+  buildAgentTargetWeightPlan,
   buildEmptyAutoTriggerSkipMessage,
   filterAutoTradeStability,
   filterRecentAutoTradeReversals,
@@ -293,7 +293,7 @@ describe("automationGuards", () => {
       },
     };
 
-    const plan = buildAgentTargetWeightOverrides({
+    const plan = buildAgentTargetWeightPlan({
       overlay,
       knownAssetKeys: ["US::NVDA", "US::TSLA"],
       maxPositionPct: 0.1,
@@ -301,7 +301,7 @@ describe("automationGuards", () => {
     });
 
     expect(plan).toEqual({
-      targetWeightOverrides: { "US::NVDA": 0.03 },
+      targetWeights: { "US::NVDA": 0.03 },
       baselineTargetWeights: { "US::NVDA": 0 },
       acceptedCount: 1,
       skippedCount: 1,
@@ -329,14 +329,14 @@ describe("automationGuards", () => {
       },
     };
 
-    const plan = buildAgentTargetWeightOverrides({
+    const plan = buildAgentTargetWeightPlan({
       overlay,
       knownAssetKeys: ["US::NVDA"],
       maxPositionPct: 0.1,
       minConfidence: 70,
     });
 
-    expect(plan?.targetWeightOverrides["US::NVDA"]).toBe(0.1);
+    expect(plan?.targetWeights["US::NVDA"]).toBe(0.1);
   });
 
   it("Agent 目标权重计划拒绝旧版单冒号 assetKey", () => {
@@ -358,7 +358,7 @@ describe("automationGuards", () => {
       },
     };
 
-    const plan = buildAgentTargetWeightOverrides({
+    const plan = buildAgentTargetWeightPlan({
       overlay,
       knownAssetKeys: ["US::NVDA"],
       maxPositionPct: 0.1,
@@ -401,7 +401,7 @@ describe("automationGuards", () => {
       },
     };
 
-    const plan = buildAgentTargetWeightOverrides({
+    const plan = buildAgentTargetWeightPlan({
       overlay,
       knownAssetKeys: ["US::SPY", "US::NVDA", "US::MSFT"],
       currentTargetWeights: {
@@ -413,7 +413,7 @@ describe("automationGuards", () => {
       minConfidence: 70,
     });
 
-    expect(plan?.targetWeightOverrides).toEqual({
+    expect(plan?.targetWeights).toEqual({
       "US::SPY": 0.05,
       "US::NVDA": 0.03,
       "US::MSFT": 0.04,
@@ -426,7 +426,7 @@ describe("automationGuards", () => {
     expect(plan?.skippedCount).toBe(0);
   });
 
-  it("目标权重覆盖会重算 workbench 资产目标与偏移", () => {
+  it("目标配置计划会重算 workbench 资产目标与偏移", () => {
     const bootstrap = buildWorkbenchBootstrap({
       account: { totalEquity: 10000, cash: 8000, investableCash: 8000, frozenCash: 0 },
       assetUniverse: [
@@ -447,7 +447,7 @@ describe("automationGuards", () => {
       ],
     });
 
-    const next = applyTargetWeightOverridesToBootstrap(bootstrap, {
+    const next = applyTargetAllocationWeightsToBootstrap(bootstrap, {
       "US::NVDA": 0.03,
     });
 
@@ -457,7 +457,7 @@ describe("automationGuards", () => {
     expect(next).not.toBe(bootstrap);
   });
 
-  it("目标权重覆盖可作用于无持仓观察列表资产，后续执行层会转成 BUY 偏移", () => {
+  it("目标配置计划可作用于无持仓观察列表资产，后续执行层会转成 BUY 偏移", () => {
     const bootstrap = buildWorkbenchBootstrap({
       account: { totalEquity: 10000, cash: 8000, investableCash: 8000, frozenCash: 0 },
       assetUniverse: [
@@ -473,7 +473,7 @@ describe("automationGuards", () => {
       ],
     });
 
-    const next = applyTargetWeightOverridesToBootstrap(bootstrap, {
+    const next = applyTargetAllocationWeightsToBootstrap(bootstrap, {
       "US::QQQ": 0.05,
     });
 

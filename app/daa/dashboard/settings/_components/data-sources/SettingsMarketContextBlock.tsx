@@ -31,7 +31,7 @@ export function SettingsMarketContextBlock(props: {
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>市场状态层</div>
             <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-              现在按市场拆分为美股、港股 / 中概、加密与宏观防御四组环境，只影响对应市场的买入执行节奏、风险提示与 AI 解读语境。
+              现在按市场拆分为美股、港股 / 中概、加密、宏观防御与宏观政策环境，只影响对应市场的买入执行节奏、风险提示与 AI 解读语境。
             </div>
           </div>
           <CheckboxRow
@@ -86,7 +86,7 @@ export function SettingsMarketContextBlock(props: {
           <div style={{ gridColumn: "1 / -1", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", padding: "10px 12px" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>市场划分说明</div>
             <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-              美股使用恐慌指数、成长/大盘比与市场广度；港股 / 中概使用港中概波动率与中概互联/大盘比；加密使用比特币/以太坊比与比特币波动率；宏观层使用金银比、收益率曲线、美元、信用与通胀代理指标。
+              美股使用恐慌指数、成长/大盘比与市场广度；港股 / 中概使用港中概波动率与中概互联/大盘比；加密使用比特币/以太坊比与比特币波动率；宏观层使用金银比、收益率曲线、美元、信用、通胀代理、PPI、政策利率与美联储资产负债表。
             </div>
           </div>
         </div>
@@ -103,7 +103,7 @@ export function SettingsMarketContextBlock(props: {
             lineHeight: 1.7,
           }}
         >
-          数据源对照：VIX → ^VIX；QQQ/SPY → QQQ / SPY；FXI 波动率 → FXI；KWEB/FXI → KWEB / FXI；BTC/ETH → BTC-USD / ETH-USD；BTC 波动率 → BTC-USD；金银比 → GC=F / SI=F；收益率曲线 → IEF / SHY；美元 → UUP；信用利差 → HYG / LQD；通胀预期 → TIP / IEF；市场广度 → RSP / SPY。
+          数据源对照：VIX → ^VIX；QQQ/SPY → QQQ / SPY；FXI 波动率 → FXI；KWEB/FXI → KWEB / FXI；BTC/ETH → BTC-USD / ETH-USD；BTC 波动率 → BTC-USD；金银比 → GC=F / SI=F；收益率曲线 → IEF / SHY；美元 → UUP；信用利差 → HYG / LQD；通胀预期 → TIP / IEF；市场广度 → RSP / SPY；PPI / 政策利率 / 缩表 → FRED。
         </div>
 
         <div style={{ marginTop: 16 }}>
@@ -190,13 +190,13 @@ export function SettingsMarketContextBlock(props: {
         </div>
 
         <div style={{ marginTop: 16 }}>
-          <FieldLabel>市场环境执行系数</FieldLabel>
+          <FieldLabel>市场环境预算基准</FieldLabel>
           <div style={{ marginBottom: 10, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-            这些系数只影响不同市场环境下的买入力度，用来把研究结论转成更保守或更积极的执行节奏。
+            这些系数作为资产预算倾斜的基础输入，用来把研究结论转成更保守或更积极的入场节奏。
           </div>
           <div style={settingsGridCols3Style}>
             <div>
-              <FieldLabel>过渡环境买入执行系数</FieldLabel>
+              <FieldLabel>过渡环境预算基准</FieldLabel>
               <NumberInput
                 value={config.dataSources.marketIndicators.overlays.transitionalBuyScale}
                 min={0.2}
@@ -225,7 +225,7 @@ export function SettingsMarketContextBlock(props: {
             </div>
 
             <div>
-              <FieldLabel>减仓/回避环境买入执行系数</FieldLabel>
+              <FieldLabel>回避环境预算基准</FieldLabel>
               <NumberInput
                 value={config.dataSources.marketIndicators.overlays.riskOffBuyScale}
                 min={0.2}
@@ -254,7 +254,7 @@ export function SettingsMarketContextBlock(props: {
             </div>
 
             <div>
-              <FieldLabel>高波动资产买入执行系数</FieldLabel>
+              <FieldLabel>高波动资产预算基准</FieldLabel>
               <NumberInput
                 value={config.dataSources.marketIndicators.overlays.highRiskBuyScale}
                 min={0.1}

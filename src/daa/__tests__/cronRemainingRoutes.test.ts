@@ -411,7 +411,7 @@ describe('cron-remaining-routes-v1', () => {
     });
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).toHaveBeenCalledWith({
       triggerSource: 'drift',
-      triggerReason: '观察列表自动建仓检查',
+      triggerReason: '观察列表入场候选检查',
       manual: false,
     });
     expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('自动调仓触发');

@@ -37,6 +37,9 @@ export const MARKET_INDICATOR_ITEMS_: Array<{
   { key: "creditSpread", label: "信用利差 (HYG/LQD)", hint: "观察信用风险偏好是否收缩。", dependencies: "HYG, LQD" },
   { key: "inflationExpectation", label: "通胀预期 (TIP/IEF)", hint: "观察通胀预期是否影响权益与债券配置语境。", dependencies: "TIP, IEF" },
   { key: "marketBreadth", label: "市场广度 (RSP/SPY)", hint: "观察美股上涨是否由少数头部资产驱动。", dependencies: "RSP, SPY" },
+  { key: "ppiInflation", label: "生产者价格指数 (PPI)", hint: "观察生产端通胀压力是否压制降息空间和企业利润率。", dependencies: "FRED:PPIACO" },
+  { key: "fedPolicyRate", label: "政策利率路径 (FEDFUNDS)", hint: "观察联邦基金利率水平和近期是否进入降息/再加息路径。", dependencies: "FRED:FEDFUNDS" },
+  { key: "fedBalanceSheet", label: "美联储资产负债表 (WALCL)", hint: "观察缩表或扩表对系统流动性的影响。", dependencies: "FRED:WALCL" },
 ];
 
 export type SettingsConfigSetter = Dispatch<SetStateAction<DaaSystemConfig | null>>;

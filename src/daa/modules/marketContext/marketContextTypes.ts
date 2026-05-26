@@ -12,12 +12,65 @@ export type DaaMarketIndicatorKey =
   | "usd_strength"
   | "credit_spread"
   | "inflation_expectation"
-  | "market_breadth";
+  | "market_breadth"
+  | "ppi_inflation"
+  | "fed_policy_rate"
+  | "fed_balance_sheet";
 
 export type DaaMarketIndicatorCategory = "volatility" | "relative_value" | "sentiment" | "macro";
-export type DaaMarketIndicatorScope = "us_equity" | "hk_cn_equity" | "crypto" | "macro_defensive" | "macro_global";
+export type DaaMarketIndicatorScope =
+  | "us_equity"
+  | "hk_cn_equity"
+  | "crypto"
+  | "macro_defensive"
+  | "macro_global"
+  | "macro_policy";
 
 export type MacroCyclePhase = "recovery" | "overheating" | "stagflation" | "deflation";
+
+export type DaaMacroPolicyDimensionKey = "inflation" | "rates" | "liquidity";
+
+export type DaaMacroPolicyDimension = {
+  key: DaaMacroPolicyDimensionKey;
+  label: string;
+  pressurePct: number;
+  confidencePct: number;
+  regime: DaaMarketRegime;
+  reasons: string[];
+  sourceIndicators: DaaMarketIndicatorKey[];
+};
+
+export type DaaMacroPolicyContext = {
+  generatedAt: string;
+  regime: DaaMarketRegime;
+  pressurePct: number;
+  confidencePct: number;
+  label: string;
+  reasons: string[];
+  dimensions: DaaMacroPolicyDimension[];
+};
+
+export type DaaAssetBudgetOverlayKey =
+  | "us_equity"
+  | "hk_cn_equity"
+  | "crypto"
+  | "duration_bonds"
+  | "short_bonds_cash"
+  | "gold_commodities";
+
+export type DaaAssetBudgetStance = "increase" | "neutral" | "reduce";
+
+export type DaaAssetBudgetOverlay = {
+  key: DaaAssetBudgetOverlayKey;
+  label: string;
+  stance: DaaAssetBudgetStance;
+  budgetScale: number;
+  pressurePct: number;
+  confidencePct: number;
+  reasons: string[];
+  sourceScopes: DaaMarketIndicatorScope[];
+  sourceMacroDimensions: DaaMacroPolicyDimensionKey[];
+};
 
 export type DaaMarketIndicatorSnapshot = {
   key: DaaMarketIndicatorKey;
@@ -70,4 +123,6 @@ export type DaaMarketContext = {
     label: string;
     favoredAssets: string[];
   } | null;
+  macroPolicy?: DaaMacroPolicyContext | null;
+  assetBudgets?: DaaAssetBudgetOverlay[];
 };

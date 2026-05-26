@@ -10,7 +10,10 @@ import {
   marketScopeMetricLabelZh,
   marketScopePrimaryLabelZh,
 } from "@/src/daa/modules/marketContext/marketContextLabels";
-import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type {
+  DaaAssetBudgetOverlayKey,
+  DaaMarketContext,
+} from "@/src/daa/modules/marketContext/marketContextTypes";
 
 function riskScoreTone(scorePct: number | null | undefined): DaaSurfaceTone {
   const score = Number.isFinite(scorePct) ? Number(scorePct) : 50;
@@ -23,6 +26,26 @@ function riskScoreTone(scorePct: number | null | undefined): DaaSurfaceTone {
 function formatPct(value: number | null | undefined): string {
   if (!Number.isFinite(value)) return "-";
   return `${Number(value).toFixed(0)}%`;
+}
+
+function assetBudgetStanceLabel(stance: string): string {
+  if (stance === "increase") return "提高预算";
+  if (stance === "reduce") return "降低预算";
+  return "维持中性";
+}
+
+function asAssetBudgetKey(scope: string): DaaAssetBudgetOverlayKey | null {
+  if (
+    scope === "us_equity"
+    || scope === "hk_cn_equity"
+    || scope === "crypto"
+    || scope === "duration_bonds"
+    || scope === "short_bonds_cash"
+    || scope === "gold_commodities"
+  ) {
+    return scope;
+  }
+  return null;
 }
 
 type AiSnapshot = {
@@ -52,7 +75,10 @@ export function MarketContextCard(props: {
   const vix = mc.indicators.find((i) => i.key === "vix");
   const confidence = props.aiSnapshot?.overallConfidence ?? mc.confidencePct;
   const actionableScopes = mc.scopes.filter((s) => isActionableMarketScope(s.scope));
-  const macroScopes = mc.scopes.filter((s) => !isActionableMarketScope(s.scope));
+  const macroScopes = mc.scopes.filter((s) => !isActionableMarketScope(s.scope) && s.scope !== "macro_policy");
+  const macroPolicy = mc.macroPolicy ?? null;
+  const assetBudgets = (mc.assetBudgets || []).slice(0, 4);
+  const assetBudgetByScope = new Map((mc.assetBudgets || []).map((budget) => [budget.key, budget] as const));
   const topReason = props.aiSnapshot?.summary || mc.reasons[0] || "市场指标已更新，可结合左侧调仓建议一起审阅。";
 
   return (
@@ -103,9 +129,56 @@ export function MarketContextCard(props: {
 
       <div className="mt-3 text-xs leading-5 text-[var(--muted)]">{topReason}</div>
 
+      {macroPolicy ? (
+        <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.5)] px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-[var(--text)]">宏观政策</span>
+            <DaaSurfaceStatusPill tone={riskScoreTone(macroPolicy.pressurePct)}>
+              {macroPolicy.label}
+            </DaaSurfaceStatusPill>
+          </div>
+          <div className="mt-1 text-xs text-[var(--faint)]">
+            政策压力 {macroPolicy.pressurePct.toFixed(0)}/100 · 置信度 {macroPolicy.confidencePct.toFixed(0)}%
+          </div>
+          {macroPolicy.reasons[0] ? (
+            <div className="mt-2 text-xs leading-5 text-[var(--muted)]">{macroPolicy.reasons[0]}</div>
+          ) : null}
+          <div className="mt-2 grid gap-1.5">
+            {macroPolicy.dimensions.map((dimension) => (
+              <div key={dimension.key} className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-[var(--muted)]">{dimension.label}</span>
+                <span className="font-[var(--font-mono)] text-[var(--text)]">{dimension.pressurePct.toFixed(0)}/100</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {assetBudgets.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">资产预算倾斜</div>
+          {assetBudgets.map((budget) => (
+            <div key={budget.key} className="rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.44)] px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-[var(--text)]">{budget.label}</span>
+                <DaaSurfaceStatusPill tone={riskScoreTone(budget.pressurePct)}>
+                  {assetBudgetStanceLabel(budget.stance)}
+                </DaaSurfaceStatusPill>
+              </div>
+              <div className="mt-1 text-xs text-[var(--faint)]">
+                预算系数 {Math.round(budget.budgetScale * 100)}% · 压力 {budget.pressurePct.toFixed(0)}/100
+              </div>
+              {budget.reasons[0] ? (
+                <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{budget.reasons[0]}</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {actionableScopes.length > 0 ? (
         <div className="mt-4 space-y-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">各市场是否适合加仓</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">各市场状态</div>
           {actionableScopes.map((s) => (
             <div key={s.scope} className="rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.48)] px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
@@ -115,7 +188,13 @@ export function MarketContextCard(props: {
                 </DaaSurfaceStatusPill>
               </div>
               <div className="mt-1 flex items-center justify-between gap-2 text-xs text-[var(--faint)]">
-                <span>{marketScopeMetricLabelZh(s.scope)} {Math.round(s.buyScale * 100)}%</span>
+                <span>
+                  {(() => {
+                    const budgetKey = asAssetBudgetKey(s.scope);
+                    const budget = budgetKey ? assetBudgetByScope.get(budgetKey) : null;
+                    return budget ? `资产预算 ${Math.round(budget.budgetScale * 100)}%` : `压力 ${Math.round(s.riskOffScorePct)}/100`;
+                  })()}
+                </span>
                 <span>压力 {Math.round(s.riskOffScorePct)}/100</span>
               </div>
               <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{marketScopeMeaningZh(s.scope)}</div>

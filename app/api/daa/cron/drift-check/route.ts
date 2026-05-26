@@ -117,7 +117,7 @@ async function runDriftCheck() {
       if (hasDrift || hasWatchlistEntryPath) {
         generated = await generateWorkbenchRebalanceCycle({
           triggerSource: "drift",
-          triggerReason: hasDrift ? "偏移量阈值触发" : "观察列表自动建仓检查",
+          triggerReason: hasDrift ? "偏移量阈值触发" : "观察列表入场候选检查",
           manual: false,
         });
       }

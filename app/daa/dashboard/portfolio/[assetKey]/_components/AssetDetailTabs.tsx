@@ -25,7 +25,7 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
       { key: "agent", label: "研究观点", icon: <Bot className="h-3.5 w-3.5" /> },
     ];
     if (row.watchEnabled && row.holdingQty === 0) {
-      items.push({ key: "auto-entry", label: "自动建仓", icon: <Settings2 className="h-3.5 w-3.5" /> });
+      items.push({ key: "auto-entry", label: "入场候选", icon: <Settings2 className="h-3.5 w-3.5" /> });
     }
     return items;
   }, [row.holdingQty, row.watchEnabled]);

@@ -10,7 +10,6 @@ import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchRe
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaTriggerEvent: vi.fn(async () => null),
-  appendAssetPriceHistoryRows: vi.fn(async () => 0),
   createDaaRebalanceCycle: vi.fn(),
   getDaaAccountState: vi.fn(),
   getDaaCycleReport: vi.fn(),

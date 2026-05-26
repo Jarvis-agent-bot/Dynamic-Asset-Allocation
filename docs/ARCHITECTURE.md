@@ -173,7 +173,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 |----|------|
 | `daa_asset_master` | 元数据（symbol / market / currency / asset_class / region） |
 | `daa_positions_v2` | 当前持仓（qty / 平均成本 / 成本基准） |
-| `daa_watchlist_entries` | 观察列表 + 自动建仓规则 + 价格提醒 |
+| `daa_watchlist_entries` | 观察列表 + 入场候选规则 + 价格提醒 |
 | `daa_target_allocations` | 目标权重 |
 | `daa_market_price_snapshots` | 最新市场价 |
 
@@ -218,7 +218,7 @@ daa_agent_strategies    — 从高准确率 run 提取的调查策略模板
 ```
 daa_asset_master           — 资产元数据
 daa_positions_v2           — 当前持仓
-daa_watchlist_entries      — 观察列表 + 自动建仓
+daa_watchlist_entries      — 观察列表 + 入场候选
 daa_target_allocations     — 目标权重
 daa_trade_tickets          — 交易草稿、提交与执行状态
 ```

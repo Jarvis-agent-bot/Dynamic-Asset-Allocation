@@ -33,7 +33,6 @@ vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({
 }));
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
-  appendAssetPriceHistoryRows: vi.fn(async () => 0),
   getDaaSystemConfig: vi.fn(async () => ({
     config: {
       dataSources: {

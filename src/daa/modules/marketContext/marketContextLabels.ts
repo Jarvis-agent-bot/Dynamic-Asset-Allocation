@@ -74,6 +74,7 @@ export function marketScopeMetricLabelZh(scope: string | null | undefined): stri
   if (isActionableMarketScope(scope)) return "加仓环境";
   if (scope === "macro_defensive") return "避险需求";
   if (scope === "macro_global") return "宏观压力";
+  if (scope === "macro_policy") return "政策压力";
   return "风险指数";
 }
 
@@ -83,6 +84,7 @@ export function marketScopeMeaningZh(scope: string | null | undefined): string {
   if (scope === "crypto") return "只说明加密市场现在是否适合加仓；不是具体订单。";
   if (scope === "macro_defensive") return "看是否需要额外提高现金、黄金、短债等防御仓。";
   if (scope === "macro_global") return "看通胀、美元、利率等是否正在压制整体风险资产。";
+  if (scope === "macro_policy") return "看 PPI、降息路径、缩表等政策环境是否正在改变风险预算。";
   return "衡量当前市场环境对交易节奏的影响。";
 }
 
@@ -106,5 +108,6 @@ export function marketScopePrimaryLabelZh(input: {
   const level = marketPressureLevelZh(input.riskOffScorePct);
   if (input.scope === "macro_defensive") return `避险需求${level}`;
   if (input.scope === "macro_global") return `宏观压力${level}`;
+  if (input.scope === "macro_policy") return `政策压力${level}`;
   return `风险${level}`;
 }

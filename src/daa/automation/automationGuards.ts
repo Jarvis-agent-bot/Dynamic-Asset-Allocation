@@ -276,8 +276,8 @@ export function shouldSendAgentBriefingTelegram(config: DaaSystemConfig): boolea
     && config.notification.telegram.dailyReport === true;
 }
 
-type AgentTargetWeightOverrides = {
-  targetWeightOverrides: Record<string, number>;
+type AgentTargetWeightPlan = {
+  targetWeights: Record<string, number>;
   baselineTargetWeights: Record<string, number>;
   acceptedCount: number;
   skippedCount: number;
@@ -285,13 +285,13 @@ type AgentTargetWeightOverrides = {
   summary: string;
 };
 
-export function buildAgentTargetWeightOverrides(input: {
+export function buildAgentTargetWeightPlan(input: {
   overlay: AgentStrategyOverlay | null;
   knownAssetKeys: string[];
   currentTargetWeights?: Record<string, number>;
   maxPositionPct: number;
   minConfidence?: number;
-}): AgentTargetWeightOverrides | null {
+}): AgentTargetWeightPlan | null {
   const plan = input.overlay?.targetAllocationPlan;
   const intents = Array.isArray(plan?.intents) ? plan.intents : [];
   if (intents.length === 0) return null;
@@ -310,7 +310,7 @@ export function buildAgentTargetWeightOverrides(input: {
       Math.max(0, Number(value) || 0),
     ]),
   );
-  const targetWeightOverrides: Record<string, number> = {};
+  const targetWeights: Record<string, number> = {};
   const baselineTargetWeights: Record<string, number> = {};
   const acceptedLabels: string[] = [];
   let skippedCount = 0;
@@ -331,15 +331,15 @@ export function buildAgentTargetWeightOverrides(input: {
     }
 
     const targetPct = Math.min(proposedPct / 100, maxPositionPct > 0 ? maxPositionPct : proposedPct / 100);
-    targetWeightOverrides[canonicalAssetKey] = Number(Math.max(0, targetPct).toFixed(6));
+    targetWeights[canonicalAssetKey] = Number(Math.max(0, targetPct).toFixed(6));
     baselineTargetWeights[canonicalAssetKey] = Number(Math.max(0, currentTargetWeights.get(canonicalAssetKey.toUpperCase()) ?? 0).toFixed(6));
-    acceptedLabels.push(`${symbol || canonicalAssetKey}→${(targetWeightOverrides[canonicalAssetKey] * 100).toFixed(1)}%`);
+    acceptedLabels.push(`${symbol || canonicalAssetKey}→${(targetWeights[canonicalAssetKey] * 100).toFixed(1)}%`);
   }
 
   if (acceptedLabels.length === 0) return null;
   const summary = String(plan?.reasoning || "Agent 目标权重计划").trim() || "Agent 目标权重计划";
   return {
-    targetWeightOverrides,
+    targetWeights,
     baselineTargetWeights,
     acceptedCount: acceptedLabels.length,
     skippedCount,
@@ -348,11 +348,11 @@ export function buildAgentTargetWeightOverrides(input: {
   };
 }
 
-export function applyTargetWeightOverridesToBootstrap(
+export function applyTargetAllocationWeightsToBootstrap(
   bootstrap: WorkbenchBootstrap,
-  targetWeightOverrides: Record<string, number> | null | undefined,
+  targetWeights: Record<string, number> | null | undefined,
 ): WorkbenchBootstrap {
-  const entries = Object.entries(targetWeightOverrides || {})
+  const entries = Object.entries(targetWeights || {})
     .map(([assetKey, value]) => [assetKey.toUpperCase(), Math.max(0, Number(value) || 0)] as const)
     .filter(([, value]) => Number.isFinite(value));
   if (entries.length === 0) return bootstrap;

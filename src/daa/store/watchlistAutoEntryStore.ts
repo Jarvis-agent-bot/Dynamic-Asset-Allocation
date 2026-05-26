@@ -1,5 +1,5 @@
 /**
- * Watchlist Auto-Entry Store — daa_watchlist_entries 自动建仓字段的读写层。
+ * Watchlist Auto-Entry Store — daa_watchlist_entries 入场候选字段的读写层。
  *
  * 与常规 watchlist 元数据（watch_enabled/notes/price_alert）分开管理，
  * 便于上层（信号触发服务）做最小查询。
@@ -48,7 +48,7 @@ function mapRow(row: Record<string, unknown>): WatchlistAutoEntryRow {
   };
 }
 
-/** 列出所有启用自动建仓的 watchlist 资产（由上层按持仓/冷静期再筛选）。 */
+/** 列出所有纳入入场候选的 watchlist 资产（由上层按持仓/冷静期再筛选）。 */
 export async function listActiveWatchlistAutoEntries(): Promise<WatchlistAutoEntryRow[]> {
   await ensureDaaStoreSchemaPg();
   const ownerAccountId = getDaaAccountScopeId();
@@ -64,7 +64,7 @@ export async function listActiveWatchlistAutoEntries(): Promise<WatchlistAutoEnt
   });
 }
 
-/** 获取单条资产的自动建仓配置。 */
+/** 获取单条资产的入场候选配置。 */
 export async function getWatchlistAutoEntry(assetKey: string): Promise<WatchlistAutoEntryRow | null> {
   const key = normalizeText(assetKey).toUpperCase();
   if (!key) return null;
@@ -89,7 +89,7 @@ type WatchlistAutoEntryUpdate = {
   entryCooldownDays?: number;
 };
 
-/** 更新自动建仓配置。要求 watchlist 条目已存在（由 upsertWatchlistEntry 保证）。 */
+/** 更新入场候选配置。要求 watchlist 条目已存在（由 upsertWatchlistEntry 保证）。 */
 export async function updateWatchlistAutoEntry(
   assetKey: string,
   update: WatchlistAutoEntryUpdate,

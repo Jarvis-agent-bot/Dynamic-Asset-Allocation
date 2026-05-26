@@ -16,6 +16,10 @@ describe("system-config-normalization", () => {
       enabled: true,
       weight: 0.45,
     });
+    expect(normalized.dataSources.marketIndicators.indicators.ppiInflation).toEqual({
+      enabled: true,
+      weight: 0.4,
+    });
   });
 
   it("会丢弃 Settings 中已经没有运行时消费路径的数据源冗余字段", () => {

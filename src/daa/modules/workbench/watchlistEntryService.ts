@@ -1,8 +1,8 @@
 /**
- * Watchlist Entry Service — 信号驱动的自动建仓提案生成。
+ * Watchlist Entry Service — 信号驱动的观察列表入场候选提案生成。
  *
  * 流程：
- *   1) 读取启用自动建仓的 watchlist 条目（holdingQty == 0 且过冷静期）
+ *   1) 读取已纳入入场候选的 watchlist 条目（holdingQty == 0 且过冷静期）
  *   2) 并行计算技术 + 估值信号，按每资产规则或全局默认规则判定达标
  *   3) 根据 entryTargetWeightPct 与可用现金上限生成 BUY 提案
  *   4) 按融合评分排序，截取 maxPerCycle 条
@@ -58,7 +58,7 @@ function fuseScore(tech: DaaTechnicalSignal | null, val: DaaValuationSignal | nu
   if (tech) parts.push(tech.scorePct);
   if (val) parts.push(val.scorePct);
   if (parts.length === 0) return null;
-  // 等权平均（技术 + 估值），新闻信号在自动建仓场景留待未来
+  // 等权平均（技术 + 估值），新闻信号在入场候选场景留待未来
   return parts.reduce((a, b) => a + b, 0) / parts.length;
 }
 
@@ -123,7 +123,7 @@ export async function generateWatchlistEntryProposals(input: {
     const config = candidateConfigMap.get(assetKey) || null;
     const targetWeightPct = resolveEffectiveTargetWeightPct({ asset, config });
     if (!asset.autoEntryEnabled) {
-      evaluations.push({ assetKey: asset.assetKey, symbol: asset.symbol, eligible: false, technicalScore: null, valuationScore: null, fusionScore: null, rejectReason: "未启用自动建仓" });
+      evaluations.push({ assetKey: asset.assetKey, symbol: asset.symbol, eligible: false, technicalScore: null, valuationScore: null, fusionScore: null, rejectReason: "未纳入入场候选" });
       continue;
     }
     const cooldownDays = config?.entryCooldownDays ?? asset.entryCooldownDays;
@@ -243,7 +243,7 @@ export async function generateWatchlistEntryProposals(input: {
     if (!(suggestedQty > 0)) continue;
 
     const reason = [
-      "观察列表自动建仓",
+      "观察列表入场候选",
       tech ? `tech=${tech.scorePct.toFixed(0)}` : "tech=-",
       val ? `val=${val.scorePct.toFixed(0)}` : "val=-",
       fusion != null ? `fusion=${fusion.toFixed(0)}` : "fusion=-",

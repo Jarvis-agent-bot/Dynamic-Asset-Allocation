@@ -119,7 +119,7 @@ export function WatchlistAutoEntryPanel(props: {
     return (
       <div className="flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4 text-sm text-[var(--muted)]">
         <Loader2 className="h-4 w-4 animate-spin" />
-        加载自动建仓规则...
+        加载入场候选规则...
       </div>
     );
   }
@@ -127,7 +127,7 @@ export function WatchlistAutoEntryPanel(props: {
   if (!row) {
     return (
       <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4 text-sm text-[var(--muted)]">
-        该资产不在观察列表中，无法配置自动建仓。
+        该资产不在观察列表中，无法配置入场候选规则。
       </div>
     );
   }
@@ -144,7 +144,7 @@ export function WatchlistAutoEntryPanel(props: {
     : "未设置";
   const livePrice = assetSnapshot.lastPrice > 0 ? assetSnapshot.lastPrice : assetSnapshot.holdingPrice;
   const firstBlocker = !row.autoEntryEnabled
-    ? "未启用本标的自动建仓"
+    ? "未纳入本标的入场候选"
     : !(effectiveTargetWeightPct != null && effectiveTargetWeightPct > 0)
       ? "未设置有效目标权重"
       : !(livePrice > 0) || assetSnapshot.fxMissing
@@ -157,10 +157,10 @@ export function WatchlistAutoEntryPanel(props: {
     <div className="space-y-3 rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-[var(--primary)]" />
-        <div className="text-sm font-semibold text-[var(--text)]">自动建仓规则</div>
+        <div className="text-sm font-semibold text-[var(--text)]">入场候选规则</div>
       </div>
       <p className="text-xs leading-relaxed text-[var(--muted)]">
-        技术 + 估值信号同时达标时，下一次策略 cron 会为此标的生成 BUY 提案。需在"设置 → Policy Engine"开启全局开关。
+        技术 + 估值信号同时达标时，下一次策略 cron 会为此标的生成 BUY 提案。需在设置里的入场候选过滤器开启全局开关。
       </p>
 
       <div className="grid gap-2 rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] p-3 text-xs text-[var(--muted)]">
@@ -190,7 +190,7 @@ export function WatchlistAutoEntryPanel(props: {
           onChange={(e) => setEnabled(e.target.checked)}
           className="h-4 w-4 rounded border-[var(--border)] bg-transparent"
         />
-        启用本标的自动建仓
+        纳入本标的入场候选
       </label>
 
       <div className="grid grid-cols-2 gap-3">

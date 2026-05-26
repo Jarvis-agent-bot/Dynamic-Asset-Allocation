@@ -8,7 +8,14 @@ import {
   MARKET_SCOPE_LABEL_ZH_,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type {
+  DaaAssetBudgetOverlay,
+  DaaAssetBudgetOverlayKey,
+  DaaAssetBudgetStance,
+  DaaMacroPolicyContext,
+  DaaMacroPolicyDimension,
+  DaaMacroPolicyDimensionKey,
   DaaMarketContext,
+  DaaMarketIndicatorKey,
   DaaMarketIndicatorScope,
   DaaMarketIndicatorSnapshot,
   DaaMarketRegime,
@@ -60,6 +67,274 @@ export function deriveMarketRegime(
   if (riskOffScorePct >= riskOff) return "risk_off";
   if (riskOffScorePct < riskOn) return "risk_on";
   return "transitional";
+}
+
+const MACRO_POLICY_DIMENSION_META_: Record<DaaMacroPolicyDimensionKey, {
+  label: string;
+  indicators: DaaMarketIndicatorKey[];
+}> = {
+  inflation: {
+    label: "通胀压力",
+    indicators: ["ppi_inflation", "inflation_expectation"],
+  },
+  rates: {
+    label: "利率路径",
+    indicators: ["fed_policy_rate", "yield_curve_spread"],
+  },
+  liquidity: {
+    label: "流动性 / 缩表",
+    indicators: ["fed_balance_sheet", "usd_strength", "credit_spread"],
+  },
+};
+
+function buildMacroPolicyDimension(input: {
+  key: DaaMacroPolicyDimensionKey;
+  indicators: DaaMarketIndicatorSnapshot[];
+}): DaaMacroPolicyDimension | null {
+  const meta = MACRO_POLICY_DIMENSION_META_[input.key];
+  const rows = meta.indicators
+    .map((key) => input.indicators.find((item) => item.key === key) || null)
+    .filter((item): item is DaaMarketIndicatorSnapshot => Boolean(item));
+  if (rows.length <= 0) return null;
+
+  const weightSum = rows.reduce((sum, item) => sum + Math.max(1, item.confidencePct), 0) || 1;
+  const pressurePct = rows.reduce(
+    (sum, item) => sum + item.riskOffScorePct * (Math.max(1, item.confidencePct) / weightSum),
+    0,
+  );
+  const confidencePct = rows.reduce((sum, item) => sum + item.confidencePct, 0) / rows.length;
+  const rankedRows = [...rows].sort((a, b) => {
+    const scoreA = Math.abs(a.riskOffScorePct - 50) * Math.max(1, a.confidencePct);
+    const scoreB = Math.abs(b.riskOffScorePct - 50) * Math.max(1, b.confidencePct);
+    return scoreB - scoreA;
+  });
+
+  return {
+    key: input.key,
+    label: meta.label,
+    pressurePct: round(pressurePct),
+    confidencePct: round(confidencePct),
+    regime: deriveMarketRegime(pressurePct),
+    reasons: rankedRows.map((item) => item.reason).slice(0, 2),
+    sourceIndicators: rows.map((item) => item.key),
+  };
+}
+
+function macroPolicyLabel(regime: DaaMarketRegime): string {
+  if (regime === "risk_on") return "政策环境偏宽松";
+  if (regime === "risk_off") return "政策压力偏高";
+  return "政策环境中性";
+}
+
+function buildMacroPolicyContext(indicators: DaaMarketIndicatorSnapshot[]): DaaMacroPolicyContext | null {
+  const dimensions = (Object.keys(MACRO_POLICY_DIMENSION_META_) as DaaMacroPolicyDimensionKey[])
+    .map((key) => buildMacroPolicyDimension({ key, indicators }))
+    .filter((item): item is DaaMacroPolicyDimension => Boolean(item));
+  if (dimensions.length <= 0) return null;
+
+  const weightSum = dimensions.reduce((sum, item) => sum + Math.max(1, item.confidencePct), 0) || 1;
+  const pressurePct = dimensions.reduce(
+    (sum, item) => sum + item.pressurePct * (Math.max(1, item.confidencePct) / weightSum),
+    0,
+  );
+  const confidencePct = dimensions.reduce((sum, item) => sum + item.confidencePct, 0) / dimensions.length;
+  const regime = deriveMarketRegime(pressurePct);
+  const generatedAt = indicators
+    .filter((item) => item.scope === "macro_policy" || dimensions.some((dim) => dim.sourceIndicators.includes(item.key)))
+    .map((item) => Date.parse(item.generatedAt))
+    .filter((item) => Number.isFinite(item))
+    .sort((a, b) => b - a)[0];
+
+  const reasons = [...dimensions]
+    .sort((a, b) => {
+      const scoreA = Math.abs(a.pressurePct - 50) * Math.max(1, a.confidencePct);
+      const scoreB = Math.abs(b.pressurePct - 50) * Math.max(1, b.confidencePct);
+      return scoreB - scoreA;
+    })
+    .flatMap((item) => item.reasons.map((reason) => `${item.label}：${reason}`))
+    .slice(0, 3);
+
+  return {
+    generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : new Date().toISOString(),
+    regime,
+    pressurePct: round(pressurePct),
+    confidencePct: round(confidencePct),
+    label: macroPolicyLabel(regime),
+    reasons,
+    dimensions,
+  };
+}
+
+function budgetScaleToStance(scale: number): DaaAssetBudgetStance {
+  if (scale >= 1.05) return "increase";
+  if (scale <= 0.85) return "reduce";
+  return "neutral";
+}
+
+function pressureFromScale(scale: number): number {
+  return clamp(50 + (1 - scale) * 100, 0, 100);
+}
+
+function getScopeContext(scopes: DaaMarketScopeContext[], scope: DaaMarketIndicatorScope): DaaMarketScopeContext | null {
+  return scopes.find((item) => item.scope === scope) || null;
+}
+
+function getMacroDimension(
+  macroPolicy: DaaMacroPolicyContext | null,
+  key: DaaMacroPolicyDimensionKey,
+): DaaMacroPolicyDimension | null {
+  return macroPolicy?.dimensions.find((item) => item.key === key) || null;
+}
+
+function buildAssetBudget(input: {
+  key: DaaAssetBudgetOverlayKey;
+  label: string;
+  budgetScale: number;
+  confidencePct: number;
+  reasons: string[];
+  sourceScopes?: DaaMarketIndicatorScope[];
+  sourceMacroDimensions?: DaaMacroPolicyDimensionKey[];
+}): DaaAssetBudgetOverlay {
+  const budgetScale = round(clamp(input.budgetScale, 0.25, 1.25));
+  return {
+    key: input.key,
+    label: input.label,
+    stance: budgetScaleToStance(budgetScale),
+    budgetScale,
+    pressurePct: round(pressureFromScale(budgetScale)),
+    confidencePct: round(input.confidencePct),
+    reasons: input.reasons.filter(Boolean).slice(0, 3),
+    sourceScopes: input.sourceScopes || [],
+    sourceMacroDimensions: input.sourceMacroDimensions || [],
+  };
+}
+
+function macroReliefScale(pressurePct: number): number {
+  if (pressurePct >= 80) return 0.65;
+  if (pressurePct >= 65) return 0.78;
+  if (pressurePct >= 50) return 0.9;
+  if (pressurePct <= 30) return 1.08;
+  return 1;
+}
+
+function buildAssetBudgetOverlays(input: {
+  scopes: DaaMarketScopeContext[];
+  macroPolicy: DaaMacroPolicyContext | null;
+}): DaaAssetBudgetOverlay[] {
+  const macro = input.macroPolicy;
+  const inflation = getMacroDimension(macro, "inflation");
+  const rates = getMacroDimension(macro, "rates");
+  const liquidity = getMacroDimension(macro, "liquidity");
+  const policyPressure = macro?.pressurePct ?? 50;
+  const policyScale = macroReliefScale(policyPressure);
+
+  const usScope = getScopeContext(input.scopes, "us_equity");
+  const hkScope = getScopeContext(input.scopes, "hk_cn_equity");
+  const cryptoScope = getScopeContext(input.scopes, "crypto");
+
+  const overlays: DaaAssetBudgetOverlay[] = [];
+
+  if (usScope) {
+    overlays.push(buildAssetBudget({
+      key: "us_equity",
+      label: "美股风险资产",
+      budgetScale: usScope.buyScale * policyScale,
+      confidencePct: (usScope.confidencePct + (macro?.confidencePct ?? usScope.confidencePct)) / 2,
+      reasons: [
+        `美股环境预算基准 ${Math.round(usScope.buyScale * 100)}%`,
+        ...(macro?.reasons.slice(0, 1) || []),
+      ],
+      sourceScopes: ["us_equity"],
+      sourceMacroDimensions: ["inflation", "rates", "liquidity"],
+    }));
+  }
+
+  if (hkScope) {
+    const liquidityScale = liquidity ? macroReliefScale(liquidity.pressurePct) : policyScale;
+    overlays.push(buildAssetBudget({
+      key: "hk_cn_equity",
+      label: "港股 / 中概风险资产",
+      budgetScale: hkScope.buyScale * Math.min(policyScale, liquidityScale),
+      confidencePct: (hkScope.confidencePct + (macro?.confidencePct ?? hkScope.confidencePct)) / 2,
+      reasons: [
+        `港股 / 中概环境预算基准 ${Math.round(hkScope.buyScale * 100)}%`,
+        liquidity?.reasons[0] || macro?.reasons[0] || "",
+      ],
+      sourceScopes: ["hk_cn_equity"],
+      sourceMacroDimensions: ["liquidity", "rates"],
+    }));
+  }
+
+  if (cryptoScope) {
+    const highBetaPressure = Math.max(policyPressure, liquidity?.pressurePct ?? 50, rates?.pressurePct ?? 50);
+    overlays.push(buildAssetBudget({
+      key: "crypto",
+      label: "加密高波动资产",
+      budgetScale: cryptoScope.highRiskBuyScale * macroReliefScale(highBetaPressure),
+      confidencePct: (cryptoScope.confidencePct + (macro?.confidencePct ?? cryptoScope.confidencePct)) / 2,
+      reasons: [
+        `加密市场高波动预算基准 ${Math.round(cryptoScope.highRiskBuyScale * 100)}%`,
+        liquidity?.reasons[0] || rates?.reasons[0] || "",
+      ],
+      sourceScopes: ["crypto"],
+      sourceMacroDimensions: ["liquidity", "rates"],
+    }));
+  }
+
+  if (macro) {
+    const durationPressure = Math.max(inflation?.pressurePct ?? 50, rates?.pressurePct ?? 50);
+    const durationScale = durationPressure >= 65
+      ? macroReliefScale(durationPressure)
+      : durationPressure <= 40
+        ? 1.12
+        : 1;
+    overlays.push(buildAssetBudget({
+      key: "duration_bonds",
+      label: "中长久期债券",
+      budgetScale: durationScale,
+      confidencePct: macro.confidencePct,
+      reasons: [
+        rates?.reasons[0] || "",
+        inflation?.reasons[0] || "",
+      ],
+      sourceMacroDimensions: ["rates", "inflation"],
+    }));
+
+    const cashScale = Math.max(
+      rates && rates.pressurePct >= 60 ? 1.12 : 1,
+      policyPressure >= 65 ? 1.08 : 1,
+    );
+    overlays.push(buildAssetBudget({
+      key: "short_bonds_cash",
+      label: "现金 / 短债",
+      budgetScale: cashScale,
+      confidencePct: macro.confidencePct,
+      reasons: [
+        rates?.reasons[0] || "",
+        policyPressure >= 65 ? "政策压力偏高时，现金和短债承担组合缓冲角色" : "",
+      ],
+      sourceMacroDimensions: ["rates", "liquidity"],
+    }));
+
+    const commodityScale = (inflation?.pressurePct ?? 50) >= 65 || macro.regime === "risk_off"
+      ? 1.1
+      : (inflation?.pressurePct ?? 50) <= 35 && macro.regime === "risk_on"
+        ? 0.95
+        : 1;
+    overlays.push(buildAssetBudget({
+      key: "gold_commodities",
+      label: "黄金 / 大宗商品",
+      budgetScale: commodityScale,
+      confidencePct: macro.confidencePct,
+      reasons: [
+        inflation?.reasons[0] || "",
+        macro.regime === "risk_off" ? "政策压力偏高时，黄金和商品承担通胀/尾部风险对冲角色" : "",
+      ],
+      sourceMacroDimensions: ["inflation", "liquidity"],
+    }));
+  }
+
+  return overlays;
 }
 
 function buildScopedContext(input: {
@@ -162,6 +437,7 @@ export function buildMarketContextFromIndicators(input: {
     .map((key) => input.indicators.find((item) => item.key === key) || null)
     .filter(Boolean) as DaaMarketIndicatorSnapshot[];
 
+  const macroPolicy = buildMacroPolicyContext(enabledIndicators);
   const result: DaaMarketContext = {
     generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : new Date().toISOString(),
     regime: topScope.regime,
@@ -173,6 +449,8 @@ export function buildMarketContextFromIndicators(input: {
     indicators: enabledIndicators,
     scopes,
     macroCycle: classifyMacroCycleWithFred(input.fredMacro ?? null, enabledIndicators) ?? null,
+    macroPolicy,
+    assetBudgets: buildAssetBudgetOverlays({ scopes, macroPolicy }),
   };
 
   return result;

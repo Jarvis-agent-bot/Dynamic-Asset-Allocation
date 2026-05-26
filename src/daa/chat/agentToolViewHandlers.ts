@@ -54,12 +54,17 @@ function formatMarketStatus(readModel: DaaAgentToolContext["readModel"]): string
   const context = readModel.bootstrap.marketContext;
   const scopes = (context?.scopes || [])
     .slice(0, 4)
-    .map((item) => `${item.label}: ${marketRegimeActionLabelZh(item.regime)}（买入预算系数 ${Math.round(item.buyScale * 100)}%）`)
+    .map((item) => `${item.label}: ${marketRegimeActionLabelZh(item.regime)}（压力 ${Math.round(item.riskOffScorePct)}/100）`)
+    .join("\n");
+  const budgets = (context?.assetBudgets || [])
+    .slice(0, 6)
+    .map((item) => `${item.label}: 预算系数 ${Math.round(item.budgetScale * 100)}%，${item.reasons[0] || "暂无具体原因"}`)
     .join("\n");
   const dataHealth = readModel.bootstrap.marketDataHealth;
   return [
     "当前市场状态：",
-    scopes || "当前没有市场状态层快照。",
+    budgets ? `资产预算：\n${budgets}` : "资产预算：暂无。",
+    scopes ? `市场压力：\n${scopes}` : "市场压力：暂无快照。",
     dataHealth
       ? `行情健康：fresh ${dataHealth.freshCount} / stale ${dataHealth.staleCount} / missing ${dataHealth.missingCount}，失败率 ${dataHealth.recentJobFailureRatePct.toFixed(1)}%。`
       : "行情健康：暂无快照。",
@@ -176,7 +181,7 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
       if (b.autopilotCoverage) {
         const c = b.autopilotCoverage;
         parts.push("\n🧭 自动驾驶覆盖:");
-        parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 已设目标 ${c.watchlistTargetedAssets} 个 | 可自动建仓 ${c.autoEntryReadyAssets} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
+        parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 已设目标 ${c.watchlistTargetedAssets} 个 | 入场候选就绪 ${c.autoEntryReadyAssets} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
       }
       if (b.mindChangeConditions.length > 0) {
         parts.push("\n🔄 改观条件:");

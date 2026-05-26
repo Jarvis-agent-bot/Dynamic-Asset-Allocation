@@ -136,16 +136,23 @@ export function buildContextDigest(readModel: Awaited<ReturnType<typeof buildWor
   const topSignals = (readModel.signals || []).slice(0, 4).map((item) => item.text).join("；");
   const marketScopes = (readModel.bootstrap.marketContext?.scopes || [])
     .slice(0, 5)
-    .map((item) => `${item.label}:${marketRegimeActionLabelZh(item.regime)}(买入预算系数=${item.buyScale})`)
+    .map((item) => `${item.label}:${marketRegimeActionLabelZh(item.regime)}(压力=${item.riskOffScorePct.toFixed(0)}/100)`)
     .join("；");
   // 展示 top 8 市场指标的具体数值
   const marketIndicators = (readModel.bootstrap.marketContext?.indicators || [])
-    .slice(0, 8)
+    .slice(0, 12)
     .map((item) => {
       const val = item.rawValue != null ? `${item.rawValue}${item.unit || ""}` : "N/A";
       const pct = item.percentile252 != null ? `${item.percentile252.toFixed(0)}%位` : "";
       return `${item.label} ${val}${pct ? ` (${pct})` : ""}`;
     })
+    .join("；");
+  const macroPolicy = readModel.bootstrap.marketContext?.macroPolicy
+    ? `${readModel.bootstrap.marketContext.macroPolicy.label} / 压力 ${readModel.bootstrap.marketContext.macroPolicy.pressurePct.toFixed(0)}/100 / ${readModel.bootstrap.marketContext.macroPolicy.reasons.slice(0, 2).join("；") || "暂无具体原因"}`
+    : "暂无";
+  const assetBudgets = (readModel.bootstrap.marketContext?.assetBudgets || [])
+    .slice(0, 6)
+    .map((item) => `${item.label}:${Math.round(item.budgetScale * 100)}%/${item.stance}`)
     .join("；");
   const latestCycle = readModel.bootstrap.latestCycle;
   return [
@@ -154,7 +161,9 @@ export function buildContextDigest(readModel: Awaited<ReturnType<typeof buildWor
     `持仓: ${topHoldings || "暂无"}`,
     `可用现金: ${formatMoney(readModel.allocationSummary.investableCash, readModel.bootstrap.baseCurrency)}`,
     `市场态势: ${readModel.bootstrap.marketContext?.regime || "未知"}`,
-    `市场区域: ${marketScopes || "暂无"}`,
+    `市场区域压力: ${marketScopes || "暂无"}`,
+    `宏观政策: ${macroPolicy}`,
+    `资产预算: ${assetBudgets || "暂无"}`,
     `市场指标: ${marketIndicators || "暂无"}`,
     `数据健康: ${readModel.bootstrap.marketDataHealth?.message || "未知"}`,
     `最新周期: ${latestCycle ? `${latestCycle.cycleId.slice(0, 8)} / ${latestCycle.status} / ${latestCycle.triggerSource}` : "暂无"}`,

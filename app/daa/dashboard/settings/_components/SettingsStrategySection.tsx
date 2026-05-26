@@ -458,7 +458,7 @@ export function SettingsStrategySection(props: {
         </div>
       </SectionCard>
 
-      <SectionCard title="观察列表自动建仓">
+      <SectionCard title="观察列表入场候选过滤器">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
             checked={config.watchlistEntry?.enabled ?? false}
@@ -476,7 +476,7 @@ export function SettingsStrategySection(props: {
               )
             }
           >
-            启用观察列表自动建仓
+            启用观察列表入场候选过滤
           </CheckboxRow>
 
           <CheckboxRow
@@ -521,7 +521,7 @@ export function SettingsStrategySection(props: {
               })
             }
           >
-            AI 写入权重后自动打开单资产 auto-entry
+            AI 写入权重后纳入单资产入场候选
           </CheckboxRow>
 
           <div>
@@ -554,7 +554,7 @@ export function SettingsStrategySection(props: {
           </div>
 
           <div>
-            <FieldLabel>单次 cron 最多触发 (个)</FieldLabel>
+            <FieldLabel>单次最多生成候选提案 (个)</FieldLabel>
             <NumberInput
               value={config.watchlistEntry?.maxPerCycle ?? 2}
               min={1}
@@ -575,12 +575,12 @@ export function SettingsStrategySection(props: {
               }
             />
             <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
-              当前语义：`Watchlist` 只是候选池。系统只会自动买入已显式开启 auto-entry、具备有效目标权重、价格 / FX 正常且不在冷静期内的观察标的。
+              当前语义：Watchlist 只是候选池。系统只会为已纳入入场候选、具备有效目标权重、价格 / FX 正常且不在冷静期内的观察标的生成买入提案。
             </div>
           </div>
 
           <div>
-            <FieldLabel>单次建仓占可用现金上限 (%)</FieldLabel>
+            <FieldLabel>单次入场占可用现金上限 (%)</FieldLabel>
             <NumberInput
               value={Math.round(((config.watchlistEntry?.notionalCashCapPct ?? 0.3) * 100))}
               min={5}

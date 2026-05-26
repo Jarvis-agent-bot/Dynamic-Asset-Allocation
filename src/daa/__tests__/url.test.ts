@@ -43,10 +43,10 @@ describe("daa/url", () => {
       expect(normalizeDaaReturnTo("/daa/dashboard/settings?section=risk")).toBe("/daa/dashboard/settings?section=risk");
     });
 
-    it("maps legacy workbench deep links to current dashboard routes", () => {
-      expect(normalizeDaaReturnTo("/daa/dashboard/workbench")).toBe("/daa/dashboard/portfolio");
-      expect(normalizeDaaReturnTo("/daa/dashboard/workbench?tab=watchlist")).toBe("/daa/dashboard/portfolio?tab=watchlist");
-      expect(normalizeDaaReturnTo("/daa/dashboard/workbench?tab=rebalance")).toBe("/daa/dashboard/rebalance");
+    it("rejects retired dashboard paths instead of redirecting to stale surfaces", () => {
+      expect(normalizeDaaReturnTo("/daa/dashboard/unknown/deep")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnTo("/daa/dashboard/unknown?tab=watchlist")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnTo("/daa/dashboard/unknown")).toBe("/daa/dashboard");
     });
   });
 });

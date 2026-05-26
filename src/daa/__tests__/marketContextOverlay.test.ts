@@ -13,12 +13,26 @@ function defaultScopeForKey(key: DaaMarketIndicatorKey): DaaMarketIndicatorSnaps
   if (key === "vix" || key === "qqq_spy_ratio") return "us_equity";
   if (key === "fxi_volatility" || key === "kweb_fxi_ratio") return "hk_cn_equity";
   if (key === "btc_eth_ratio" || key === "btc_volatility") return "crypto";
+  if (key === "ppi_inflation" || key === "fed_policy_rate" || key === "fed_balance_sheet") return "macro_policy";
+  if (key === "usd_strength" || key === "inflation_expectation") return "macro_global";
   return "macro_defensive";
 }
 
 function defaultCategoryForKey(key: DaaMarketIndicatorKey): DaaMarketIndicatorSnapshot["category"] {
   if (key === "qqq_spy_ratio" || key === "kweb_fxi_ratio" || key === "btc_eth_ratio" || key === "gold_silver_ratio") {
     return "relative_value";
+  }
+  if (
+    key === "yield_curve_spread"
+    || key === "usd_strength"
+    || key === "credit_spread"
+    || key === "inflation_expectation"
+    || key === "market_breadth"
+    || key === "ppi_inflation"
+    || key === "fed_policy_rate"
+    || key === "fed_balance_sheet"
+  ) {
+    return "macro";
   }
   return "volatility";
 }
@@ -27,6 +41,8 @@ function defaultUnitForKey(key: DaaMarketIndicatorKey): string | undefined {
   if (key === "vix") return "%";
   if (key === "fxi_volatility" || key === "btc_volatility") return "%";
   if (key === "qqq_spy_ratio" || key === "kweb_fxi_ratio" || key === "btc_eth_ratio" || key === "gold_silver_ratio") return "x";
+  if (key === "ppi_inflation" || key === "fed_policy_rate") return "%";
+  if (key === "fed_balance_sheet") return "$T";
   return undefined;
 }
 
@@ -107,6 +123,57 @@ describe("market-context-overlay-v1", () => {
     expect(resolveMarketScopeForAsset({ symbol: "600519.SS", market: "CN" })).toBe("hk_cn_equity");
     expect(resolveMarketScopeForAsset({ symbol: "0700.HK", market: "HK" })).toBe("hk_cn_equity");
     expect(resolveMarketScopeForAsset({ symbol: "BTC-USD", market: "CRYPTO" })).toBe("crypto");
+  });
+
+  it("会把 PPI、政策利率和缩表汇总成独立宏观政策上下文，但不覆盖可交易市场主环境", () => {
+    const config = structuredClone(DEFAULT_SYSTEM_CONFIG_.dataSources.marketIndicators);
+    for (const key of Object.keys(config.indicators) as Array<keyof typeof config.indicators>) {
+      config.indicators[key].enabled = false;
+    }
+    config.indicators.vix = { enabled: true, weight: 1 };
+    config.indicators.ppiInflation = { enabled: true, weight: 1 };
+    config.indicators.fedPolicyRate = { enabled: true, weight: 1 };
+    config.indicators.fedBalanceSheet = { enabled: true, weight: 1 };
+
+    const context = buildMarketContextFromIndicators({
+      config,
+      indicators: [
+        makeIndicator("vix", {
+          scope: "us_equity",
+          stance: "risk_on",
+          riskOffScorePct: 20,
+          confidencePct: 90,
+          reason: "VIX 低位",
+        }),
+        makeIndicator("ppi_inflation", {
+          stance: "risk_off",
+          riskOffScorePct: 80,
+          confidencePct: 85,
+          reason: "PPI 偏高",
+        }),
+        makeIndicator("fed_policy_rate", {
+          stance: "risk_off",
+          riskOffScorePct: 75,
+          confidencePct: 90,
+          reason: "利率仍高",
+        }),
+        makeIndicator("fed_balance_sheet", {
+          stance: "risk_off",
+          riskOffScorePct: 70,
+          confidencePct: 80,
+          reason: "缩表持续",
+        }),
+      ],
+    });
+
+    expect(context?.regime).toBe("risk_on");
+    expect(context?.macroPolicy?.regime).toBe("risk_off");
+    expect(context?.macroPolicy?.dimensions.map((item) => item.key)).toEqual(["inflation", "rates", "liquidity"]);
+    expect(context?.macroPolicy?.reasons.join(" / ")).toContain("PPI 偏高");
+    expect(context?.assetBudgets?.find((item) => item.key === "us_equity")?.stance).toBe("reduce");
+    expect(context?.assetBudgets?.find((item) => item.key === "duration_bonds")?.stance).toBe("reduce");
+    expect(context?.assetBudgets?.find((item) => item.key === "short_bonds_cash")?.stance).toBe("increase");
+    expect(context?.scopes.map((item) => item.scope)).toEqual(["us_equity", "macro_policy"]);
   });
 
   it("会按阈值判断环境并以更保守的一侧为准", () => {

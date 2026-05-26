@@ -134,7 +134,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       const avgRiskOff = riskOffScores.length > 0 ? riskOffScores.reduce((a, b) => a + b, 0) / riskOffScores.length : 50;
       market.regime = avgRiskOff > 65 ? "risk_off" : avgRiskOff < 40 ? "risk_on" : "transitional";
       market.indicators = Object.fromEntries(
-        snapshots.slice(0, 10).map(s => [s.key, {
+        snapshots.map(s => [s.key, {
           value: s.rawValue,
           percentile: s.percentile252 ?? 50,
           stance: s.stance,

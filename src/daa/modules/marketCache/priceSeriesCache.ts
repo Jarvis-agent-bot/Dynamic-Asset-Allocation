@@ -3,7 +3,7 @@
  *
  * 统一的行情序列入口，优先读取真实 OHLCV candle cache。
  * - `daa_market_candles_v1` 是新的 K 线/技术指标/回测底座，保存 Yahoo 返回的 open/high/low/close/volume/adjClose。
- * - `daa_market_price_history_v1` 和 legacy `daa_price_history` 只作为 close-only 兼容 fallback，不再用来伪造蜡烛线。
+ * - `daa_market_price_history_v1` 只作为 close-only fallback，不再用来伪造蜡烛线。
  */
 
 import { daaPgPool } from "@/src/daa/pg/daaPg";
@@ -35,7 +35,7 @@ type PriceSeriesCacheResult = {
   source: "db" | "yahoo" | "mixed";
   interval?: PriceSeriesInterval;
   priceMode?: "close" | "adjclose";
-  upstream?: "daa_market_candles_v1" | "legacy_close_history" | "yahoo_provider" | "mixed";
+  upstream?: "daa_market_candles_v1" | "close_price_history" | "yahoo_provider" | "mixed";
   rowsCovered?: number;
   rowsWritten?: number;
   error?: string;
@@ -106,13 +106,13 @@ export async function fetchPriceSeriesWithCache(
 
   if (!requireOhlcv) {
     try {
-      const legacyData = await queryLegacyCloseHistory(normalizedUpper, start, marketHint);
-      if (legacyData.length > 0) {
-        dbData = mergeByDate(legacyData, dbData);
-        dbUpstream = dbData.some(hasCompleteOhlc) ? "mixed" : "legacy_close_history";
+      const closeHistory = await queryClosePriceHistory(normalizedUpper, start, marketHint);
+      if (closeHistory.length > 0) {
+        dbData = mergeByDate(closeHistory, dbData);
+        dbUpstream = dbData.some(hasCompleteOhlc) ? "mixed" : "close_price_history";
       }
     } catch (e) {
-      logSwallowed("priceSeriesCache.legacyDbRead", e);
+      logSwallowed("priceSeriesCache.closePriceHistoryRead", e);
     }
   }
 
@@ -345,51 +345,25 @@ async function queryCandleHistory(
   return rows;
 }
 
-async function queryLegacyCloseHistory(symbolUpper: string, start: string, market?: string): Promise<CachedPricePoint[]> {
+async function queryClosePriceHistory(symbolUpper: string, start: string, market?: string): Promise<CachedPricePoint[]> {
   const pool = daaPgPool();
   const params: unknown[] = [symbolUpper, start];
   const marketFilter = market ? ` AND market = $${params.push(market)}` : "";
-  const marketAssetKey = market ? `${market}::${symbolUpper}` : "";
-  const legacyParams: unknown[] = [symbolUpper, start, marketAssetKey];
+  const marketHistory = await pool.query(
+    `SELECT DISTINCT ON (as_of_ts::date)
+       as_of_ts::date::text AS date, price
+     FROM daa_market_price_history_v1
+     WHERE UPPER(symbol) = $1 AND as_of_ts >= $2::date${marketFilter}
+     ORDER BY as_of_ts::date, as_of_ts DESC`,
+    params,
+  );
 
-  const [marketHistory, legacyHistory] = await Promise.all([
-    pool.query(
-      `SELECT DISTINCT ON (as_of_ts::date)
-         as_of_ts::date::text AS date, price
-       FROM daa_market_price_history_v1
-       WHERE UPPER(symbol) = $1 AND as_of_ts >= $2::date${marketFilter}
-       ORDER BY as_of_ts::date, as_of_ts DESC`,
-      params,
-    ),
-    pool.query(
-      `SELECT DISTINCT ON (ts::date)
-         ts::date::text AS date,
-         price,
-         open_price,
-         high_price,
-         low_price,
-         volume
-       FROM daa_price_history
-       WHERE UPPER(symbol) IN ($1, $3) AND ts >= $2::date
-       ORDER BY ts::date, ts DESC`,
-      legacyParams,
-    ),
-  ]);
-
-  const points = [
-    ...marketHistory.rows.map((r: Record<string, unknown>) => ({
+  const points = marketHistory.rows
+    .map((r: Record<string, unknown>) => ({
       date: String(r.date).slice(0, 10),
       close: Number(r.price),
-    })),
-    ...legacyHistory.rows.map((r: Record<string, unknown>) => ({
-      date: String(r.date).slice(0, 10),
-      close: Number(r.price),
-      open: maybePositive(r.open_price),
-      high: maybePositive(r.high_price),
-      low: maybePositive(r.low_price),
-      volume: maybeVolume(r.volume),
-    })),
-  ].filter((p) => Number.isFinite(p.close) && p.close > 0);
+    }))
+    .filter((p) => Number.isFinite(p.close) && p.close > 0);
 
   return mergeByDate([], points);
 }

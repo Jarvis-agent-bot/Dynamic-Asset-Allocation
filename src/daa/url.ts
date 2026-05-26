@@ -2,6 +2,18 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 const DUMMY_ORIGIN_ = "https://daa.local";
 const DEFAULT_DASHBOARD_RETURN_TO_ = "/daa/dashboard";
+const DASHBOARD_ROUTE_PREFIXES_ = [
+  "/daa/dashboard/portfolio",
+  "/daa/dashboard/rebalance",
+  "/daa/dashboard/settings",
+  "/daa/dashboard/strategy-lab",
+  "/daa/dashboard/today",
+  "/daa/dashboard/trades",
+] as const;
+
+function isAllowedDashboardPath(pathname: string): boolean {
+  return DASHBOARD_ROUTE_PREFIXES_.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 /**
  * Normalize a potentially-untrusted returnTo into a safe, canonical DAA dashboard path.
@@ -36,18 +48,8 @@ export function normalizeDaaReturnTo(raw: unknown): string {
       return `/daa/dashboard${u.hash || ""}`;
     }
 
-    // 旧 workbench 已不是实际页面，统一落到当前真实路由。
-    if (u.pathname === "/daa/dashboard/workbench" || u.pathname.startsWith("/daa/dashboard/workbench/")) {
-      const tab = String(u.searchParams.get("tab") || "").trim().toLowerCase();
-      if (tab === "rebalance") return `/daa/dashboard/rebalance${u.hash || ""}`;
-      if (tab === "watchlist" || tab === "positions" || tab === "analysis") {
-        return `/daa/dashboard/portfolio?tab=${tab}${u.hash || ""}`;
-      }
-      return `/daa/dashboard/portfolio${u.hash || ""}`;
-    }
-
-    // Allow deep links inside the authenticated dashboard shell.
-    if (u.pathname.startsWith("/daa/dashboard/")) {
+    // Allow known deep links inside the authenticated dashboard shell.
+    if (isAllowedDashboardPath(u.pathname)) {
       return `${u.pathname}${u.search}${u.hash}`;
     }
   } catch (err) {

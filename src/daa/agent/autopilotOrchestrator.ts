@@ -11,7 +11,7 @@ import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalan
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
-import { buildAgentTargetWeightOverrides } from "@/src/daa/automation/automationGuards";
+import { buildAgentTargetWeightPlan as buildAgentTargetAllocationPlan } from "@/src/daa/automation/automationGuards";
 import {
   persistAgentTargetWeightPool,
   resolveAiTargetWeightPoolConfig,
@@ -219,7 +219,7 @@ async function ensureThesisCoverage(): Promise<AutopilotLoopResult["bootstrapped
   return { attempted: true, created: result.created, errors: result.errors };
 }
 
-type AgentTargetWeightPlan = ReturnType<typeof buildAgentTargetWeightOverrides>;
+type AgentTargetWeightPlan = ReturnType<typeof buildAgentTargetAllocationPlan>;
 
 async function buildAgentTargetWeightPlan(input: {
   row: DaaStoreSystemConfigRow;
@@ -233,7 +233,7 @@ async function buildAgentTargetWeightPlan(input: {
     ]),
   );
   const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(input.row.config);
-  return buildAgentTargetWeightOverrides({
+  return buildAgentTargetAllocationPlan({
     overlay: input.overlay,
     knownAssetKeys: bootstrap.assetUniverse.map((row) => row.assetKey),
     currentTargetWeights,
@@ -269,7 +269,7 @@ async function maybePersistAgentTargetWeightPool(input: {
   }
 
   const persisted = await persistAgentTargetWeightPool({
-    targetWeightOverrides: input.targetPlan.targetWeightOverrides,
+    targetWeights: input.targetPlan.targetWeights,
     autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
   });
   return {
@@ -345,8 +345,12 @@ async function maybeRunAgentDrivenRebalance(input: {
       ? `${rebalanceTriggerSource === "scheduled_review" ? "定期 AI 目标权重复盘" : "Agent 目标权重调仓"}: ${input.targetPlan.reason}；${input.targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
       : `Agent 自动驾驶检查${eventContext ? `: ${eventContext}` : ""}`,
     manual: false,
-    targetWeightOverrides: input.targetPlan?.targetWeightOverrides,
-    targetWeightBaseline: input.targetPlan?.baselineTargetWeights,
+    targetAllocationPlan: input.targetPlan ? {
+      targetWeights: input.targetPlan.targetWeights,
+      baselineTargetWeights: input.targetPlan.baselineTargetWeights,
+      summary: input.targetPlan.summary,
+      reason: input.targetPlan.reason,
+    } : undefined,
   });
   const cycle = generated.cycle;
   if (!generated.created || !cycle) {

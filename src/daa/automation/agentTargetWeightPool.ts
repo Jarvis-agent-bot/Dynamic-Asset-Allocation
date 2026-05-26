@@ -33,10 +33,10 @@ export function resolveAiTargetWeightPoolConfig(config: DaaSystemConfig): AiTarg
 }
 
 export function buildAgentTargetWeightPoolPatches(input: {
-  targetWeightOverrides: Record<string, number> | null | undefined;
+  targetWeights: Record<string, number> | null | undefined;
   autoEnableEntry: boolean;
 }): AgentTargetWeightPoolPatch[] {
-  return Object.entries(input.targetWeightOverrides || {})
+  return Object.entries(input.targetWeights || {})
     .map(([assetKey, value]) => {
       const normalizedKey = String(assetKey || "").trim().toUpperCase();
       const targetWeightHint = Math.max(0, Math.min(1, Number(value) || 0));
@@ -53,7 +53,7 @@ export function buildAgentTargetWeightPoolPatches(input: {
 }
 
 export async function persistAgentTargetWeightPool(input: {
-  targetWeightOverrides: Record<string, number> | null | undefined;
+  targetWeights: Record<string, number> | null | undefined;
   autoEnableEntry: boolean;
 }): Promise<PersistAgentTargetWeightPoolResult> {
   const patches = buildAgentTargetWeightPoolPatches(input);
@@ -72,7 +72,7 @@ export async function persistAgentTargetWeightPool(input: {
         autoEntryEnabled: patch.autoEntryEnabled,
         entryTargetWeightPct: patch.entryTargetWeightPct,
       });
-      if (!updated) throw new Error(`auto-entry update failed: ${patch.assetKey}`);
+      if (!updated) throw new Error(`entry candidate update failed: ${patch.assetKey}`);
     }
     return patch;
   }));
