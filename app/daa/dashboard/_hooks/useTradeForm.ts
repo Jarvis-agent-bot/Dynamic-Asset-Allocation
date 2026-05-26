@@ -9,6 +9,7 @@ export type TradeFormCallbacks = {
     side: "BUY" | "SELL";
     qty?: number;
     notional?: number;
+    sellAll?: boolean;
   }) => Promise<WorkbenchMarketOrderPreviewResult>;
   onSubmit: (preview: WorkbenchMarketOrderPreviewResult) => Promise<void>;
 };
@@ -24,6 +25,7 @@ export function useTradeForm(input: {
 }) {
   const [qty, setQty] = useState("");
   const [notional, setNotional] = useState("");
+  const [sellAll, setSellAll] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [preview, setPreview] = useState<WorkbenchMarketOrderPreviewResult | null>(null);
   const [error, setError] = useState("");
@@ -32,6 +34,7 @@ export function useTradeForm(input: {
   useEffect(() => {
     setQty("");
     setNotional("");
+    setSellAll(false);
     setPreview(null);
     setError("");
     setPreviewLoading(false);
@@ -68,12 +71,14 @@ export function useTradeForm(input: {
   function handleQtyChange(value: string) {
     resetPreviewState();
     setQty(value);
+    setSellAll(false);
     if (Number(value) > 0) setNotional("");
   }
 
   function handleNotionalChange(value: string) {
     resetPreviewState();
     setNotional(value);
+    setSellAll(false);
     if (Number(value) > 0) setQty("");
   }
 
@@ -82,13 +87,15 @@ export function useTradeForm(input: {
     resetPreviewState();
     const { holdingQty, availableCash, lastPrice, pct } = params;
     if (input.side === "SELL" && holdingQty > 0) {
-      const q = (pct * holdingQty).toFixed(6);
+      const q = pct >= 1 ? String(holdingQty) : (pct * holdingQty).toFixed(6);
       setQty(q);
       setNotional("");
+      setSellAll(pct >= 1);
     } else if (input.side === "BUY" && lastPrice > 0 && availableCash > 0) {
       const q = ((pct * availableCash) / lastPrice).toFixed(6);
       setQty(q);
       setNotional("");
+      setSellAll(false);
     }
   }
 
@@ -106,6 +113,7 @@ export function useTradeForm(input: {
         side: input.side,
         qty: qtyNum > 0 ? qtyNum : undefined,
         notional: notionalNum > 0 ? notionalNum : undefined,
+        sellAll: input.side === "SELL" && sellAll,
       });
       setPreview(res);
     } catch (e) {
@@ -114,7 +122,7 @@ export function useTradeForm(input: {
     } finally {
       setPreviewLoading(false);
     }
-  }, [input.assetKey, input.side, input.callbacks, previewLoading, qtyNum, notionalNum]);
+  }, [input.assetKey, input.side, input.callbacks, previewLoading, qtyNum, notionalNum, sellAll]);
 
   const handleSubmit = useCallback(async () => {
     if (!preview || input.submitting || !input.callbacks) return;

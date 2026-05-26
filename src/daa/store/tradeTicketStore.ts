@@ -763,6 +763,7 @@ function normalizeCycleProposals(value: unknown): DaaStoreRebalanceCycle["propos
       suggestedQty: Math.max(0, toFiniteNumber(row.suggestedQty, 0)),
       suggestedNotional: Math.max(0, toFiniteNumber(row.suggestedNotional, 0)),
       price: Math.max(0, toFiniteNumber(row.price, 0)),
+      sellAll: toBoolean(row.sellAll, false),
       reason: normalizeText(row.reason, ""),
       selected: toBoolean(row.selected, true),
       hfContribution: normalizeText(row.hfContribution, "") || null,
@@ -1636,7 +1637,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
     const side = normalizeTradeTicketSide(input.side);
     const source = normalizeTradeTicketSource(input.source);
     const sourceForBasket = source === "decision" ? "decision" : "manual";
-    const qty = Math.max(0, toFiniteNumber(input.qty, 0));
+    let qty = Math.max(0, toFiniteNumber(input.qty, 0));
     const price = Math.max(0, toFiniteNumber(input.price, 0));
     const fee = Math.max(0, toFiniteNumber(input.fee, 0));
     const basketIdInput = normalizeText(input.basketId);
@@ -1716,6 +1717,9 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
         [ownerAccountId, assetKey],
       );
       const positionQty = Math.max(0, toFiniteNumber((posRes.rows[0] as Record<string, unknown> | undefined)?.qty, 0));
+      if (side === "SELL" && input.sellAll === true) {
+        qty = positionQty;
+      }
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);

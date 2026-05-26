@@ -21,6 +21,7 @@ import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
+import { normalizeOrderSizing } from "./orderSizing";
 import { normalizeReasonTags, normalizeTradeSide } from "./tradeNormalization";
 
 export class ManualTradeServiceError extends Error {
@@ -47,6 +48,7 @@ export type PreviewManualTradeInput = {
   side: "BUY" | "SELL";
   qty?: number | null;
   notional?: number | null;
+  sellAll?: boolean | null;
   feeRateBps?: number | null;
 };
 
@@ -58,6 +60,7 @@ export type PreviewManualTradeResult = {
   side: "BUY" | "SELL";
   qty: number;
   price: number;
+  sellAll?: boolean;
   grossNotional: number;
   fee: number;
   feeInBase: number | null;
@@ -85,6 +88,7 @@ export type ExecuteManualTradeInput = {
   currency?: unknown;
   qty?: unknown;
   price?: unknown;
+  sellAll?: unknown;
   fee?: unknown;
   pricingMode?: unknown;
   priceSource?: unknown;
@@ -208,15 +212,6 @@ export async function previewManualTrade(input: PreviewManualTradeInput): Promis
     });
   }
 
-  const qtyInput = toPositive(input.qty);
-  const notionalInput = toPositive(input.notional);
-  const qty = qtyInput > 0 ? qtyInput : (notionalInput > 0 ? (notionalInput / price) : 0);
-  if (!(qty > 0)) {
-    throwManualTradeError("VALIDATION_FAILED", "qty 或 notional 至少提供一个且 > 0", 400);
-  }
-
-  const grossNotional = qty * price;
-  const fee = grossNotional * (feeRateBps / 10000);
   const investableCash = resolveInvestableCash(bootstrap.account);
   const fxLookup = buildFxLookupToBase(fxRows);
   const fxRateResolved = resolveFxRateToBase(bootstrap.baseCurrency, row.currency, fxLookup);
@@ -226,15 +221,49 @@ export async function previewManualTrade(input: PreviewManualTradeInput): Promis
     warnings.push(`缺少汇率 ${row.currency}/${bootstrap.baseCurrency}，当前预览不会再做 1:1 估算，执行会被阻断`);
   }
 
+  const qtyInput = toPositive(input.qty);
+  const notionalInput = toPositive(input.notional);
+  const rawQty = qtyInput > 0 ? qtyInput : (notionalInput > 0 ? (notionalInput / price) : 0);
+  if (!(rawQty > 0)) {
+    throwManualTradeError("VALIDATION_FAILED", "qty 或 notional 至少提供一个且 > 0", 400);
+  }
+  const sizing = normalizeOrderSizing({
+    side: input.side,
+    market: row.market,
+    assetClass: row.assetClass,
+    instrumentType: row.instrumentType,
+    marketGroup: row.marketGroup,
+    price,
+    fxRateToBase,
+    qty: rawQty,
+    holdingQty: row.holdingQty,
+    sellAll: input.sellAll === true,
+    minNotionalBase: systemRow.config.strategy.constraints.minNotional,
+  });
+  warnings.push(...sizing.warnings);
+  const qty = sizing.qty;
+  price = sizing.price;
+  const grossNotional = qty * price;
+  const fee = grossNotional * (feeRateBps / 10000);
   const notionalInBase = fxRateToBase == null ? null : grossNotional * fxRateToBase;
   const feeInBase = fxRateToBase == null ? null : fee * fxRateToBase;
+  const requestedGrossNotional = (qty > 0 ? qty : rawQty) * price;
+  const requestedFee = requestedGrossNotional * (feeRateBps / 10000);
+  const requestedNotionalInBase = fxRateToBase == null ? null : requestedGrossNotional * fxRateToBase;
+  const requestedFeeInBase = fxRateToBase == null ? null : requestedFee * fxRateToBase;
   const totalCostInBase = notionalInBase == null || feeInBase == null
     ? null
     : (input.side === "BUY" ? (notionalInBase + feeInBase) : (notionalInBase - feeInBase));
+  const requestedTotalCostInBase = requestedNotionalInBase == null || requestedFeeInBase == null
+    ? null
+    : (input.side === "BUY" ? (requestedNotionalInBase + requestedFeeInBase) : (requestedNotionalInBase - requestedFeeInBase));
 
   let manualBlock = false;
-  if (input.side === "BUY" && totalCostInBase != null && investableCash + 1e-9 < totalCostInBase) {
-    warnings.push(`可投资现金不足：预计需要 ${totalCostInBase.toFixed(2)} ${bootstrap.baseCurrency}，当前可投资现金 ${investableCash.toFixed(2)} ${bootstrap.baseCurrency}`);
+  if (!(qty > 0)) {
+    manualBlock = true;
+  }
+  if (input.side === "BUY" && requestedTotalCostInBase != null && investableCash + 1e-9 < requestedTotalCostInBase) {
+    warnings.push(`可投资现金不足：预计需要 ${requestedTotalCostInBase.toFixed(2)} ${bootstrap.baseCurrency}，当前可投资现金 ${investableCash.toFixed(2)} ${bootstrap.baseCurrency}`);
     manualBlock = true;
   }
   if (input.side === "BUY" && fxRateToBase == null && row.currency !== bootstrap.baseCurrency) {
@@ -258,10 +287,12 @@ export async function previewManualTrade(input: PreviewManualTradeInput): Promis
 
   const holdingsBase = bootstrap.assetUniverse.reduce((sum, item) => sum + (item.valuationBase ?? 0), 0);
   const currentAssetBase = bootstrap.assetUniverse.find((item) => item.assetKey === assetKey)?.valuationBase ?? 0;
-  if (notionalInBase != null && totalCostInBase != null) {
-    const nextAssetBase = Math.max(0, currentAssetBase + (input.side === "BUY" ? notionalInBase : -notionalInBase));
-    const nextHoldingsBase = Math.max(0, holdingsBase + (input.side === "BUY" ? notionalInBase : -notionalInBase));
-    const nextCash = Math.max(0, bootstrap.account.cash + (input.side === "BUY" ? -totalCostInBase : totalCostInBase));
+  const notionalForProjection = notionalInBase && notionalInBase > 0 ? notionalInBase : requestedNotionalInBase;
+  const costForProjection = totalCostInBase && totalCostInBase > 0 ? totalCostInBase : requestedTotalCostInBase;
+  if (notionalForProjection != null && costForProjection != null) {
+    const nextAssetBase = Math.max(0, currentAssetBase + (input.side === "BUY" ? notionalForProjection : -notionalForProjection));
+    const nextHoldingsBase = Math.max(0, holdingsBase + (input.side === "BUY" ? notionalForProjection : -notionalForProjection));
+    const nextCash = Math.max(0, bootstrap.account.cash + (input.side === "BUY" ? -costForProjection : costForProjection));
     const nextEquity = Math.max(1e-9, nextHoldingsBase + nextCash);
     const nextWeightPct = (nextAssetBase / nextEquity) * 100;
     if (nextWeightPct >= 30) {
@@ -297,6 +328,7 @@ export async function previewManualTrade(input: PreviewManualTradeInput): Promis
     side: input.side,
     qty,
     price,
+    sellAll: sizing.sellAll,
     grossNotional,
     fee,
     feeInBase,
@@ -323,7 +355,7 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
   const symbol = String(input.symbol || "").trim().toUpperCase();
   const market = String(input.market || "US").trim().toUpperCase() || "US";
   const qty = Number(input.qty);
-  const price = Number(input.price);
+  let price = Number(input.price);
   const fee = Number(input.fee || 0);
   if (!symbol) throwManualTradeError("VALIDATION_FAILED", "symbol is required", 400);
   if (!Number.isFinite(qty) || qty <= 0) throwManualTradeError("VALIDATION_FAILED", "qty must be > 0", 400);
@@ -347,11 +379,37 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
     });
   }
 
-  const notionalInBase = qty * price * fxRateToBase;
-  const feeInBase = fee * fxRateToBase;
-  const totalCostInBase = side === "BUY" ? (notionalInBase + feeInBase) : Math.max(0, notionalInBase - feeInBase);
   const pricingMode = normalizePricingMode(input.pricingMode);
   const assetKey = String(input.assetKey || "").trim() || `${market}::${symbol}`;
+  const assetUniverseRows = await listDaaAssetUniverse();
+  const assetUniverse = Array.isArray(assetUniverseRows) ? assetUniverseRows : [];
+  const assetMeta = assetUniverse.find((row) => row.assetKey === assetKey) || null;
+  const sizing = normalizeOrderSizing({
+    side,
+    market,
+    assetClass: assetMeta?.assetClass || null,
+    instrumentType: assetMeta?.instrumentType || null,
+    marketGroup: assetMeta?.marketGroup || null,
+    price,
+    fxRateToBase,
+    qty,
+    holdingQty: assetMeta?.holdingQty ?? null,
+    sellAll: input.sellAll === true,
+    minNotionalBase: systemRow.config.strategy.constraints.minNotional,
+  });
+  if (!(sizing.qty > 0)) {
+    throwManualTradeError("VALIDATION_FAILED", sizing.warnings[0] || "订单数量低于可执行规格", 400, {
+      code: "ORDER_SIZE_INVALID",
+      warnings: sizing.warnings,
+    });
+  }
+  const normalizedQty = sizing.qty;
+  price = sizing.price;
+  const feeRate = qty > 0 && Number(input.price) > 0 ? fee / (qty * Number(input.price)) : 0;
+  const normalizedFee = normalizedQty * price * Math.max(0, feeRate);
+  const notionalInBase = normalizedQty * price * fxRateToBase;
+  const feeInBase = normalizedFee * fxRateToBase;
+  const totalCostInBase = side === "BUY" ? (notionalInBase + feeInBase) : Math.max(0, notionalInBase - feeInBase);
   const reasonTags = normalizeReasonTags(input.reasonTags);
   const reasonText = String(input.reasonText || "").trim() || null;
   const createdBy = String(input.createdBy || "").trim() || "admin";
@@ -376,7 +434,7 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       symbol,
       currency: instrumentCurrency,
       side,
-      suggestedQty: qty,
+      suggestedQty: normalizedQty,
       suggestedNotional: notionalInBase,
       price,
       reason: "manual_execution",
@@ -392,9 +450,6 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
     });
   }
 
-  const assetUniverseRows = await listDaaAssetUniverse();
-  const assetUniverse = Array.isArray(assetUniverseRows) ? assetUniverseRows : [];
-  const assetMeta = assetUniverse.find((row) => row.assetKey === assetKey) || null;
   const route = await resolveExecutionRoute({
     assetKey,
     symbol,
@@ -414,9 +469,10 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       symbol,
       market,
       instrumentCurrency,
-      qty,
+      qty: normalizedQty,
       price,
-      fee,
+      fee: normalizedFee,
+      sellAll: sizing.sellAll,
       pricingMode,
       priceSource: String(input.priceSource || "").trim() || undefined,
       priceSnapshotAt: String(input.priceSnapshotAt || "").trim() || undefined,
@@ -491,9 +547,10 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
     symbol,
     market,
     instrumentCurrency,
-    qty,
+    qty: normalizedQty,
     price,
-    fee,
+    fee: normalizedFee,
+    sellAll: sizing.sellAll,
     pricingMode,
     priceSource: String(input.priceSource || "").trim() || undefined,
     priceSnapshotAt: String(input.priceSnapshotAt || "").trim() || undefined,
@@ -511,7 +568,7 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       market,
       currency: instrumentCurrency,
       side,
-      qty,
+      qty: normalizedQty,
       orderType: pricingMode === "market" ? "MKT" : "LMT",
       referencePrice: price,
       limitPrice: pricingMode === "manual" ? price : null,

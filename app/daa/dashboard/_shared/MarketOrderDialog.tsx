@@ -31,7 +31,7 @@ export default function MarketOrderDialog(props: {
   loading?: boolean;
   slippageBps?: number;
   onOpenChange: (next: boolean) => void;
-  onPreview: (input: { assetKey: string; side: "BUY" | "SELL"; qty?: number; notional?: number }) => Promise<WorkbenchMarketOrderPreviewResult>;
+  onPreview: (input: { assetKey: string; side: "BUY" | "SELL"; qty?: number; notional?: number; sellAll?: boolean }) => Promise<WorkbenchMarketOrderPreviewResult>;
   onSubmit: (preview: WorkbenchMarketOrderPreviewResult) => Promise<void>;
 }) {
   const [qty, setQty] = useState("");

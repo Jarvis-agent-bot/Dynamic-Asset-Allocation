@@ -22,6 +22,7 @@ export async function previewWorkbenchExecution(input: {
   side: "BUY" | "SELL";
   qty?: number;
   notional?: number;
+  sellAll?: boolean;
   feeRateBps?: number;
 }): Promise<WorkbenchMarketOrderPreviewResult> {
   return requestData<WorkbenchMarketOrderPreviewResult>("/api/daa/workbench/execution/preview", {

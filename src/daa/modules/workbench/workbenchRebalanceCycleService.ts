@@ -27,6 +27,7 @@ import { evaluatePortfolioPolicy } from "@/src/daa/modules/policy-engine/policyE
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 import { collectPortfolioSignals } from "@/src/daa/modules/signals/signalCollector";
 import { resolveExecutionRoute, syncBrokerOrders } from "./executionVenue";
+import { normalizeOrderSizing } from "./orderSizing";
 import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 
@@ -865,6 +866,7 @@ async function executeWorkbenchProposalByRoute(input: {
     suggestedQty: number;
     price: number;
     reason: string;
+    sellAll?: boolean;
   };
   feeRate: number;
   assetMeta?: {
@@ -900,6 +902,7 @@ async function executeWorkbenchProposalByRoute(input: {
     qty: input.row.suggestedQty,
     price: input.row.price,
     fee,
+    sellAll: input.row.sellAll === true,
     pricingMode: "market",
     priceSource: "rebalance_cycle",
     decisionRefId: input.cycleId,
@@ -1070,6 +1073,10 @@ export async function executeWorkbenchRebalanceCycle(input: {
     rawRetentionDays: 90,
   });
 
+  const assetMetaByKey = new Map(
+    beforeBootstrap.assetUniverse.map((row) => [row.assetKey, row]),
+  );
+
   // Build execution-ready proposals with refreshed prices + slippage
   const executionRows = toExecute.map((row) => {
     const parsed = parseDaaAssetKey(row.assetKey);
@@ -1079,18 +1086,35 @@ export async function executeWorkbenchRebalanceCycle(input: {
     // Apply slippage: BUY pays more, SELL receives less
     const slippageMultiplier = row.side === "BUY" ? (1 + slippageRate) : (1 - slippageRate);
     const executionPrice = basePrice * slippageMultiplier;
+    const assetMeta = assetMetaByKey.get(row.assetKey);
+    const sizing = normalizeOrderSizing({
+      side: row.side,
+      market: assetMeta?.market || parsed?.market || "US",
+      assetClass: assetMeta?.assetClass || null,
+      instrumentType: assetMeta?.instrumentType || null,
+      marketGroup: assetMeta?.marketGroup || null,
+      price: executionPrice,
+      fxRateToBase: row.fxRateToBase,
+      notionalBase: row.suggestedNotional,
+      holdingQty: assetMeta?.holdingQty ?? null,
+      sellAll: row.sellAll === true,
+      minNotionalBase: systemRow.config.strategy.constraints.minNotional,
+    });
     return {
       ...row,
-      price: executionPrice,
+      price: sizing.price,
+      suggestedQty: sizing.qty,
+      suggestedNotional: sizing.notionalBase,
+      sellAll: sizing.sellAll,
+      reason: sizing.warnings.length
+        ? `${row.reason}；执行规格归一化：${sizing.warnings.join("；")}`
+        : row.reason,
       _originalPrice: row.price,
       _refreshedPrice: basePrice,
       _slippageApplied: slippageRate > 0,
     };
   });
 
-  const assetMetaByKey = new Map(
-    beforeBootstrap.assetUniverse.map((row) => [row.assetKey, row]),
-  );
   const createdTicketIds: string[] = [];
   for (const row of executionRows) {
     const ticketId = await executeWorkbenchProposalByRoute({

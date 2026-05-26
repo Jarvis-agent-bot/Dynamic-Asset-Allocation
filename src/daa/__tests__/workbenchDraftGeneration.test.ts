@@ -100,8 +100,10 @@ describe("buildCycleDraftFromBootstrap", () => {
     const draft = buildCycleDraftFromBootstrap({ bootstrap, allowUnheldBuyTargets: true });
 
     expect(draft.proposals).toHaveLength(1);
-    expect(draft.proposals[0]?.suggestedNotional).toBeCloseTo(1000 / (1.01 * 1.01), 6);
-    expect(draft.proposals[0]?.suggestedQty).toBeCloseTo((1000 / (1.01 * 1.01)) / 100, 6);
+    const maxAffordableNotional = 1000 / (1.01 * 1.01);
+    expect(draft.proposals[0]?.suggestedNotional).toBeLessThanOrEqual(maxAffordableNotional);
+    expect(draft.proposals[0]?.suggestedNotional).toBeCloseTo(maxAffordableNotional, 3);
+    expect(draft.proposals[0]?.suggestedQty).toBeCloseTo((draft.proposals[0]?.suggestedNotional ?? 0) / 100, 6);
   });
 
   it("小于 minNotional 的 drift 提案会被直接过滤", () => {

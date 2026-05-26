@@ -161,6 +161,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
     side: "BUY" | "SELL";
     qty?: number;
     notional?: number;
+    sellAll?: boolean;
   }) => previewWorkbenchExecution(payload), []);
 
   const handleSubmitOrder = useCallback(async (preview: Awaited<ReturnType<typeof previewWorkbenchExecution>>) => {

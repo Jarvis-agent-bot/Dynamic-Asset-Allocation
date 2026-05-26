@@ -80,6 +80,7 @@ export type RebalanceProposal = {
   suggestedQty: number;
   suggestedNotional: number;
   price: number;
+  sellAll?: boolean;
   reason: string;
   selected: boolean;
   hfContribution: string | null;

@@ -10,6 +10,7 @@ type Body = {
   side?: unknown;
   qty?: unknown;
   notional?: unknown;
+  sellAll?: unknown;
   feeRateBps?: unknown;
 };
 
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
         side,
         qty: body?.qty == null ? null : Number(body.qty),
         notional: body?.notional == null ? null : Number(body.notional),
+        sellAll: body?.sellAll === true,
         feeRateBps: body?.feeRateBps == null ? null : Number(body.feeRateBps),
       }));
     } catch (error) {

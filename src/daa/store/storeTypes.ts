@@ -515,6 +515,7 @@ export type DaaStoreCreateTradeTicketInput = {
   instrumentCurrency?: string;
   qty: number;
   price: number;
+  sellAll?: boolean;
   fee?: number;
   decisionRefId?: string | null;
   reasonTags?: string[];
@@ -609,6 +610,7 @@ export type DaaStoreRebalanceCycle = {
     suggestedQty: number;
     suggestedNotional: number;
     price: number;
+    sellAll?: boolean;
     reason: string;
     selected: boolean;
     hfContribution: string | null;

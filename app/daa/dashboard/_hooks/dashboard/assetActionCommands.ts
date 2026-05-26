@@ -36,6 +36,7 @@ export function buildManualExecutionInput(preview: WorkbenchMarketOrderPreviewRe
     currency: preview.currency,
     qty: preview.qty,
     price: preview.price,
+    sellAll: preview.sellAll === true,
     notionalInBase: preview.notionalInBase,
     fee: preview.fee,
     pricingMode: "market",

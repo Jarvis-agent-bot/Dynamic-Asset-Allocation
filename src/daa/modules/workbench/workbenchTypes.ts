@@ -375,6 +375,7 @@ export type WorkbenchExecutionExecuteInput = {
   currency: string;
   qty: number;
   price: number;
+  sellAll?: boolean;
   notionalInBase?: number | null;
   fee?: number;
   pricingMode?: "manual" | "market";
@@ -468,6 +469,7 @@ export type WorkbenchMarketOrderPreviewResult = {
   side: "BUY" | "SELL";
   qty: number;
   price: number;
+  sellAll?: boolean;
   grossNotional: number;
   feeRateBps?: number;
   fee: number;

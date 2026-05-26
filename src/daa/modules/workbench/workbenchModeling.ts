@@ -15,6 +15,7 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { computeCorrelationMatrix } from "./correlationService";
 import { calcHoldingCostPerUnit } from "./executionCost";
+import { normalizeOrderSizing } from "./orderSizing";
 import type {
   PreTradeRiskCheck,
   PreTradeRiskCheckItem,
@@ -845,9 +846,23 @@ function buildCycleDraftFromBootstrap(input: {
         if (!fxRateToBase)
             continue;
         const localNotional = suggestedNotional / fxRateToBase;
-        const suggestedQty = localNotional / price;
+        const sizing = normalizeOrderSizing({
+            side,
+            market: row.market,
+            assetClass: row.assetClass,
+            instrumentType: row.instrumentType,
+            marketGroup: row.marketGroup,
+            price,
+            fxRateToBase,
+            qty: localNotional / price,
+            holdingQty: row.holdingQty,
+            sellAll: side === "SELL" && (targetPct <= 0 || suggestedNotional + 1e-9 >= Math.max(0, row.valuationBase || 0)),
+            minNotionalBase,
+        });
+        const suggestedQty = sizing.qty;
         if (!(suggestedQty > 0))
             continue;
+        suggestedNotional = sizing.notionalBase;
         if (side === "BUY") {
             buyCashReserved += suggestedNotional * buyCashMultiplier;
         }
@@ -862,7 +877,8 @@ function buildCycleDraftFromBootstrap(input: {
             side,
             suggestedQty,
             suggestedNotional,
-            price,
+            price: sizing.price,
+            sellAll: sizing.sellAll,
             reason: `${targetSource}：偏移 ${(driftPct * 100).toFixed(2)}%，回归目标权重`,
             selected: true,
             hfContribution: row.hfSignal
@@ -937,7 +953,20 @@ function buildRiskCycleDraft(input: {
         const fxRateToBase = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : null;
         if (!fxRateToBase) continue;
         const localNotional = suggestedNotional / fxRateToBase;
-        const suggestedQty = Math.min(row.holdingQty, localNotional / px);
+        const sizing = normalizeOrderSizing({
+            side: "SELL",
+            market: row.market,
+            assetClass: row.assetClass,
+            instrumentType: row.instrumentType,
+            marketGroup: row.marketGroup,
+            price: px,
+            fxRateToBase,
+            qty: Math.min(row.holdingQty, localNotional / px),
+            holdingQty: row.holdingQty,
+            sellAll: isStopLoss,
+            minNotionalBase: input.bootstrap.execution.minNotional,
+        });
+        const suggestedQty = sizing.qty;
         if (!(suggestedQty > 0))
             continue;
         proposals.push({
@@ -947,8 +976,9 @@ function buildRiskCycleDraft(input: {
             fxRateToBase,
             side: "SELL",
             suggestedQty,
-            suggestedNotional,
-            price: px,
+            suggestedNotional: sizing.notionalBase,
+            price: sizing.price,
+            sellAll: sizing.sellAll,
             reason: isStopLoss
                 ? `触发止损阈值：浮亏 ${Math.abs(pnlPct).toFixed(2)}%`
                 : `触发止盈阈值：浮盈 ${pnlPct.toFixed(2)}%`,
