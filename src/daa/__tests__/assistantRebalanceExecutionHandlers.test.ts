@@ -63,6 +63,7 @@ function buildContext(executeMode: RebalanceExecuteMode = "selected") {
     sessionMemory: null,
     learningDigest: "",
     systemDigest: "",
+    brainContextDigest: "",
     storedPendingAction: null,
     intent: { kind: "rebalance_execute" as const, rawText: "执行调仓", executeMode },
     currentPendingAction: null,

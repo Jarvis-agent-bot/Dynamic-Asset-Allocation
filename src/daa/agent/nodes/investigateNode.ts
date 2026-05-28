@@ -436,7 +436,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       });
     }
 
-    // 调查完成无论 thesis 是否变化都 bump updated_at，防止认知缺口天数
+    // 调查完成无论 thesis 是否变化都 bump updated_at，防止论点复核天数
     // 永久增长的 bug：否则 LLM 说"无变化"时 target thesis 虽然被调查过但
     // updated_at 纹丝不动，日报里 medium thesis 永远是 "N 天未调查"。
     if (resultHasUsableEvidence || result?.thesisChanged) {

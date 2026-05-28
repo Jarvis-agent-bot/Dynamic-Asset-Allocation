@@ -123,7 +123,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
 ## 任务
 1. 从活跃论点中选出最需要立即调查的 1-${maxTargets} 个。优先级依据：
    - 事件触发资产相关论点优先
-   - 相关资产权重高但 thesis 久未更新
+   - 相关资产权重高但 thesis 距上次复核较久
    - 观察列表资产没有稳定方向，且可能进入目标权重计划
    - 新闻与现有 thesis 矛盾
    - 新闻智能层提示 holding/target 为 risk 或 review
@@ -157,7 +157,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
 \`\`\`json
 {
   "targets": [
-    {"threadId": "a1b2c3d4-1111-2222-3333-444455556666", "reason": "NVDA 权重15%但论点20天未更新，且近期有重大新闻", "dataNeeded": ["technical", "news"]},
+    {"threadId": "a1b2c3d4-1111-2222-3333-444455556666", "reason": "NVDA 权重15%，论点上次复核在20天前，且近期有重大新闻", "dataNeeded": ["technical", "news"]},
     {"threadId": null, "reason": "VIX 突破25但无对应宏观避险论点", "dataNeeded": ["technical"]}
   ],
   "newThreads": [
@@ -318,7 +318,7 @@ export function buildSurfacePrompt(ctx: {
 }): string {
   const surpriseText = ctx.surprises.length > 0
     ? ctx.surprises.map(s => `- [${s.severityScore}/10] ${sanitizeForPrompt(s.title, 60)}: ${sanitizeForPrompt(s.description, 100)}`).join("\n")
-    : "本次调查无意外发现";
+    : "本次调查没有发现需要复核的变化";
 
   const thesisText = ctx.theses
     .slice(0, 15)
@@ -352,10 +352,10 @@ export function buildSurfacePrompt(ctx: {
           .map(c => `- "${sanitizeForPrompt(c.thesisTitle, 40)}" (${c.currentConviction}): ${c.conditions.slice(0, 2).map(s => sanitizeForPrompt(s, 60)).join("; ")}`)
           .join("\n");
         return `## 上次日报（对比参考）
-改观条件:
+改变判断的条件:
 ${prevConditions || "无"}
 
-⚠️ 重要：如果改观条件与上次完全相同，请明确写"条件未变，持续监控"。如果有新的观察或数据支持，请更新条件描述。避免逐字重复上次内容。`;
+⚠️ 重要：如果改变判断的条件与上次完全相同，请明确写"条件未变，持续监控"。如果有新的观察或数据支持，请更新条件描述。避免逐字重复上次内容。`;
       })()
     : "";
 
@@ -371,7 +371,7 @@ VIX: ${ctx.market?.vix ?? "N/A"}
 论点更新: ${ctx.thesesUpdated} 个
 新记忆: ${ctx.memoriesCreated} 条
 
-## 意外发现
+## 需要复核的变化
 ${surpriseText}
 
 ## 今日调查详情
@@ -385,14 +385,14 @@ ${prevBriefingText}
 
 ## 任务
 生成两类输出（“自动跟踪清单”由系统代码直出，无需你生成）：
-1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 和工具调用结果中总结）。如果没有实质性意外，**必须**返回空数组 \`[]\`，**不要**生成"市场与预期一致"等占位条目；系统会在输出为空时自动展示 fallback 文案。仅当 severityScore >= 3 的真实矛盾信息才值得输出。
-2. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
+1. **需要复核的变化**：最不符合现有认知、或可能改变仓位假设的变化（从上面的 surprises 和工具调用结果中总结）。如果没有实质变化，**必须**返回空数组 \`[]\`，**不要**生成"市场与预期一致"等占位条目；系统会在输出为空时自动展示 fallback 文案。仅当 severityScore >= 3 的真实矛盾信息才值得输出。
+2. **改变判断的条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
 
 ## 输出格式（严格 JSON）
 \`\`\`json
 {
   "surprises": [
-    { "title": "意外标题", "description": "描述", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "建议" }
+    { "title": "变化标题", "description": "描述", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "建议" }
   ],
   "mindChangeConditions": [
     { "thesisTitle": "论点标题", "currentConviction": "high", "conditions": ["条件1"], "monitoringIndicators": ["VIX"] }
@@ -442,12 +442,12 @@ export function buildStrategyAdvisorPrompt(ctx: {
 
   const surpriseLines = ctx.surprises.length > 0
     ? ctx.surprises.map(s => `[${s.severityScore}/10] ${sanitizeForPrompt(s.title, 60)}`).join("\n")
-    : "无意外";
+    : "无需要复核的变化";
 
   const gapLines = ctx.cognitionGaps.length > 0
     ? ctx.cognitionGaps.map(g => {
       const scope = g.portfolioWeight > 0 ? `权重${(g.portfolioWeight * 100).toFixed(1)}%` : "观察列表";
-      return `${g.assetKey} ${scope}：${sanitizeForPrompt(g.uncertaintyReason || `${g.daysSinceLastInvestigation}天未更新`, 90)}${g.suggestedInvestigation ? `；${sanitizeForPrompt(g.suggestedInvestigation, 90)}` : ""}`;
+      return `${g.assetKey} ${scope}：${sanitizeForPrompt(g.uncertaintyReason || `上次复核 ${g.daysSinceLastInvestigation} 天前`, 90)}${g.suggestedInvestigation ? `；${sanitizeForPrompt(g.suggestedInvestigation, 90)}` : ""}`;
     }).join("\n")
     : "无";
 
@@ -462,7 +462,7 @@ ${watchlistLines}
 ## 活跃论点
 ${thesisLines}
 
-## 今日意外
+## 需要复核的变化
 ${surpriseLines}
 
 ## 自动跟踪项
@@ -678,18 +678,18 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
 
   // ── Agent 分析 ──
   if (briefing.surprises.length > 0) {
-    lines.push("<b>\u26A1 今日意外</b>");
+    lines.push("<b>\u26A1 需要复核的变化</b>");
     for (const s of briefing.surprises.slice(0, 3)) {
       lines.push(`• [${s.severityScore}/10] ${s.title}`);
       lines.push(`  ${formatBriefingTextExcerpt(s.description, 160)}`);
     }
     lines.push("");
   } else {
-    lines.push("<b>\u26A1 今日意外</b>\n市场与预期一致，无重大意外。\n");
+    lines.push("<b>\u26A1 需要复核的变化</b>\n没有发现会改变当前判断的新信号。\n");
   }
 
   if (briefing.cognitionGaps.length > 0) {
-    lines.push("<b>\u{1F50D} 研究论点待复核</b>");
+    lines.push("<b>\u{1F50D} 论点复核</b>");
     for (const g of briefing.cognitionGaps.slice(0, 3)) {
       lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
       if (g.suggestedInvestigation) {
@@ -707,7 +707,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   }
 
   if (briefing.mindChangeConditions.length > 0) {
-    lines.push("<b>\u{1F504} 改观条件</b>");
+    lines.push("<b>\u{1F504} 改变判断的条件</b>");
     for (const m of briefing.mindChangeConditions.slice(0, 3)) {
       lines.push(`• "${m.thesisTitle}" (${m.currentConviction})`);
       lines.push(`  改变条件: ${formatBriefingTextExcerpt(m.conditions.slice(0, 2).join("; "), 260)}`);
@@ -735,7 +735,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     }
   }
 
-  // ── 论点冲突 ──
+  // ── 同一资产判断不一致 ──
   const conflicts = briefing.thesisConflicts ?? [];
   if (conflicts.length > 0) {
     const ranked = [...conflicts]
@@ -744,12 +744,12 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
         return rank(b.severity) - rank(a.severity);
       })
       .slice(0, 3);
-    lines.push("<b>\u{26A1} 论点冲突</b>");
+    lines.push("<b>\u{26A1} 同一资产判断不一致</b>");
     for (const c of ranked) {
       const sevLabel = c.severity === "high" ? "高" : c.severity === "medium" ? "中" : "低";
       const assets = c.overlappingAssets.slice(0, 3).map(k => formatAssetLabelByKey(k)).join(", ");
       lines.push(`• [${sevLabel}] "${c.thesisA.title}" (${c.thesisA.conviction}) × "${c.thesisB.title}" (${c.thesisB.conviction})`);
-      lines.push(`  冲突资产: ${assets}`);
+      lines.push(`  重叠资产: ${assets}`);
     }
     lines.push("");
   }

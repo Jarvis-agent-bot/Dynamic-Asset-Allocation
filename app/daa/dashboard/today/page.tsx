@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import AgentBriefingView from "./_components/AgentBriefingView";
+import AssistantChatPanel from "./_components/AssistantChatPanel";
 import RealtimeNewsStream from "./_components/RealtimeNewsStream";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 
@@ -11,6 +12,9 @@ export default function TodayPage() {
         <Suspense fallback={<div className="py-20 text-center text-sm text-[var(--muted)]">加载中...</div>}>
           <AgentBriefingView />
         </Suspense>
+      </SectionErrorBoundary>
+      <SectionErrorBoundary sectionName="Agent 对话">
+        <AssistantChatPanel />
       </SectionErrorBoundary>
       <SectionErrorBoundary sectionName="实时新闻流">
         <RealtimeNewsStream />

@@ -109,7 +109,7 @@ export async function getActiveTheses(): Promise<ResearchThread[]> {
 /**
  * 归档超过 staleDays 天未更新的 uncertain thesis。
  * prioritizeNode 会为驱动调查创建 conviction=uncertain 的待确认 thesis，如果长时间没被 investigate 节点转正，
- * 它们会在冲突检测、认知缺口等下游产生噪声。此函数在每次 observe 时清扫一次。
+ * 它们会在冲突检测、论点复核清单等下游产生噪声。此函数在每次 observe 时清扫一次。
  * 返回归档的 thesis id 列表，便于日志观察。
  */
 export async function archiveStaleUncertainTheses(staleDays = 7, protectedAssetKeys: string[] = []): Promise<string[]> {
@@ -193,7 +193,7 @@ export async function updateThesis(
 /**
  * 只刷新 updated_at，不改其他字段。
  * 供 investigateNode 在"调查完成但 thesis 未变化"时使用，避免
- * 认知缺口天数永远增长的 bug（medium thesis 被调查后仍显示 N 天未调查）。
+ * 论点复核天数永远增长的 bug（medium thesis 被调查后仍显示 N 天未调查）。
  */
 export async function touchThesis(id: string): Promise<void> {
   const ownerAccountId = getDaaAccountScopeId();

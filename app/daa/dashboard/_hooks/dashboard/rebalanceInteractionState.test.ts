@@ -111,4 +111,18 @@ describe("deriveRebalanceInteractionState", () => {
     expect(state.sellProposalCount).toBe(1);
     expect(state.rebalanceChecklistAllPassed).toBe(true);
   });
+
+  it("does not count tiny residual positions as active holdings", () => {
+    const state = deriveRebalanceInteractionState({
+      assetRows: [
+        makeAssetRow({ assetKey: "US::AAPL", holdingQty: 10, valuationBase: 1000, actualWeightPct: 10 }),
+        makeAssetRow({ assetKey: "US::TINY", holdingQty: 0.001, valuationBase: 0.2, actualWeightPct: 0.002 }),
+      ],
+      currentCycle: null,
+      riskCheck: null,
+      busy: false,
+    });
+
+    expect(state.summary.holdingAssets).toBe(1);
+  });
 });

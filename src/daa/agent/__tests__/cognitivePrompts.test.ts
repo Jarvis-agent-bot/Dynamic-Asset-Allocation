@@ -325,7 +325,7 @@ describe("formatBriefingForTelegram", () => {
       estimatedCost: 0,
     };
     const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 0, memoriesCount: 0 });
-    expect(html).toContain("市场与预期一致");
+    expect(html).toContain("没有发现会改变当前判断的新信号");
   });
 
   it("有自动跟踪但无目标权重计划时，明确说明不会直接调仓", () => {
@@ -335,7 +335,7 @@ describe("formatBriefingForTelegram", () => {
         assetKey: "US::NVDA",
         portfolioWeight: 0.107,
         daysSinceLastInvestigation: 2,
-        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向（权重 10.7%，2 天未更新）",
+        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向（权重 10.7%，上次复核 2 天前）",
         suggestedInvestigation: "关注维度：组合、资产配置、宏观",
       }],
       mindChangeConditions: [],
@@ -494,7 +494,7 @@ describe("formatBriefingForTelegram", () => {
     expect(html).not.toContain("小仓位论点");
   });
 
-  it("渲染论点冲突板块（thesisConflicts 存在）", () => {
+  it("渲染同一资产判断不一致板块（thesisConflicts 存在）", () => {
     const briefing: DailyBriefing = {
       surprises: [],
       cognitionGaps: [],
@@ -513,7 +513,7 @@ describe("formatBriefingForTelegram", () => {
       }],
     };
     const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 0, thesesCount: 2, memoriesCount: 0 });
-    expect(html).toContain("论点冲突");
+    expect(html).toContain("同一资产判断不一致");
     expect(html).toContain("看多A");
     expect(html).toContain("看空A");
     // 资产标签走 assetRegistry：US::NVDA → "英伟达 NVDA"

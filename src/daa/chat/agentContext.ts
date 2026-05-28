@@ -3,6 +3,9 @@ import { normalizeSystemConfig, type DaaSystemConfig } from "@/src/daa/config/sy
 import { resolveLlmConfig, type LlmRuntimeConfig, type LlmTaskType } from "@/src/daa/llm/llmClient";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
+import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
+import { getActiveTheses } from "@/src/daa/agent/store/thesisStore";
+import type { AgentRun, ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
@@ -24,6 +27,7 @@ export type DaaAssistantRuntimeContext = {
   sessionMemory: DaaChatSessionMemory | null;
   learningDigest: string;
   systemDigest: string;
+  brainContextDigest: string;
   storedPendingAction: DaaChatPendingAction | null;
 };
 
@@ -212,12 +216,69 @@ export function buildAssistantSystemDigest(input: {
 
   return [
     "执行边界：仅支持本地模拟，可生成建议、进入待确认并执行模拟调仓或模拟买卖；不支持真实券商下单。",
-    "可读上下文：组合快照、市场状态、最近周期、会话记忆、复盘学习摘要、活跃论点、Agent 日报。",
-    "权限边界：不返回敏感密钥明文、不直接改系统设置、不跳过确认直接成交。",
+    "通道权限：Web 与 Telegram 入站在登录或 allowlist 通过后，共用同一套运行上下文、工具和大脑授权矩阵。",
+    "可读上下文：组合快照、市场状态、最近周期、会话记忆、复盘学习摘要、活跃论点、Agent 日报与策略建议摘要。",
+    "权限边界：不返回敏感密钥明文；模拟交易/调仓需待确认；系统设置只允许显式大脑模式切换，不开放任意配置写入；不支持真实券商下单。",
     `大脑模式：${describeBrainModeSummary(summarizedConfig)}`,
     `大脑动作边界：${buildBrainBoundaryText(summarizedConfig)}`,
     `当前 LLM 路由：${llmSummary || "暂无"}`,
     `认知 Agent：${cognitiveSummary}`,
+  ].join("\n");
+}
+
+function formatThreadAge(updatedAt: string): string {
+  const time = Date.parse(updatedAt);
+  if (!Number.isFinite(time)) return "时间未知";
+  const days = Math.max(0, Math.floor((Date.now() - time) / 86400000));
+  return `上次复核 ${days} 天前`;
+}
+
+export function buildAssistantBrainContextDigest(input: {
+  activeTheses: ResearchThread[];
+  latestRun: AgentRun | null;
+}): string {
+  const thesisLines = input.activeTheses
+    .slice(0, 20)
+    .map((thread) => {
+      const assets = thread.assetKeys.slice(0, 5).join(",") || "未绑定资产";
+      const text = normalizeText(thread.thesisText).slice(0, 140);
+      return `- ${thread.title} | ${thread.conviction} | ${assets} | ${formatThreadAge(thread.updatedAt)}${text ? ` | ${text}` : ""}`;
+    });
+
+  const latestRun = input.latestRun;
+  const briefing = latestRun?.briefing ?? null;
+  const changeLines = (briefing?.surprises ?? [])
+    .slice(0, 5)
+    .map((item) => `- [${item.severityScore}/10] ${item.title}: ${normalizeText(item.description).slice(0, 140)}`);
+  const reviewLines = (briefing?.cognitionGaps ?? [])
+    .slice(0, 8)
+    .map((item) => `- ${item.assetKey}: ${normalizeText(item.uncertaintyReason).slice(0, 140)}${item.suggestedInvestigation ? `；${normalizeText(item.suggestedInvestigation).slice(0, 100)}` : ""}`);
+  const conditionLines = (briefing?.mindChangeConditions ?? [])
+    .slice(0, 8)
+    .map((item) => `- ${item.thesisTitle}(${item.currentConviction}): ${item.conditions.slice(0, 3).join("；")}`);
+  const strategyIntents = (briefing?.strategyOverlay?.targetAllocationPlan?.intents ?? [])
+    .slice(0, 8)
+    .map((item) => `- ${item.symbol || item.assetKey}: 目标 ${item.proposedTargetWeightPct.toFixed(1)}%，置信 ${item.confidence.toFixed(0)}%，${normalizeText(item.reasoning).slice(0, 100)}`);
+
+  return [
+    `活跃论点（${input.activeTheses.length} 个）：`,
+    thesisLines.join("\n") || "暂无",
+    "",
+    latestRun
+      ? `最新 Agent 运行：${latestRun.status} / ${new Date(latestRun.createdAt).toLocaleString("zh-CN")} / tokens ${latestRun.totalTokens}`
+      : "最新 Agent 运行：暂无",
+    "",
+    "需要复核的变化：",
+    changeLines.join("\n") || "暂无",
+    "",
+    "论点复核：",
+    reviewLines.join("\n") || "暂无",
+    "",
+    "改变判断的条件：",
+    conditionLines.join("\n") || "暂无",
+    "",
+    "策略建议摘要：",
+    strategyIntents.join("\n") || normalizeText(briefing?.strategyOverlay?.targetAllocationPlan?.reasoning) || "暂无",
   ].join("\n");
 }
 
@@ -230,7 +291,7 @@ export async function loadAssistantRuntimeContext(sessionId: string): Promise<Da
     apiKey: "",
     timeoutMs: 15000,
   };
-  const [readModel, recentMessages, sessionMemory, learningDigest, system, analysisRoute, decisionRoute, researchRoute] = await Promise.all([
+  const [readModel, recentMessages, sessionMemory, learningDigest, system, analysisRoute, decisionRoute, researchRoute, activeTheses, latestRun] = await Promise.all([
     buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false }),
     listChatMessages(sessionId, 12),
     getChatSessionMemory(sessionId),
@@ -243,6 +304,8 @@ export async function loadAssistantRuntimeContext(sessionId: string): Promise<Da
     resolveLlmConfig("analysis").catch(() => emptyRoute),
     resolveLlmConfig("decision").catch(() => emptyRoute),
     resolveLlmConfig("research").catch(() => emptyRoute),
+    getActiveTheses().catch(() => []),
+    getLatestRun().catch(() => null),
   ]);
   const systemDigest = buildAssistantSystemDigest({
     llmRoutes: [
@@ -261,6 +324,10 @@ export async function loadAssistantRuntimeContext(sessionId: string): Promise<Da
     sessionMemory,
     learningDigest,
     systemDigest,
+    brainContextDigest: buildAssistantBrainContextDigest({
+      activeTheses,
+      latestRun,
+    }),
     storedPendingAction: parsePendingAction(sessionMemory?.metaJson?.pendingAction),
   };
 }

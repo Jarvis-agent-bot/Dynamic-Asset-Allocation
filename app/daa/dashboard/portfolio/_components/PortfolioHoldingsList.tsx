@@ -12,6 +12,7 @@ import { DaaSurfaceEmptyState, DaaSurfacePanel } from "@/app/daa/dashboard/_comp
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
 import { useFundamentalsState, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
+import { filterVisibleHoldings, MIN_VISIBLE_HOLDING_VALUE_BASE } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 import {
   deriveGrowthRequirementBadge,
@@ -255,7 +256,9 @@ export function PortfolioHoldingsList(props: {
   const { rows, baseCurrency } = props;
   const [activeCategory, setActiveCategory] = useState("all");
 
-  const holdingRows = useMemo(() => rows.filter((r) => r.holdingQty > 0), [rows]);
+  const rawHoldingCount = useMemo(() => rows.filter((r) => r.holdingQty > 0).length, [rows]);
+  const holdingRows = useMemo(() => filterVisibleHoldings(rows), [rows]);
+  const hiddenTinyHoldingCount = Math.max(0, rawHoldingCount - holdingRows.length);
 
   // 批量获取所有持仓的 sparkline（1 次 API 调用替代 N 次）
   const sparklineSymbols = useMemo(
@@ -284,10 +287,14 @@ export function PortfolioHoldingsList(props: {
 
   if (holdingRows.length === 0) {
     return (
-      <DaaSurfacePanel accent="slate" title="持仓" subtitle="当前没有持仓标的">
+      <DaaSurfacePanel
+        accent="slate"
+        title="持仓"
+        subtitle={hiddenTinyHoldingCount > 0 ? `已隐藏 ${hiddenTinyHoldingCount} 个市值低于 ${baseCurrency} ${MIN_VISIBLE_HOLDING_VALUE_BASE} 的残留仓位` : "当前没有持仓标的"}
+      >
         <DaaSurfaceEmptyState
-          title="暂无持仓"
-          description="在观察列表中添加标的并执行买入操作后，持仓将在此显示。"
+          title={hiddenTinyHoldingCount > 0 ? "暂无有效持仓" : "暂无持仓"}
+          description={hiddenTinyHoldingCount > 0 ? "只保留达到最小有效市值的仓位，清仓后留下的极小残值不会再占用持仓列表。" : "在观察列表中添加标的并执行买入操作后，持仓将在此显示。"}
         />
       </DaaSurfacePanel>
     );
@@ -316,6 +323,12 @@ export function PortfolioHoldingsList(props: {
               {cat.key === "all" ? ` ${holdingRows.length}` : ""}
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {hiddenTinyHoldingCount > 0 ? (
+        <div className="px-1 text-xs leading-5 text-[var(--faint)]">
+          已隐藏 {hiddenTinyHoldingCount} 个低于 {baseCurrency} {MIN_VISIBLE_HOLDING_VALUE_BASE} 的残留仓位。
         </div>
       ) : null}
 

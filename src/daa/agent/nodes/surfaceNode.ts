@@ -29,7 +29,7 @@ import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfi
  *
  * - 触发条件（二选一）：
    *   (1) thesis conviction=uncertain 且关联持仓或观察列表（必须尽快给出明确判断）
-   *   (2) 持仓权重 > 5% 或观察列表 thesis 超过 7 天未更新
+   *   (2) 持仓权重 > 5% 或观察列表 thesis 距上次复核超过 7 天
  * - 同 assetKey 多 thesis 去重，取最陈旧的一条
  * - triggerReason / focusHint 字段直接用 thesis 数据拼接，不再让 LLM 改写
  */
@@ -57,12 +57,12 @@ function computeDueForReview(
               ? `论点刚进入观察态，等待下一轮证据确认（权重 ${(weight * 100).toFixed(1)}%）`
               : "观察列表论点刚进入观察态，等待下一轮证据确认")
             : (weight > 0
-              ? `论点仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，${days} 天未更新）`
-              : `观察列表论点仍处观察态，尚未形成高置信度方向（${days} 天未更新）`)
+              ? `论点仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，上次复核 ${days} 天前）`
+              : `观察列表论点仍处观察态，尚未形成高置信度方向（上次复核 ${days} 天前）`)
         )
         : (weight > 0
-          ? `高权重持仓需要复核：权重 ${(weight * 100).toFixed(1)}%，已 ${days} 天未得到新调查`
-          : `观察列表论点需要复核：已 ${days} 天未得到新调查`);
+          ? `高权重持仓需要复核：权重 ${(weight * 100).toFixed(1)}%，上次复核 ${days} 天前`
+          : `观察列表论点需要复核：上次复核 ${days} 天前`);
       const focusHint = t.invalidationConditions
         ? `核对失效条件：${t.invalidationConditions.slice(0, 80)}`
         : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视论点：${t.title}`);

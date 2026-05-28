@@ -1,5 +1,6 @@
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
+import { countVisibleHoldings } from "@/app/daa/dashboard/_shared/holdingVisibility";
 
 export type RebalanceInteractionStage =
   | "empty"
@@ -62,7 +63,7 @@ export function deriveRebalanceInteractionState(input: {
   busy: boolean;
 }) {
   const summary = {
-    holdingAssets: input.assetRows.filter((row) => row.holdingQty > 0).length,
+    holdingAssets: countVisibleHoldings(input.assetRows),
     watchlistAssets: input.assetRows.filter((row) => row.watchEnabled).length,
   };
   const currentRiskCheck = input.riskCheck;

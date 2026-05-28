@@ -18,7 +18,7 @@ function formatLatestRunSummary(latestRun: Awaited<ReturnType<typeof getLatestRu
     `最近运行：${latestRun.status}`,
     `时间：${new Date(latestRun.createdAt).toLocaleString("zh-CN")}`,
     `Tokens：${latestRun.totalTokens}`,
-    `Surprises：${latestRun.surprises.length}`,
+    `复核变化：${latestRun.surprises.length}`,
   ].join(" | ");
 }
 
@@ -39,7 +39,8 @@ export async function buildAssistantBrainStatusText(runtimeContext: DaaAssistant
 
   return [
     `当前模式：全权大脑 / ${describeBrainModeSummary(runtimeContext.systemConfig)}。`,
-    `可见范围：组合 ${holdings} 个持仓，总权益 ${Number(totalEquity || 0).toFixed(2)} ${baseCurrency}；同时可读系统配置、LLM 路由、认知 Agent 状态、会话记忆与日报摘要。`,
+    "通道权限：Web 对话和 Telegram 机器人共用同一套工具、上下文和大脑授权矩阵；Telegram 额外需要 webhook secret 与 allowlist 通过。",
+    `可见范围：组合 ${holdings} 个持仓，总权益 ${Number(totalEquity || 0).toFixed(2)} ${baseCurrency}；同时可读系统配置、LLM 路由、认知 Agent 状态、活跃论点、会话记忆、复盘学习与日报摘要。`,
     `工具底座：共 ${totalTools} 个 Agent 工具，其中 observe ${observeTools} / analyze ${analyzeTools} / meta ${metaTools} / act ${actTools}。`,
     `动作边界：${buildBrainBoundaryText(runtimeContext.systemConfig)}`,
     `认知状态：当前活跃论点 ${theses.length} 个。${formatLatestRunSummary(latestRun)}`,
@@ -102,7 +103,7 @@ export async function runAssistantCognitiveCycle(runtimeContext?: DaaAssistantRu
     "已手动触发一轮 Cognitive Agent 调查。",
     `runId: ${result.runId}`,
     `更新论点：${result.thesesUpdated}`,
-    `Surprises：${result.surprises.length}`,
+    `复核变化：${result.surprises.length}`,
     `Tokens：${result.totalTokens}`,
     `耗时：${result.durationMs}ms`,
     result.errors.length > 0 ? `错误：${result.errors.slice(0, 3).join("；")}` : "状态：执行完成。",

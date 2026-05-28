@@ -97,6 +97,23 @@ type DashboardPageModelOverrides =
     dialogProps?: Partial<DashboardPageModel["dialogProps"]>;
   };
 
+function createAssetRowFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    assetKey: "US::AAPL",
+    symbol: "AAPL",
+    market: "US",
+    currency: "USD",
+    holdingQty: 1,
+    lastPrice: 100,
+    valuationBase: 100,
+    actualWeightPct: 10,
+    fxRateToBase: 1,
+    watchEnabled: false,
+    targetWeightHint: 0,
+    ...overrides,
+  };
+}
+
 function createModel(overrides: DashboardPageModelOverrides = {}): DashboardPageModel {
   const {
     tableProps: tablePropsOverride,
@@ -111,7 +128,10 @@ function createModel(overrides: DashboardPageModelOverrides = {}): DashboardPage
   };
   const baseBootstrap = buildWorkbenchBootstrapFixture();
   const tableProps: DashboardPageModel["tableProps"] = {
-    rows: [],
+    rows: [
+      createAssetRowFixture({ assetKey: "US::AAPL", symbol: "AAPL" }),
+      createAssetRowFixture({ assetKey: "US::MSFT", symbol: "MSFT" }),
+    ] as DashboardPageModel["tableProps"]["rows"],
     baseCurrency: "USD",
     counts: { all: 0, holdings: 2, watchlist: 5, basket: 1 },
     onAddToExecution: vi.fn(async () => undefined),
@@ -261,6 +281,21 @@ describe("ActiveTabPanel", () => {
 
     expect(onNavigateTab).toHaveBeenCalledWith("positions");
     expect(model.setActiveTab).not.toHaveBeenCalled();
+  });
+
+  it("持仓 tab 计数忽略低市值残留仓位", () => {
+    const model = createModel({
+      tableProps: {
+        rows: [
+          createAssetRowFixture({ assetKey: "US::AAPL", symbol: "AAPL", valuationBase: 100 }),
+          createAssetRowFixture({ assetKey: "US::TINY", symbol: "TINY", holdingQty: 0.001, valuationBase: 0.2, actualWeightPct: 0.002 }),
+        ] as DashboardPageModel["tableProps"]["rows"],
+      },
+    });
+
+    render(<ActiveTabPanel model={model} />);
+
+    expect(screen.getByRole("tab", { name: "持仓 1" })).toBeTruthy();
   });
 
   it("观察列表展示搜索栏和列表", () => {

@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Agent Briefing 视图 — 显示 Cognitive Agent 的每日三类输出
+ * Agent Briefing 视图 — 显示 Cognitive Agent 的每日输出
  *
- * 今日意外 / 自动跟踪 / 改观条件
+ * 需要复核的变化 / 论点复核 / 改变判断的条件
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -256,7 +256,7 @@ export default function AgentBriefingView() {
           </div>
           <div className="grid grid-cols-3 gap-4 text-xs text-[var(--muted)]">
             <div>论点更新: <span className="text-[var(--text)]">{runResult.thesesUpdated}</span></div>
-            <div>意外发现: <span className="text-[var(--text)]">{runResult.surprises.length}</span></div>
+            <div>复核变化: <span className="text-[var(--text)]">{runResult.surprises.length}</span></div>
             <div>Tokens: <span className="text-[var(--text)]">{runResult.totalTokens}</span></div>
           </div>
           {runResult.errors.length > 0 && (
@@ -267,7 +267,7 @@ export default function AgentBriefingView() {
         </div>
       )}
 
-      {/* 日报三大板块 */}
+      {/* 日报板块 */}
       {briefing && <BriefingPanels briefing={briefing} />}
 
       {/* 活跃论点列表 */}
@@ -341,12 +341,15 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
 
   return (
     <div className="space-y-3">
-      {/* 今日意外 */}
+      {/* 需要复核的变化 */}
       {hasSurprises && (
         <div className="rounded-xl border border-amber-500/15 bg-amber-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-300">
             <Zap className="h-3.5 w-3.5" />
-            今日意外
+            需要复核的变化
+            <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
+              （与现有论点不一致，或可能改变仓位假设的新信号）
+            </span>
           </h3>
           <div className="space-y-2">
             {briefing.surprises.slice(0, 5).map((s, i) => (
@@ -365,14 +368,14 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
         </div>
       )}
 
-      {/* 研究论点待复核：由代码按 thesis 状态确定，避免让 LLM 编造权重或天数。 */}
+      {/* 论点复核：由代码按 thesis 状态确定，避免让 LLM 编造权重或天数。 */}
       {hasGaps && (
         <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-300">
             <Search className="h-3.5 w-3.5" />
-            研究论点待复核
+            论点复核
             <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
-              （这里显示距离论点有效更新的时间；定时任务仍会运行，但不代表每轮都会改写该论点）
+              （时间指上次 Agent 调查或证据刷新，不是行情数据更新时间；结论不变也会刷新）
             </span>
           </h3>
           <div className="space-y-2">
@@ -385,8 +388,8 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
                     <p className="mt-0.5 text-blue-400/80">→ {g.suggestedInvestigation}</p>
                   )}
                 </div>
-                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400" title="距上次论点有效调查更新的天数，不等于任务未运行">
-                  {g.portfolioWeight > 0 ? "持仓" : "观察"}论点 {g.daysSinceLastInvestigation}天未更新
+                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400" title="距上次论点调查或证据刷新的天数，不等于行情数据未更新。若复核后结论不变，也会刷新这个时间。">
+                  {g.portfolioWeight > 0 ? "持仓" : "观察"} · 上次复核 {g.daysSinceLastInvestigation}天前
                 </span>
               </div>
             ))}
@@ -394,12 +397,12 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
         </div>
       )}
 
-      {/* 改观条件 */}
+      {/* 改变判断的条件 */}
       {hasConditions && (
         <div className="rounded-xl border border-purple-500/15 bg-purple-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-purple-300">
             <RotateCcw className="h-3.5 w-3.5" />
-            改观条件
+            改变判断的条件
           </h3>
           <div className="space-y-2">
             {briefing.mindChangeConditions.slice(0, 5).map((m, i) => {
@@ -427,12 +430,15 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
           </div>
         </div>
       )}
-      {/* 论点冲突 */}
+      {/* 同一资产判断不一致 */}
       {hasConflicts && (
         <div className="rounded-xl border border-orange-500/15 bg-orange-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-orange-300">
             <AlertTriangle className="h-3.5 w-3.5" />
-            论点冲突 ({briefing.thesisConflicts!.length})
+            同一资产判断不一致 ({briefing.thesisConflicts!.length})
+            <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
+              （同一资产上同时存在偏多与偏空判断）
+            </span>
           </h3>
           <div className="space-y-2">
             {briefing.thesisConflicts!.slice(0, 5).map((c, i) => (

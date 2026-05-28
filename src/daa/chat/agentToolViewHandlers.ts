@@ -14,7 +14,7 @@ export function buildAssistantHelpText(): string {
     "4. 运行一轮 Agent 调查 / 初始化论点 / 查看 Agent 日报",
     "5. 生成调仓建议 / 执行调仓",
     "6. 买入 QQQ 10股 / 卖出 AAPL 5股（本地模拟）",
-    "7. 活跃论点 / Agent 日报 / 研究论点待复核",
+    "7. 活跃论点 / Agent 日报 / 论点复核",
     "8. 执行类命令会先进入待确认，回复“确认”才真正执行",
     "9. 如果要放弃待确认动作，直接回复“取消”",
   ].join("\n");
@@ -166,13 +166,13 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
       const b = run.briefing;
       const parts: string[] = [`Agent 日报 (${new Date(run.createdAt).toLocaleString("zh-CN")})\n`];
       if (b.surprises.length > 0) {
-        parts.push("⚡ 今日意外:");
+        parts.push("⚡ 需要复核的变化:");
         for (const s of b.surprises.slice(0, 3)) parts.push(`  [${s.severityScore}/10] ${s.title}: ${s.description}`);
       } else {
-        parts.push("⚡ 市场与预期一致，无重大意外。");
+        parts.push("⚡ 没有发现会改变当前判断的新信号。");
       }
       if (b.cognitionGaps.length > 0) {
-        parts.push("\n🔍 研究论点待复核:");
+        parts.push("\n🔍 论点复核:");
         for (const g of b.cognitionGaps.slice(0, 3)) {
           parts.push(`  ${g.assetKey} — ${g.uncertaintyReason}`);
           if (g.suggestedInvestigation) parts.push(`    ↳ ${g.suggestedInvestigation}`);
@@ -184,7 +184,7 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 已设目标 ${c.watchlistTargetedAssets} 个 | 入场候选就绪 ${c.autoEntryReadyAssets} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
       }
       if (b.mindChangeConditions.length > 0) {
-        parts.push("\n🔄 改观条件:");
+        parts.push("\n🔄 改变判断的条件:");
         for (const m of b.mindChangeConditions.slice(0, 3)) parts.push(`  "${m.thesisTitle}" (${m.currentConviction}): ${m.conditions.slice(0, 2).join("; ")}`);
       }
       const overlay = b.strategyOverlay ?? null;

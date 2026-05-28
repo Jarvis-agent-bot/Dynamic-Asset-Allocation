@@ -16,6 +16,7 @@ import {
 
 import { WatchlistSearchBar } from "@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar";
 import { RiskOverview } from "./RiskOverview";
+import { countVisibleHoldings } from "./holdingVisibility";
 
 const LazyTargetWeightSummary = dynamic<TargetWeightSummaryProps>(
   () => import("@/app/daa/dashboard/portfolio/_components/TargetWeightSummary").then((mod) => mod.TargetWeightSummary),
@@ -35,13 +36,14 @@ export function ActiveTabPanel(props: {
 }) {
   const { model } = props;
   const hasTargetWeights = model.tableProps.rows.some((row) => row.watchEnabled && row.targetWeightHint > 0);
+  const visibleHoldingCount = countVisibleHoldings(model.tableProps.rows);
 
   return (
     <div className="space-y-4">
       {/* Tab 切换 */}
       <div className="inline-flex rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-1.5" role="tablist">
         {([
-          { key: "positions", label: `持仓 ${model.summary.holdingAssets}` },
+          { key: "positions", label: `持仓 ${visibleHoldingCount}` },
           { key: "watchlist", label: `观察列表 ${model.summary.watchlistAssets}` },
           { key: "analysis", label: "分析" },
         ] as const).map((item) => (
