@@ -55,7 +55,7 @@ export default function AssistantChatPanel() {
 
   const quickPrompts = useMemo(() => [
     "解释今天需要我复核的变化",
-    "哪些持仓论点最久没有有效更新？",
+    "哪些持仓最需要复核？",
     "当前组合最大的风险暴露是什么？",
   ], []);
 
@@ -79,7 +79,7 @@ export default function AssistantChatPanel() {
     <DaaSurfacePanel
       accent="indigo"
       title="和 Agent 对话"
-      subtitle="直接追问组合、论点、风险与调仓建议；需要下单或执行调仓时仍会走确认流程。"
+      subtitle="追问组合、复核项、风险和调仓建议；执行类动作仍会确认。"
       action={(
         <DaaSurfaceActionButton
           tone="slate"
@@ -130,7 +130,7 @@ export default function AssistantChatPanel() {
             <div className="flex h-[188px] flex-col items-center justify-center text-center">
               <Bot className="mb-3 h-8 w-8 text-[var(--faint)]" />
               <div className="text-sm font-medium text-[var(--text)]">还没有 Web 对话</div>
-              <div className="mt-1 text-xs leading-5 text-[var(--muted)]">可以从组合状态、论点复核或调仓建议开始问。</div>
+              <div className="mt-1 text-xs leading-5 text-[var(--muted)]">可以从复核项、仓位风险或调仓建议开始问。</div>
             </div>
           )}
           {assistant.sending ? (

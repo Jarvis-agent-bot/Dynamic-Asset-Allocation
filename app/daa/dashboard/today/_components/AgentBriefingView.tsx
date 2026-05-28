@@ -1,14 +1,18 @@
 "use client";
 
 /**
- * Agent Briefing 视图 — 显示 Cognitive Agent 的每日输出
- *
- * 需要复核的变化 / 论点复核 / 改变判断的条件
+ * Agent Briefing 视图 — 将日报压缩为 Today 页可执行的复核清单。
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Brain, Eye, RefreshCw, Loader2, Zap, Search, RotateCcw } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Search, Zap } from "lucide-react";
+
+import {
+  DaaSurfaceActionButton,
+  DaaSurfaceEmptyState,
+  DaaSurfacePanel,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 
 interface Surprise {
@@ -85,6 +89,20 @@ interface AgentStatus {
   schedule: { mode: string; timesUtc: string[] } | null;
 }
 
+type ReviewTone = "amber" | "blue" | "orange" | "red" | "slate";
+
+interface ReviewItem {
+  key: string;
+  label: string;
+  title: string;
+  detail: string;
+  action?: string;
+  meta?: string;
+  tone: ReviewTone;
+  href?: string;
+  priority: number;
+}
+
 /** 计算下次 cron 运行时间（UTC timesUtc，返回最近未来的一次） */
 function computeNextRun(timesUtc: string[]): Date | null {
   if (!timesUtc || timesUtc.length === 0) return null;
@@ -117,6 +135,111 @@ function formatCountdown(target: Date): string {
   return `${hrs}h${restMin.toString().padStart(2, "0")}m`;
 }
 
+function formatLatestRun(value?: string): string {
+  if (!value) return "尚未运行";
+  return new Date(value).toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatSchedule(schedule: AgentStatus["schedule"]): string {
+  if (!schedule) return "手动";
+  const nextRun = computeNextRun(schedule.timesUtc);
+  const modeLabel = schedule.mode === "2x_daily" ? "每日 2 次"
+    : schedule.mode === "daily" ? "每日 1 次"
+    : schedule.mode === "every_6h" ? "每 6 小时"
+    : "手动";
+  if (!nextRun) return modeLabel;
+  return `${modeLabel} · 下次 ${nextRun.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} (${formatCountdown(nextRun)})`;
+}
+
+function countReviewItems(briefing: DailyBriefing | null): number {
+  if (!briefing) return 0;
+  return briefing.surprises.length
+    + briefing.cognitionGaps.length
+    + (briefing.thesisConflicts ?? []).length
+    + (briefing.thesisFailureImpacts ?? []).filter((r) => r.riskLevel !== "low").length;
+}
+
+function buildReviewItems(briefing: DailyBriefing): ReviewItem[] {
+  const items: ReviewItem[] = [];
+
+  briefing.surprises.forEach((s, index) => {
+    items.push({
+      key: `surprise-${index}`,
+      label: "新变化",
+      title: s.title,
+      detail: s.description,
+      action: s.suggestedAction,
+      meta: `重要度 ${s.severityScore}`,
+      tone: s.severityScore >= 8 ? "red" : "amber",
+      priority: 90 + s.severityScore,
+    });
+  });
+
+  briefing.cognitionGaps.forEach((g, index) => {
+    const holdingLabel = g.portfolioWeight > 0 ? `持仓 ${(g.portfolioWeight * 100).toFixed(1)}%` : "观察资产";
+    items.push({
+      key: `gap-${index}`,
+      label: "需要复核",
+      title: formatAssetLabelByKey(g.assetKey),
+      detail: g.uncertaintyReason,
+      action: g.suggestedInvestigation,
+      meta: `${holdingLabel} · 上次复核 ${g.daysSinceLastInvestigation} 天前`,
+      tone: "blue",
+      priority: 70 + Math.min(g.daysSinceLastInvestigation, 30) + Math.round(g.portfolioWeight * 100),
+    });
+  });
+
+  (briefing.thesisConflicts ?? []).forEach((c, index) => {
+    items.push({
+      key: `conflict-${index}`,
+      label: "判断不一致",
+      title: c.overlappingAssets.map((k) => formatAssetLabelByKey(k)).join(", ") || "同一资产",
+      detail: `${c.thesisA.title} / ${c.thesisB.title}`,
+      meta: `${c.thesisA.conviction} vs ${c.thesisB.conviction}`,
+      tone: "orange",
+      priority: 80,
+    });
+  });
+
+  (briefing.thesisFailureImpacts ?? [])
+    .filter((r) => r.riskLevel !== "low")
+    .forEach((r, index) => {
+      items.push({
+        key: `risk-${index}`,
+        label: "高影响",
+        title: r.thesisTitle,
+        detail: `相关资产：${r.affectedAssets.slice(0, 3).map((a) => formatAssetLabelByKey(a.assetKey)).join(", ")}`,
+        meta: `相关持仓 ${(r.totalExposurePct * 100).toFixed(1)}%`,
+        tone: r.riskLevel === "critical" ? "red" : "amber",
+        href: `/daa/dashboard/today/thesis/${r.threadId}`,
+        priority: 85 + Math.round(r.totalExposurePct * 100),
+      });
+    });
+
+  return items.sort((a, b) => b.priority - a.priority).slice(0, 8);
+}
+
+function toneClasses(tone: ReviewTone): string {
+  if (tone === "red") return "border-red-400/22 bg-red-500/10 text-red-200";
+  if (tone === "amber") return "border-amber-400/22 bg-amber-500/10 text-amber-200";
+  if (tone === "blue") return "border-sky-400/22 bg-sky-500/10 text-sky-200";
+  if (tone === "orange") return "border-orange-400/22 bg-orange-500/10 text-orange-200";
+  return "border-[var(--border)] bg-[rgba(255,255,255,0.04)] text-[var(--muted)]";
+}
+
+function ReviewBadge({ tone, children }: { tone: ReviewTone; children: string }) {
+  return (
+    <span className={`inline-flex shrink-0 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-medium ${toneClasses(tone)}`}>
+      {children}
+    </span>
+  );
+}
+
 export default function AgentBriefingView() {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -136,7 +259,7 @@ export default function AgentBriefingView() {
         setStatus(json.data);
       }
     } catch {
-      // silent
+      // 静默失败，页面保留当前状态。
     } finally {
       setLoading(false);
     }
@@ -152,10 +275,10 @@ export default function AgentBriefingView() {
       if (res.ok) {
         const json = await res.json();
         setRunResult(json.data);
-        await loadStatus(); // 刷新状态
+        await loadStatus();
       }
     } catch {
-      // silent
+      // 静默失败，按钮状态会恢复。
     } finally {
       setRunning(false);
     }
@@ -165,350 +288,209 @@ export default function AgentBriefingView() {
     setRunning(true);
     try {
       const res = await fetch("/api/daa/agent/bootstrap", { method: "POST" });
-      if (res.ok) {
-        await loadStatus();
-      }
+      if (res.ok) await loadStatus();
     } catch {
-      // silent
+      // 静默失败，按钮状态会恢复。
     } finally {
       setRunning(false);
     }
   }, [loadStatus]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        加载 Agent 状态...
-      </div>
-    );
-  }
-
   const theses = status?.theses ?? [];
   const hasTheses = theses.length > 0;
   const briefing = status?.latestRun?.briefing ?? null;
+  const reviewCount = countReviewItems(briefing);
+  const latestRunAt = formatLatestRun(status?.latestRun?.createdAt);
+  const reviewItems = useMemo(() => briefing ? buildReviewItems(briefing) : [], [briefing]);
+
+  if (loading) {
+    return (
+      <DaaSurfacePanel accent="cyan" title="今日复核">
+        <div className="flex items-center justify-center py-16 text-[var(--muted)]">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          加载 Agent 状态...
+        </div>
+      </DaaSurfacePanel>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <DaaSurfacePanel
+      accent="cyan"
+      title="今日复核"
+      subtitle="先看会影响仓位判断的事项；需要展开时直接追问 Agent。"
+      action={(
         <div className="flex items-center gap-2">
-          <Brain className="h-5 w-5 text-indigo-400" />
-          <h2 className="text-lg font-semibold text-[var(--text)]">Agent 认知状态</h2>
-          <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-xs text-[var(--muted)]">
-            {theses.length} 论点 · <Link href="/daa/dashboard/today/memories" className="hover:text-indigo-400 transition-colors">{status?.memoryCount ?? 0} 记忆</Link>
-          </span>
-          {status?.schedule && (() => {
-            const nextRun = computeNextRun(status.schedule.timesUtc);
-            const schedLabel = status.schedule.mode === "2x_daily" ? "每日 2 次"
-              : status.schedule.mode === "daily" ? "每日 1 次"
-              : status.schedule.mode === "every_6h" ? "每 6 小时"
-              : "手动";
-            return (
-              <span
-                className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300"
-                title={`自动运行时段（UTC）: ${status.schedule.timesUtc.join(" / ")}`}
-              >
-                自动 · {schedLabel}
-                {nextRun && ` · 下次 ${nextRun.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} (${formatCountdown(nextRun)})`}
-              </span>
-            );
-          })()}
-        </div>
-        <div className="flex gap-2">
-          {!hasTheses && (
-            <button
+          {!hasTheses ? (
+            <DaaSurfaceActionButton
+              tone="primary"
+              className="h-8 px-2.5 text-xs"
               onClick={triggerBootstrap}
               disabled={running}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
             >
               {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-              初始化论点
-            </button>
-          )}
-          <button
+              初始化
+            </DaaSurfaceActionButton>
+          ) : null}
+          <DaaSurfaceActionButton
+            tone="slate"
+            className="h-8 px-2.5 text-xs"
             onClick={triggerRun}
             disabled={running || !hasTheses}
-            title="通常无需手动触发，系统会按 Schedule 自动运行。这里用于立即刷新一次。"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--faint)] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--muted)] disabled:opacity-40"
-            aria-label="立即手动触发一次 Agent 调查"
+            title="立即刷新一次 Agent 调查"
           >
             {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          </button>
+            刷新
+          </DaaSurfaceActionButton>
         </div>
+      )}
+    >
+      <div className="space-y-5">
+        <div className="grid gap-4 border-b border-[var(--border)] pb-4 sm:grid-cols-3">
+          <SummaryStat label="待复核" value={reviewCount} hint={reviewCount > 0 ? "按影响排序" : "暂无"} />
+          <SummaryStat label="本轮更新" value={briefing?.thesesUpdated ?? 0} hint={`${briefing?.memoriesCreated ?? 0} 条记忆`} />
+          <SummaryStat label="最近运行" value={latestRunAt} hint={formatSchedule(status?.schedule ?? null)} />
+        </div>
+
+        {!hasTheses ? (
+          <DaaSurfaceEmptyState
+            title="Agent 尚未初始化"
+            description="先基于持仓生成研究线索，之后这里会只显示需要你复核的事项。"
+            action={(
+              <DaaSurfaceActionButton tone="primary" onClick={triggerBootstrap} disabled={running}>
+                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                初始化
+              </DaaSurfaceActionButton>
+            )}
+          />
+        ) : briefing ? (
+          <BriefingSummary briefing={briefing} reviewItems={reviewItems} />
+        ) : (
+          <DaaSurfaceEmptyState
+            title="还没有今日复核结果"
+            description="刷新一次后，页面会汇总最需要处理的变化和复核项。"
+            action={(
+              <DaaSurfaceActionButton tone="primary" onClick={triggerRun} disabled={running}>
+                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                刷新
+              </DaaSurfaceActionButton>
+            )}
+          />
+        )}
+
+        {runResult ? (
+          <div className="rounded-[var(--radius-lg)] border border-[var(--primary-border)] bg-[var(--primary-bg)] px-4 py-3 text-xs leading-5 text-[var(--muted)]">
+            <div className="font-medium text-[var(--text)]">调查完成：更新 {runResult.thesesUpdated} 条，发现 {runResult.surprises.length} 条需复核变化。</div>
+            {runResult.errors.length > 0 ? (
+              <div className="mt-1 text-amber-200">{runResult.errors.length} 个错误：{runResult.errors[0]}</div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {status?.latestRun ? (
+          <div className="text-xs leading-5 text-[var(--faint)]">
+            状态 {status.latestRun.status} · {status.latestRun.totalTokens} tokens
+            {briefing?.estimatedCost ? ` · $${briefing.estimatedCost.toFixed(4)}` : ""}
+            {status.memoryCount > 0 ? (
+              <>
+                {" · "}
+                <Link href="/daa/dashboard/today/memories" className="text-[var(--muted)] transition-colors hover:text-[var(--primary)]">
+                  {status.memoryCount} 条记忆
+                </Link>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+    </DaaSurfacePanel>
+  );
+}
 
-      {/* 无论点时的空状态 */}
-      {!hasTheses && (
-        <div className="rounded-xl border border-dashed border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.02)] p-8 text-center">
-          <Brain className="mx-auto mb-3 h-10 w-10 text-[var(--faint)]" />
-          <p className="text-sm text-[var(--muted)]">Agent 尚未初始化。</p>
-          <p className="mt-1 text-xs text-[var(--faint)]">点击「初始化论点」扫描持仓并生成初始研究线索。</p>
-        </div>
-      )}
-
-      {/* 运行结果 */}
-      {runResult && (
-        <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-indigo-300">
-            <Zap className="h-4 w-4" />
-            调查完成
-          </div>
-          <div className="grid grid-cols-3 gap-4 text-xs text-[var(--muted)]">
-            <div>论点更新: <span className="text-[var(--text)]">{runResult.thesesUpdated}</span></div>
-            <div>复核变化: <span className="text-[var(--text)]">{runResult.surprises.length}</span></div>
-            <div>Tokens: <span className="text-[var(--text)]">{runResult.totalTokens}</span></div>
-          </div>
-          {runResult.errors.length > 0 && (
-            <div className="mt-2 text-xs text-amber-400">
-              ⚠ {runResult.errors.length} 个错误: {runResult.errors[0]}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 日报板块 */}
-      {briefing && <BriefingPanels briefing={briefing} />}
-
-      {/* 活跃论点列表 */}
-      {hasTheses && (
-        <div className="space-y-3">
-          <h3 className="flex items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
-            <Eye className="h-3.5 w-3.5" />
-            活跃研究论点
-          </h3>
-          <div className="space-y-2">
-            {theses.map(t => {
-              const daysSince = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
-              const convictionColor =
-                t.conviction === "high" ? "text-emerald-400" :
-                t.conviction === "medium" ? "text-amber-400" :
-                t.conviction === "low" ? "text-red-400" : "text-[var(--faint)]";
-              const stale = daysSince > 14;
-
-              return (
-                <div
-                  key={t.id}
-                  className="rounded-lg border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-3 transition-colors hover:bg-[rgba(255,255,255,0.04)]"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Link href={`/daa/dashboard/today/thesis/${t.id}`} className="truncate text-sm font-medium text-[var(--text)] hover:text-indigo-400 transition-colors">{t.title}</Link>
-                        <span className={`shrink-0 text-xs font-medium ${convictionColor}`}>
-                          {t.conviction}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 line-clamp-2 text-xs text-[var(--muted)]">{t.thesisText}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className={`text-xs ${stale ? "text-amber-400" : "text-[var(--faint)]"}`}>
-                        {daysSince}天前
-                      </div>
-                      <div className="mt-0.5 text-[10px] text-[var(--faint)]">
-                        {t.assetKeys.slice(0, 2).map(k => formatAssetLabelByKey(k)).join(", ")}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 最近运行 */}
-      {status?.latestRun && (
-        <div className="text-xs text-[var(--faint)]">
-          最近运行: {new Date(status.latestRun.createdAt).toLocaleString("zh-CN")} · {status.latestRun.status} · {status.latestRun.totalTokens} tokens
-          {briefing?.estimatedCost ? ` · $${briefing.estimatedCost.toFixed(4)}` : ""}
-        </div>
-      )}
+function SummaryStat({ label, value, hint }: { label: string; value: string | number; hint: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] text-[var(--faint)]">{label}</div>
+      <div className="mt-1 truncate font-[var(--font-mono)] text-lg text-[var(--text)]">{value}</div>
+      <div className="mt-1 truncate text-xs text-[var(--muted)]">{hint}</div>
     </div>
   );
 }
 
-// ── 日报三大板块组件 ──
-
-function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
-  const hasSurprises = briefing.surprises.length > 0;
-  const hasGaps = briefing.cognitionGaps.length > 0;
-  const hasConditions = briefing.mindChangeConditions.length > 0;
-  const hasRisks = (briefing.thesisFailureImpacts ?? []).filter(r => r.riskLevel !== "low").length > 0;
-  const hasConflicts = (briefing.thesisConflicts ?? []).length > 0;
-
-  if (!hasSurprises && !hasGaps && !hasConditions && !hasRisks && !hasConflicts) return null;
+function BriefingSummary({ briefing, reviewItems }: { briefing: DailyBriefing; reviewItems: ReviewItem[] }) {
+  const conditions = briefing.mindChangeConditions.slice(0, 3);
 
   return (
-    <div className="space-y-3">
-      {/* 需要复核的变化 */}
-      {hasSurprises && (
-        <div className="rounded-xl border border-amber-500/15 bg-amber-500/5 p-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-300">
-            <Zap className="h-3.5 w-3.5" />
-            需要复核的变化
-            <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
-              （与现有论点不一致，或可能改变仓位假设的新信号）
-            </span>
-          </h3>
-          <div className="space-y-2">
-            {briefing.surprises.slice(0, 5).map((s, i) => (
-              <div key={i} className="text-xs">
-                <div className="flex items-center gap-2">
-                  <SeverityBadge score={s.severityScore} />
-                  <span className="font-medium text-[var(--text)]">{s.title}</span>
+    <div className="space-y-5">
+      <section>
+        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+          <Search className="h-4 w-4 text-[var(--primary)]" />
+          今天先看
+        </div>
+        {reviewItems.length > 0 ? (
+          <div className="divide-y divide-[var(--border)]">
+            {reviewItems.map((item) => (
+              <ReviewRow key={item.key} item={item} />
+            ))}
+          </div>
+        ) : (
+          <div className="py-6 text-sm text-[var(--muted)]">
+            当前没有需要立即复核的变化。
+          </div>
+        )}
+      </section>
+
+      {conditions.length > 0 ? (
+        <section>
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+            <RotateCcw className="h-4 w-4 text-[var(--amber)]" />
+            什么会改变判断
+          </div>
+          <div className="space-y-3 border-l border-[var(--border)] pl-4">
+            {conditions.map((condition, index) => (
+              <div key={`${condition.thesisTitle}-${index}`} className="text-sm leading-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-[var(--text)]">{condition.thesisTitle}</span>
+                  <span className="text-xs text-[var(--faint)]">{condition.currentConviction}</span>
                 </div>
-                <p className="mt-0.5 pl-7 text-[var(--muted)]">{s.description}</p>
-                {s.suggestedAction && (
-                  <p className="mt-0.5 pl-7 text-amber-400/80">→ {s.suggestedAction}</p>
-                )}
+                <div className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                  {condition.conditions.slice(0, 2).join("；")}
+                </div>
+                {condition.monitoringIndicators.length > 0 ? (
+                  <div className="mt-1 text-[11px] text-[var(--faint)]">
+                    观察：{condition.monitoringIndicators.slice(0, 4).join(" / ")}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* 论点复核：由代码按 thesis 状态确定，避免让 LLM 编造权重或天数。 */}
-      {hasGaps && (
-        <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-300">
-            <Search className="h-3.5 w-3.5" />
-            论点复核
-            <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
-              （时间指上次 Agent 调查或证据刷新，不是行情数据更新时间；结论不变也会刷新）
-            </span>
-          </h3>
-          <div className="space-y-2">
-            {briefing.cognitionGaps.slice(0, 5).map((g, i) => (
-              <div key={i} className="flex items-start justify-between text-xs">
-                <div className="min-w-0 flex-1">
-                  <span className="font-medium text-[var(--text)]">{formatAssetLabelByKey(g.assetKey)}</span>
-                  <p className="mt-0.5 text-[var(--muted)]">{g.uncertaintyReason}</p>
-                  {g.suggestedInvestigation && (
-                    <p className="mt-0.5 text-blue-400/80">→ {g.suggestedInvestigation}</p>
-                  )}
-                </div>
-                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400" title="距上次论点调查或证据刷新的天数，不等于行情数据未更新。若复核后结论不变，也会刷新这个时间。">
-                  {g.portfolioWeight > 0 ? "持仓" : "观察"} · 上次复核 {g.daysSinceLastInvestigation}天前
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 改变判断的条件 */}
-      {hasConditions && (
-        <div className="rounded-xl border border-purple-500/15 bg-purple-500/5 p-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-purple-300">
-            <RotateCcw className="h-3.5 w-3.5" />
-            改变判断的条件
-          </h3>
-          <div className="space-y-2">
-            {briefing.mindChangeConditions.slice(0, 5).map((m, i) => {
-              const convColor =
-                m.currentConviction === "high" ? "text-emerald-400" :
-                m.currentConviction === "medium" ? "text-amber-400" :
-                m.currentConviction === "low" ? "text-red-400" : "text-[var(--faint)]";
-              return (
-                <div key={i} className="text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-[var(--text)]">{m.thesisTitle}</span>
-                    <span className={`text-[10px] font-medium ${convColor}`}>{m.currentConviction}</span>
-                  </div>
-                  <ul className="mt-0.5 list-inside list-disc pl-2 text-[var(--muted)]">
-                    {m.conditions.slice(0, 3).map((c, j) => <li key={j}>{c}</li>)}
-                  </ul>
-                  {m.monitoringIndicators.length > 0 && (
-                    <div className="mt-0.5 pl-2 text-[var(--faint)]">
-                      监控: {m.monitoringIndicators.join(", ")}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {/* 同一资产判断不一致 */}
-      {hasConflicts && (
-        <div className="rounded-xl border border-orange-500/15 bg-orange-500/5 p-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-orange-300">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            同一资产判断不一致 ({briefing.thesisConflicts!.length})
-            <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
-              （同一资产上同时存在偏多与偏空判断）
-            </span>
-          </h3>
-          <div className="space-y-2">
-            {briefing.thesisConflicts!.slice(0, 5).map((c, i) => (
-              <div key={i} className="text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-[var(--text)]">{c.thesisA.title}</span>
-                  <span className="text-orange-400">vs</span>
-                  <span className="text-[var(--text)]">{c.thesisB.title}</span>
-                </div>
-                <div className="mt-0.5 pl-2 text-[var(--faint)]">
-                  重叠资产: {c.overlappingAssets.map(k => formatAssetLabelByKey(k)).join(", ")} · {c.thesisA.conviction} vs {c.thesisB.conviction}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 风险暴露 */}
-      {hasRisks && (
-        <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-red-300">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            风险暴露
-            <span className="ml-1 text-[10px] font-normal text-[var(--faint)]">(按相关持仓权重衡量复核优先级)</span>
-          </h3>
-          <div className="space-y-2">
-            {briefing.thesisFailureImpacts!.filter(r => r.riskLevel !== "low").map((r, i) => {
-              const riskColor = r.riskLevel === "critical" ? "text-red-400 bg-red-500/20" : r.riskLevel === "high" ? "text-orange-400 bg-orange-500/20" : "text-amber-400 bg-amber-500/20";
-              const riskLabel = r.riskLevel === "critical" ? "严重复核" : r.riskLevel === "high" ? "高优先级" : "中优先级";
-              return (
-                <div key={i} className="flex items-start justify-between gap-3 text-xs">
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/daa/dashboard/today/thesis/${r.threadId}`} className="font-medium text-[var(--text)] hover:text-indigo-400 transition-colors">{r.thesisTitle}</Link>
-                    <span className="ml-2 text-[var(--faint)]">({r.conviction})</span>
-                    <p className="mt-0.5 text-[var(--faint)]">
-                      相关资产: {r.affectedAssets.slice(0, 3).map(a => formatAssetLabelByKey(a.assetKey)).join(", ")}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span
-                      className="text-[var(--faint)]"
-                      title="相关持仓 = 该论点涉及资产在组合中的权重合计；用于提示复核优先级，不是收益预测或 VaR。"
-                    >
-                      相关持仓 {(r.totalExposurePct * 100).toFixed(1)}%
-                    </span>
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${riskColor}`}
-                      title="该等级来自相关持仓规模与论点置信度的内部排序，只用于提醒优先复核。"
-                    >
-                      {riskLabel}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        </section>
+      ) : null}
     </div>
   );
 }
 
-function SeverityBadge({ score }: { score: number }) {
-  const bg = score >= 8 ? "bg-red-500/20 text-red-400" :
-    score >= 5 ? "bg-amber-500/20 text-amber-400" :
-    "bg-blue-500/20 text-blue-400";
+function ReviewRow({ item }: { item: ReviewItem }) {
+  const title = item.href ? (
+    <Link href={item.href} className="font-medium text-[var(--text)] transition-colors hover:text-[var(--primary)]">
+      {item.title}
+    </Link>
+  ) : (
+    <span className="font-medium text-[var(--text)]">{item.title}</span>
+  );
+
   return (
-    <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${bg}`}>
-      {score}
-    </span>
+    <div className="grid gap-3 py-3 text-sm sm:grid-cols-[96px_minmax(0,1fr)]">
+      <ReviewBadge tone={item.tone}>{item.label}</ReviewBadge>
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          {title}
+          {item.meta ? <span className="text-xs text-[var(--faint)]">{item.meta}</span> : null}
+        </div>
+        <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.detail}</div>
+        {item.action ? (
+          <div className="mt-1 text-xs leading-5 text-[var(--primary)]">{item.action}</div>
+        ) : null}
+      </div>
+    </div>
   );
 }
