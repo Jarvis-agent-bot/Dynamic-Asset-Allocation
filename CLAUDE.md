@@ -76,11 +76,10 @@ src/
 │   │   ├── marketContext/      # Market regime detection (risk_off/risk_on)
 │   │   ├── decision/           # Proposal decision context
 │   │   └── dividend/           # Dividend tracking
-│   ├── signals/                # Three-dimensional signal fusion
+│   ├── signals/                # Agent observe-tool 数据源（无规则融合）
 │   │   ├── technicalSignal.ts  # SMA, momentum, trend
 │   │   ├── valuationSignal.ts  # PE, dividend yield, relative value
-│   │   ├── newsSignal.ts       # Sentiment analysis
-│   │   └── fusion.ts           # Multi-signal fusion engine
+│   │   └── newsSignal.ts       # Sentiment analysis
 │   ├── store/                  # PostgreSQL persistence layer
 │   ├── pg/                     # Connection pooling, schema migration
 │   ├── config/                 # System config, secrets, currency
@@ -100,22 +99,25 @@ src/
 ### Supported Regions (Region type)
 `US` | `HK` | `CN` | `EU` | `JP` | `GLOBAL` | `OTHER`
 
-### Featured Assets Catalog (87 items)
+### Featured Assets Catalog (63 items)
+
+只列实际入库的标的；新增需求请直接在 `src/daa/modules/workbench/featuredAssetsCatalog.ts` 加 entry。
 
 | Category | Count | Examples |
 |----------|-------|---------|
-| US Equities | 8 | AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, BRK-B |
-| HK Equities | 8 | 0700.HK (腾讯), 9988.HK (阿里), 3690.HK (美团) |
-| CN A-shares | 8 | 600519.SS (茅台), 300750.SZ (宁德), 601318.SS (平安) |
-| US/Global ETFs | 13 | SPY, QQQ, VTI, IWM, EFA, EEM, INDA, EWJ, VNQ |
-| HK ETFs | 2 | 2800.HK (盈富), 2823.HK (A50) |
-| CN ETFs | 2 | 510300.SS (沪深300), 159915.SZ (创业板) |
-| Commodities | 7 | GLD, IAU (黄金), SLV (白银), USO, BNO (原油), DBC, DBA |
-| US Bonds | 6 | BND, TLT, IEF, LQD, TIP, SGOV |
-| CN Bonds | 2 | 511010.SS (国债), 511260.SS (十年国债) |
-| HK Bonds | 2 | 3141.HK (亚洲高息), 2819.HK (美元债) |
-| Crypto | 3 | BTC-USD, ETH-USD, SOL-USD |
-| Currency | 8 | UUP (美元多头), UDN (美元空头), FXE (欧元), FXY (日元), FXB (英镑), FXA (澳元), CYB (人民币), CEW (新兴货币) |
+| US Equities | 11 | AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AMD, AVGO, ASML, ARM |
+| HK Equities | 6 | 0700.HK (腾讯), 9988.HK (阿里), 3690.HK (美团), 1810.HK (小米), 0883.HK (中海油), 0941.HK (中国移动) |
+| CN A-shares | 5 | 600519.SS (茅台), 300750.SZ (宁德), 601318.SS (平安), 600036.SS (招商), 002594.SZ (比亚迪) |
+| KR Equities | 1 | 000660.KS (SK 海力士) |
+| US/Global ETFs | 13 | SPY, QQQ, VTI, VT, EFA, EEM, VGK, HEDJ, EWJ, DXJ, INDA, SMH, BOTZ, CIBR |
+| HK ETFs | 1 | 2800.HK (盈富) |
+| CN ETFs | 4 | 510300.SS (沪深300), 510500.SS (中证500), 159915.SZ (创业板), 510880.SS (上证红利) |
+| Commodities | 5 | GLD, IAU (黄金), SLV (白银), DBC (商品篮子), GC=F (黄金期货) |
+| US Bonds | 6 | BND, TLT, IEF, TIP, SGOV, BIL, SHV, USFR |
+| Crypto | 2 | BTC-USD, ETH-USD |
+| Currency | 2 | UUP (美元多头), FXY (日元) |
+
+**缺口**：日股 / 欧股 / 印度仅有 ETF，无个股；CN/HK 债券、A 股更多白马、EU 个股暂未覆盖。
 
 ## Key Architecture Concepts
 
@@ -146,7 +148,9 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 - 连续 LLM 失败触发熔断（阈值可配置，跳过剩余 LLM 调用）
 - 所有 LLM 输出经 `validateShape()` 结构校验
 - 每个 prompt 包含 few-shot JSON 示例
-- 新 thesis 创建前去重检查（assetKeys + 标题子串匹配）
+- 新 thesis 创建前去重检查（assetKeys + 标题 pg_trgm 相似度 ≥ 0.40）
+- 单资产论点上限 `MAX_ACTIVE_THESES_PER_ASSET = 5`（防止热门标的积累几十篇并行论点）
+- review 节点 LLM 同时输出 `shouldInvalidate` 和 `shouldArchive`：判断失效 → `status='invalidated'`；已兑现 → `status='archived'`；都不是 → 30 天后再复盘
 - Autopilot 自动执行统一经过 `AutomationAuthority`、单笔 NAV 上限、执行前风控和本地执行网关；LLM 只能输出本轮目标权重计划，不能直接改永久配置或绕过执行授权
 
 **数据模型**（8 张表）：
@@ -313,7 +317,6 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_positions_v2`,
 | Asset taxonomy & types | `src/daa/modules/workbench/assetTaxonomy.ts` |
 | Featured asset catalog | `src/daa/modules/workbench/featuredAssetsCatalog.ts` |
 | Rebalancing engine | `src/core/rebalanceCore.ts` |
-| Signal fusion | `src/daa/signals/fusion.ts` |
 | System config model | `src/daa/config/systemConfig.ts` |
 | Authority gate（自动/手动执行授权） | `src/daa/automation/automationAuthority.ts` |
 | Portfolio valuation（金额来源） | `src/daa/modules/portfolio/portfolioValuation.ts` |
@@ -341,7 +344,6 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_positions_v2`,
 | **Episodic 关键字搜索** (pg_trgm) | `searchMemoriesByKeyword` in `memoryStore.ts`、`searchEvidenceByKeyword` in `thesisStore.ts` |
 | **实体图抽取** | `src/daa/agent/entities/entityExtractor.ts` |
 | **实体图存储** | `src/daa/agent/entities/entityStore.ts` |
-| 信号概览（insights 展示用） | `src/daa/signals/fusion.ts` |
 | 交易反馈闭环 | `src/daa/agent/tradeOutcomeFeedback.ts` |
 
 ## Development Conventions

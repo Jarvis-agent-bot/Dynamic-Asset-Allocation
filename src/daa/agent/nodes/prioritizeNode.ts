@@ -8,7 +8,9 @@ import { buildPrioritizePrompt } from "@/src/daa/agent/cognitivePrompts";
 import { callDeepSeekJson } from "@/src/daa/agent/helpers/llm";
 import { validateShape } from "@/src/daa/agent/helpers/validation";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
-import { findSimilarThesis } from "@/src/daa/agent/store/thesisStore";
+import { findSimilarThesis, countActiveThesesForAssets } from "@/src/daa/agent/store/thesisStore";
+
+const MAX_ACTIVE_THESES_PER_ASSET = 5;
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 const DEFAULT_MAX_INVESTIGATION_TARGETS = 5;
@@ -216,13 +218,23 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       };
     }
 
-    // 创建新 thesis（如果 LLM 建议），P2-9: 去重检查
+    // 创建新 thesis（如果 LLM 建议），P2-9: 去重 + per-asset 上限
     for (const nt of data.newThreads ?? []) {
       try {
-        // 检查是否存在相似 thesis
-        const existing = await findSimilarThesis(nt.assetKeys ?? [], nt.title);
+        const assetKeys = nt.assetKeys ?? [];
+        // 1) pg_trgm 相似度去重
+        const existing = await findSimilarThesis(assetKeys, nt.title);
         if (existing) {
           logSwallowed("cognitiveGraph.prioritize.dedup", new Error(`跳过重复 thesis: "${nt.title}" 已有类似 "${existing.title}"`));
+          continue;
+        }
+        // 2) 单资产论点上限（避免 GC=F/NVDA 这类热门标的累积几十篇并行论点）
+        const activeCount = await countActiveThesesForAssets(assetKeys);
+        if (activeCount >= MAX_ACTIVE_THESES_PER_ASSET) {
+          logSwallowed(
+            "cognitiveGraph.prioritize.assetCap",
+            new Error(`跳过新 thesis: 资产 ${assetKeys.join(",")} 已有 ${activeCount} 篇活跃论点（上限 ${MAX_ACTIVE_THESES_PER_ASSET}）`),
+          );
           continue;
         }
         const created = await thesisStore.createResearchThread({

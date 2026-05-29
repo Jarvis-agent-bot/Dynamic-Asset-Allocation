@@ -1,19 +1,23 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { patchDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
-import { updateWatchlistAutoEntry } from "@/src/daa/store/watchlistAutoEntryStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
+/**
+ * Agent 目标权重池 —— 把 Agent 输出的目标权重写入 asset_universe 的 `targetWeightHint`
+ * 字段，配合再平衡 cycle 的 drift 计算自然生成 BUY/SELL 提案。
+ *
+ * 历史上这里同时维护一份 watchlistAutoEntry 候选表，由独立的规则引擎触发 BUY。
+ * 新架构下 Agent 直接通过 targetAllocationPlan + AutomationAuthority 决策，
+ * 规则引擎已废弃，此模块只负责把 Agent 计划"落库"。
+ */
 export type AiTargetWeightPoolConfig = {
   enabled: boolean;
   minConfidence: number;
-  autoEnableEntry: boolean;
 };
 
 export type AgentTargetWeightPoolPatch = {
   assetKey: string;
   targetWeightHint: number;
-  autoEntryEnabled: boolean;
-  entryTargetWeightPct: number | null;
 };
 
 export type PersistAgentTargetWeightPoolResult = {
@@ -24,29 +28,24 @@ export type PersistAgentTargetWeightPoolResult = {
 };
 
 export function resolveAiTargetWeightPoolConfig(config: DaaSystemConfig): AiTargetWeightPoolConfig {
-  const raw = config.watchlistEntry?.aiTargetWeightPool;
+  const raw = config.aiTargetWeightPool;
   return {
     enabled: raw?.enabled !== false,
     minConfidence: Math.max(0, Math.min(100, Number(raw?.minConfidence ?? 0) || 0)),
-    autoEnableEntry: raw?.autoEnableEntry !== false,
   };
 }
 
 export function buildAgentTargetWeightPoolPatches(input: {
   targetWeights: Record<string, number> | null | undefined;
-  autoEnableEntry: boolean;
 }): AgentTargetWeightPoolPatch[] {
   return Object.entries(input.targetWeights || {})
     .map(([assetKey, value]) => {
       const normalizedKey = String(assetKey || "").trim().toUpperCase();
       const targetWeightHint = Math.max(0, Math.min(1, Number(value) || 0));
       if (!normalizedKey || !Number.isFinite(targetWeightHint)) return null;
-      const shouldAutoEntry = input.autoEnableEntry && targetWeightHint > 0;
       return {
         assetKey: normalizedKey,
         targetWeightHint: Number(targetWeightHint.toFixed(6)),
-        autoEntryEnabled: shouldAutoEntry,
-        entryTargetWeightPct: shouldAutoEntry ? Number((targetWeightHint * 100).toFixed(4)) : null,
       } satisfies AgentTargetWeightPoolPatch;
     })
     .filter((row): row is AgentTargetWeightPoolPatch => row != null);
@@ -54,7 +53,6 @@ export function buildAgentTargetWeightPoolPatches(input: {
 
 export async function persistAgentTargetWeightPool(input: {
   targetWeights: Record<string, number> | null | undefined;
-  autoEnableEntry: boolean;
 }): Promise<PersistAgentTargetWeightPoolResult> {
   const patches = buildAgentTargetWeightPoolPatches(input);
   if (patches.length === 0) {
@@ -67,13 +65,6 @@ export async function persistAgentTargetWeightPool(input: {
       watchEnabled: true,
       targetWeightHint: patch.targetWeightHint,
     });
-    if (input.autoEnableEntry) {
-      const updated = await updateWatchlistAutoEntry(patch.assetKey, {
-        autoEntryEnabled: patch.autoEntryEnabled,
-        entryTargetWeightPct: patch.entryTargetWeightPct,
-      });
-      if (!updated) throw new Error(`entry candidate update failed: ${patch.assetKey}`);
-    }
     return patch;
   }));
 

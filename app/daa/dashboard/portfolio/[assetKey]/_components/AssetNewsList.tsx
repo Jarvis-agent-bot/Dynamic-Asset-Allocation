@@ -34,9 +34,9 @@ function formatAgo(iso: string): string {
 
 function providerBadge(provider: string): { label: string; color: string } {
   const p = provider.toLowerCase();
-  if (p === "alpaca") return { label: "Alpaca", color: "text-emerald-300 bg-emerald-500/10" };
-  if (p === "yahoo_rss") return { label: "Yahoo", color: "text-sky-300 bg-sky-500/10" };
-  return { label: provider, color: "text-[var(--muted)] bg-[rgba(255,255,255,0.06)]" };
+  if (p === "alpaca") return { label: "Alpaca", color: "text-emerald-700 bg-emerald-50" };
+  if (p === "yahoo_rss") return { label: "Yahoo", color: "text-sky-700 bg-sky-50" };
+  return { label: provider, color: "text-slate-600 bg-slate-100" };
 }
 
 export function AssetNewsList({ symbol }: { symbol: string }) {
@@ -70,15 +70,15 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
     <div className="p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Newspaper className="h-4 w-4 text-[#a3ff12]" />
-          <h3 className="text-sm font-semibold text-[#f3f6f8]">市场资讯</h3>
-          <span className="text-[10px] text-[#59636f]">{items.length} 条</span>
+          <Newspaper className="h-4 w-4 text-[var(--primary)]" />
+          <h3 className="text-sm font-semibold text-slate-900">市场资讯</h3>
+          <span className="text-[10px] text-slate-400">{items.length} 条</span>
         </div>
         <button
           type="button"
           onClick={() => load(true)}
           disabled={refreshing}
-          className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-[10px] text-[#59636f] hover:bg-[#151b22] hover:text-[#d6dde5] disabled:opacity-50"
+          className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
           aria-label="刷新"
         >
           {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
@@ -87,19 +87,19 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
 
       {/* 整体情感摘要 */}
       {summary && (
-        <div className="mb-3 rounded-[8px] border border-[#1a222a] bg-[#050607] px-3 py-2 text-[11px] leading-relaxed text-[#8a939f]">
+        <div className="mb-3 rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
           {summary}
         </div>
       )}
 
       {loading && (
-        <div className="flex items-center gap-2 py-3 text-xs text-[#8a939f]">
+        <div className="flex items-center gap-2 py-3 text-xs text-slate-500">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> 加载新闻…
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-400">
+        <div className="flex items-center gap-1.5 text-xs text-amber-700">
           <AlertCircle className="h-3.5 w-3.5" />
           {error}
         </div>
@@ -112,7 +112,7 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
       )}
 
       {!loading && items.length > 0 && (
-        <ul className="max-h-[360px] divide-y divide-[#151b22] overflow-y-auto">
+        <ul className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto">
           {items.map((it, idx) => {
             const badge = providerBadge(it.provider);
             const isMajor = it.majorEvent?.impact === "high";
@@ -121,7 +121,7 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
                 <div className="flex items-start gap-2">
                   {isMajor && (
                     <span
-                      className="mt-0.5 shrink-0 rounded bg-red-500/15 px-1 py-0.5 text-[9px] font-medium text-red-300"
+                      className="mt-0.5 shrink-0 rounded bg-red-100 px-1 py-0.5 text-[9px] font-medium text-red-700"
                       title={it.majorEvent?.description ?? ""}
                     >
                       重大
@@ -133,15 +133,15 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
                         href={it.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="line-clamp-2 flex items-start gap-1 text-xs text-[#d6dde5] hover:text-[#a3ff12]"
+                        className="line-clamp-2 flex items-start gap-1 text-xs text-slate-800 hover:text-[var(--primary)]"
                       >
                         {it.title}
                         <ExternalLink className="mt-0.5 h-2.5 w-2.5 shrink-0 opacity-40" />
                       </a>
                     ) : (
-                      <span className="line-clamp-2 text-xs text-[#d6dde5]">{it.title}</span>
+                      <span className="line-clamp-2 text-xs text-slate-800">{it.title}</span>
                     )}
-                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[#59636f]">
+                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400">
                       <span className={`rounded px-1 py-0.5 ${badge.color}`}>{badge.label}</span>
                       <span>{formatAgo(it.publishedAt)}</span>
                     </div>

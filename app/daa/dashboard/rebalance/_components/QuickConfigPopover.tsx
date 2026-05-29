@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Settings2 } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -151,13 +152,24 @@ export function QuickConfigPopover(props: {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
-              <DaaSurfaceActionButton tone="slate" onClick={() => setOpen(false)}>
-                取消
-              </DaaSurfaceActionButton>
-              <DaaSurfaceActionButton tone="primary" onClick={() => void handleSave()} disabled={saving}>
-                {saving ? "保存中…" : "保存"}
-              </DaaSurfaceActionButton>
+            <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-4 py-3">
+              <Link
+                href="/daa/dashboard/settings#settings-strategy"
+                onClick={() => setOpen(false)}
+                className="inline-flex items-center gap-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--primary)]"
+                title="跳转到设置 → 策略，查看/调整完整参数"
+              >
+                <ExternalLink className="h-3 w-3" />
+                完整设置
+              </Link>
+              <div className="flex gap-2">
+                <DaaSurfaceActionButton tone="slate" onClick={() => setOpen(false)}>
+                  取消
+                </DaaSurfaceActionButton>
+                <DaaSurfaceActionButton tone="primary" onClick={() => void handleSave()} disabled={saving}>
+                  {saving ? "保存中…" : "保存"}
+                </DaaSurfaceActionButton>
+              </div>
             </div>
           </div>
         </>

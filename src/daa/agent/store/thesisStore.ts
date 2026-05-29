@@ -256,31 +256,42 @@ export async function createThesisReview(data: {
 
 /**
  * P2-9: 查找与给定 assetKeys 和标题相似的已有活跃 thesis。
- * 用于去重：同一资产组合且标题有 substring 重叠时视为重复。
+ * 用于去重：同一资产组合，且标题 pg_trgm 相似度 >= 0.40 视为重复。
+ * 0.40 阈值经验值——足以捕获"NVDA AI 突破"vs"NVDA AI 估值修复"这类同主题
+ * 不同措辞的论点，又不会把"NVDA 估值过高"vs"NVDA 看多 AI"误判为同一篇。
  */
 export async function findSimilarThesis(assetKeys: string[], title: string): Promise<ResearchThread | null> {
-  if (assetKeys.length === 0) return null;
+  if (assetKeys.length === 0 || !title.trim()) return null;
   const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    // 查找同一 assetKeys 且 status=active 的 thesis
     const res = await query(
-      `SELECT * FROM daa_research_threads
+      `SELECT *, similarity(title, $3) AS sim
+       FROM daa_research_threads
        WHERE owner_account_id = $2 AND status = 'active' AND asset_keys && $1
-       ORDER BY updated_at DESC
-       LIMIT 10`,
-      [assetKeys, ownerAccountId],
+         AND similarity(title, $3) >= 0.40
+       ORDER BY sim DESC, updated_at DESC
+       LIMIT 1`,
+      [assetKeys, ownerAccountId, title],
     );
     if (res.rows.length === 0) return null;
+    return mapThreadRow(res.rows[0]);
+  });
+}
 
-    // 简单标题相似度：任一方标题是另一方的子串
-    const titleLower = title.toLowerCase();
-    for (const row of res.rows) {
-      const existingTitle = String(row.title).toLowerCase();
-      if (titleLower.includes(existingTitle) || existingTitle.includes(titleLower)) {
-        return mapThreadRow(row);
-      }
-    }
-    return null;
+/**
+ * 统计某资产的活跃 thesis 数量。
+ * prioritize 节点用于阻止单资产论点数量失控（默认上限 5 篇）。
+ */
+export async function countActiveThesesForAssets(assetKeys: string[]): Promise<number> {
+  if (assetKeys.length === 0) return 0;
+  const ownerAccountId = getDaaAccountScopeId();
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query(
+      `SELECT COUNT(*)::int AS c FROM daa_research_threads
+       WHERE owner_account_id = $2 AND status = 'active' AND asset_keys && $1`,
+      [assetKeys, ownerAccountId],
+    );
+    return Number(res.rows[0]?.c ?? 0);
   });
 }
 

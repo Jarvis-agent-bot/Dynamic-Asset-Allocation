@@ -32,8 +32,6 @@ import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 
 import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
-import { generateWatchlistEntryProposals } from "./watchlistEntryService";
-import { markWatchlistEntryTriggered } from "@/src/daa/store/watchlistAutoEntryStore";
 import type {
   ExecuteRebalanceCycleResult,
   GenerateRebalanceCycleInput,
@@ -392,30 +390,6 @@ export async function generateWorkbenchRebalanceCycle(
     allowUnheldBuyTargets: hasAgentTargetPlan,
   });
 
-  // ── Step A.5: Watchlist 入场候选（信号达标则为 watchlist 资产生成 BUY 提案） ──
-  let watchlistEntryProposals: RebalanceProposal[] = [];
-  try {
-    const watchlistResult = await generateWatchlistEntryProposals({
-      bootstrap,
-      systemConfig: systemRow.config,
-    });
-    watchlistEntryProposals = watchlistResult.proposals;
-    if (watchlistEntryProposals.length > 0) {
-      // 去重：若该 assetKey 已在 drift 提案中（极少见，holding==0 不会），以 drift 为准
-      const existingKeys = new Set(draft.proposals.map((p) => p.assetKey.toUpperCase()));
-      watchlistEntryProposals = watchlistEntryProposals.filter(
-        (p) => !existingKeys.has(p.assetKey.toUpperCase()),
-      );
-      draft.proposals.push(...watchlistEntryProposals);
-      if (watchlistEntryProposals.length > 0 && !draft.triggerReason.includes("入场候选")) {
-        const extra = `；观察列表入场候选 ${watchlistEntryProposals.length} 条`;
-        draft.triggerReason = (draft.triggerReason || "组合检查") + extra;
-      }
-    }
-  } catch (err) {
-    logSwallowed("workbenchRebalanceCycleService.watchlistEntry", err);
-  }
-
   // ── Step B: 现金三层分类 ─────────────────────────────────────────
   const cashClassification = classifyCash({
     totalCash: bootstrap.account.cash,
@@ -738,8 +712,8 @@ export async function generateWorkbenchRebalanceCycle(
       reason: input.targetAllocationPlan?.reason ?? null,
     } : null,
     targetWeightLifecycle: normalizedTargetAllocationWeights
-      ? (systemRow.config.watchlistEntry?.aiTargetWeightPool.enabled
-        ? "persisted_to_watchlist_target_pool"
+      ? (systemRow.config.aiTargetWeightPool?.enabled !== false
+        ? "persisted_to_target_weight_hint"
         : "persist_after_successful_execution")
       : null,
   };
@@ -1139,26 +1113,6 @@ export async function executeWorkbenchRebalanceCycle(input: {
     cycle,
     cycleLogs,
   });
-  const watchlistEntryKeys = new Set(
-    executionRows
-      .filter((row) => (row as RebalanceProposal).proposalType === "watchlist_entry")
-      .map((row) => row.assetKey.toUpperCase()),
-  );
-  const executedWatchlistEntryKeys = new Set(
-    cycleLogs
-      .filter((row) => row.status === "executed" && watchlistEntryKeys.has(row.assetKey.toUpperCase()))
-      .map((row) => row.assetKey),
-  );
-  if (executedWatchlistEntryKeys.size > 0) {
-    await Promise.all(
-      [...executedWatchlistEntryKeys].map((assetKey) =>
-        markWatchlistEntryTriggered(assetKey).catch((err) =>
-          logSwallowed("workbenchRebalanceCycleService.markWatchlistTriggered", err),
-        ),
-      ),
-    );
-  }
-
   // P0: 交易结果反馈 → thesis evidence 闭环（按 assetKey 匹配活跃 thesis）
   try {
     const activeTheses = await getActiveTheses();

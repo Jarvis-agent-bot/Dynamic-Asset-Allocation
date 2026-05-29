@@ -8,26 +8,28 @@ import { Bot, Gauge, ListChecks, ShieldCheck, WalletCards } from "lucide-react";
 
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { DaaSurfacePanel, DaaSurfaceStatusPill, type DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { DaaSurfacePanel, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import type { PolicyDecision } from "@/src/daa/modules/policy-engine/policyTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import type { RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
+import {
+  buildDecisionState,
+  formatSnapshotTime,
+  policyActionLabel,
+  totalProposalNotional,
+} from "./rebalanceDecisionState";
 
 import { DashboardNotificationBar } from "@/app/daa/dashboard/_shared/DashboardNotificationBar";
 import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
-import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndicatorDashboard";
 import { RebalanceProposalList } from "@/app/daa/dashboard/_shared/rebalance/RebalanceProposalList";
 import type { WhatIfPreviewProps } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
 import type { DriftBarChartProps } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
-import {
-  marketRegimeLabel,
-  marketRegimeTone,
-  riskStatusLabel,
-} from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
+import { riskStatusLabel } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 
 import { QuickConfigPopover } from "./QuickConfigPopover";
 import { ExecutionPanel } from "./ExecutionPanel";
+import { RebalanceMarketStrip } from "./RebalanceMarketStrip";
 
 const LazyWhatIfPreview = dynamic<WhatIfPreviewProps>(
   () => import("@/app/daa/dashboard/_shared/rebalance/WhatIfPreview").then((mod) => mod.WhatIfPreview),
@@ -44,18 +46,6 @@ const LazyDriftBarChart = dynamic<DriftBarChartProps>(
     loading: () => <div className="h-32 rounded-[14px] bg-[rgba(255,255,255,0.03)]" />,
   },
 );
-
-function formatSnapshotTime(value: string | null | undefined) {
-  if (!value) return "等待生成";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.slice(0, 16);
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function DecisionMetric(props: {
   label: string;
@@ -77,75 +67,6 @@ function DecisionMetric(props: {
   );
 }
 
-function policyActionLabel(action: string | null | undefined) {
-  if (action === "authorize_auto_execute") return "可自动执行";
-  if (action === "require_review") return "需要人工复核";
-  if (action === "propose") return "生成建议";
-  if (action === "observe") return "保持观察";
-  if (action === "ignore") return "忽略噪声";
-  return "等待决策";
-}
-
-function totalProposalNotional(cycle: RebalanceCycle | null): number {
-  return (cycle?.proposals ?? []).reduce((sum, item) => sum + Math.max(0, item.suggestedNotional || 0), 0);
-}
-
-function buildDecisionState(input: {
-  cycle: RebalanceCycle | null;
-  riskCheck: PreTradeRiskCheck | null;
-  selectedProposalCount: number;
-  canExecuteSelected: boolean;
-  isCurrentCycleTerminal: boolean;
-}) {
-  const { cycle, riskCheck, selectedProposalCount, canExecuteSelected, isCurrentCycleTerminal } = input;
-  if (!cycle) {
-    return {
-      tone: "cyan" as DaaSurfaceTone,
-      title: "等待生成本轮调仓建议",
-      description: "先生成本轮建议，再审阅买卖清单、风控结果和执行影响。",
-      nextStep: "下一步：在下方执行面板生成本轮建议。",
-    };
-  }
-  if (riskCheck?.overallStatus === "block") {
-    return {
-      tone: "red" as DaaSurfaceTone,
-      title: "风控阻断，暂不应执行",
-      description: riskCheck.items.find((item) => item.status === "block")?.message || "存在阻断项，需要先降低仓位或调整建议。",
-      nextStep: "下一步：展开建议详情，处理阻断项后重新复核。",
-    };
-  }
-  if (isCurrentCycleTerminal) {
-    return {
-      tone: cycle.status === "completed" ? "green" as DaaSurfaceTone : "slate" as DaaSurfaceTone,
-      title: cycle.status === "completed" ? "本轮调仓已完成" : "本轮调仓已终止",
-      description: cycle.status === "completed" ? "该周期已进入只读状态，可生成新一轮建议继续审阅。" : "该周期已取消或结束，建议生成新周期重新评估。",
-      nextStep: "下一步：如需继续调仓，生成新一轮建议。",
-    };
-  }
-  if ((cycle.proposals?.length ?? 0) === 0) {
-    return {
-      tone: "slate" as DaaSurfaceTone,
-      title: "本轮没有可执行建议",
-      description: cycle.triggerReason || "组合仍在目标范围内，或候选资产暂未满足金额、信念与风控条件。",
-      nextStep: "下一步：查看下方证据，确认是否需要调整策略阈值。",
-    };
-  }
-  if (selectedProposalCount > 0 && canExecuteSelected) {
-    return {
-      tone: "green" as DaaSurfaceTone,
-      title: "已选建议可执行",
-      description: "当前选中项已通过执行前检查，可以先执行选中项，保留其余建议继续观察。",
-      nextStep: "下一步：在下方执行面板执行选中建议。",
-    };
-  }
-  return {
-    tone: "amber" as DaaSurfaceTone,
-    title: "建议待审阅",
-    description: cycle.triggerReason || "本轮已生成买卖建议，请先确认理由、金额和冲突标记。",
-    nextStep: "下一步：勾选要执行的建议，或按买入/卖出快速筛选。",
-  };
-}
-
 function RebalanceDecisionSummary(props: {
   bootstrap: WorkbenchBootstrap;
   cycle: RebalanceCycle | null;
@@ -164,6 +85,7 @@ function RebalanceDecisionSummary(props: {
   const decision = buildDecisionState({
     cycle,
     riskCheck: props.riskCheck,
+    policyDecision: props.policyDecision,
     selectedProposalCount: props.selectedProposalCount,
     canExecuteSelected: props.canExecuteSelected,
     isCurrentCycleTerminal: props.isCurrentCycleTerminal,
@@ -358,23 +280,10 @@ export default function RebalancePageClient() {
             </DaaSurfacePanel>
           </SectionErrorBoundary>
 
-          {/* ── 全宽：完整市场指标 ── */}
+          {/* ── 市场环境（默认折叠的概览 + 可展开完整指标） ── */}
           {wbModel.bootstrap.marketContext ? (
-            <SectionErrorBoundary sectionName="完整市场指标">
-              <DaaSurfacePanel
-                title="完整市场指标"
-                subtitle="这些指标只解释当前环境是否适合加仓；真正买入或卖出哪只资产，以左侧建议清单为准。"
-                accent={marketRegimeTone(wbModel.bootstrap.marketContext.regime)}
-                action={(
-                  <DaaSurfaceStatusPill tone={marketRegimeTone(wbModel.bootstrap.marketContext.regime)}>
-                    {marketRegimeLabel(wbModel.bootstrap.marketContext.regime)}
-                    {" · 风险分 "}
-                    {wbModel.bootstrap.marketContext.riskOffScorePct.toFixed(0)}
-                  </DaaSurfaceStatusPill>
-                )}
-              >
-                <MarketIndicatorDashboard marketContext={wbModel.bootstrap.marketContext} hideClock />
-              </DaaSurfacePanel>
+            <SectionErrorBoundary sectionName="市场环境">
+              <RebalanceMarketStrip marketContext={wbModel.bootstrap.marketContext} />
             </SectionErrorBoundary>
           ) : null}
         </>

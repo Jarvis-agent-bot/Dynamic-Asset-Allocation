@@ -12,6 +12,7 @@ import {
   SETTINGS_NAV_ITEMS_,
   type SettingsNavItemId,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
+import { useSettingsDirty } from "@/app/daa/dashboard/settings/_components/useSettingsDirty";
 import { SettingsBrainTab } from "@/app/daa/dashboard/settings/_components/tabs/SettingsBrainTab";
 import { SettingsDataTab, type SettingsDataHealthAsset } from "@/app/daa/dashboard/settings/_components/tabs/SettingsDataTab";
 import { SettingsNotificationTab } from "@/app/daa/dashboard/settings/_components/tabs/SettingsNotificationTab";
@@ -32,20 +33,6 @@ function resolveSectionFromHash(hash: string): SettingsNavItemId | null {
   if (id === "secrets") return "data";
   const matched = SETTINGS_NAV_ITEMS_.find((item) => item.id === id);
   return matched?.id ?? null;
-}
-
-/** 深度排序后序列化，消除嵌套字段顺序差异导致的误判 */
-function stableStringify(obj: unknown): string {
-  if (obj === null || obj === undefined) return "";
-  return JSON.stringify(obj, (_key, value) => {
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      return Object.keys(value).sort().reduce<Record<string, unknown>>((sorted, k) => {
-        sorted[k] = value[k];
-        return sorted;
-      }, {});
-    }
-    return value;
-  });
 }
 
 export default function SettingsPage() {
@@ -125,31 +112,18 @@ export default function SettingsPage() {
     void refreshDataHealthAssets();
   }, [activeSection, refreshDataHealthAssets]);
 
-  const isDirty = useMemo(() => {
-    if (!config || !baselineConfig) return false;
-    return stableStringify(config) !== stableStringify(baselineConfig);
-  }, [baselineConfig, config]);
+  const { isDirty, sectionDirtyMap } = useSettingsDirty(config, baselineConfig);
 
-  /** Per-section dirty detection for nav indicator dots */
-  const sectionDirtyMap = useMemo<Record<SettingsNavItemId, boolean>>(() => {
-    if (!config || !baselineConfig) return { strategy: false, brain: false, data: false, notification: false };
-    const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
-    return {
-      strategy: changed(config.policy, baselineConfig.policy)
-        || changed(config.strategy?.risk, baselineConfig.strategy?.risk)
-        || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints)
-        || changed(config.strategy?.execution, baselineConfig.strategy?.execution),
-      brain: changed(config.brain, baselineConfig.brain)
-        || changed(config.cognitiveAgent, baselineConfig.cognitiveAgent),
-      data: changed(config.dataSources, baselineConfig.dataSources),
-      notification: changed(config.notification, baselineConfig.notification),
+  // 离开页面前提醒未保存改动
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
     };
-  }, [baselineConfig, config]);
-
-  const dirtySectionCount = useMemo(
-    () => Object.values(sectionDirtyMap).filter(Boolean).length,
-    [sectionDirtyMap],
-  );
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   const dataHealthSummary = useMemo(() => {
     if (dataHealthAssets.length === 0) {
@@ -335,26 +309,6 @@ export default function SettingsPage() {
       </div>
 
       {activeContent}
-
-      <div className="sticky bottom-0 z-20 -mx-4 border-t border-[var(--border)] bg-[rgba(8,12,20,0.95)] px-4 py-3 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:-mx-7 lg:px-7">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-sm font-semibold text-[var(--text)]">配置保存条</div>
-            <div className="mt-1 text-sm text-[var(--muted)]">
-              {isDirty ? `存在 ${dirtySectionCount} 个未保存模块，建议在离开页面前统一保存。` : "当前页面没有待保存的修改。"}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => void saveConfig()}
-            disabled={saving || !isDirty}
-            className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[var(--primary)] px-5 py-3 text-sm font-semibold text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[var(--elevated)] disabled:text-[var(--muted)] disabled:opacity-70"
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "保存中…" : isDirty ? "保存全部设置" : "已全部保存"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

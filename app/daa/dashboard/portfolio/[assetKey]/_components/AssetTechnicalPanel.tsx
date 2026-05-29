@@ -55,14 +55,14 @@ function statusTone(status: "bullish" | "bearish" | "neutral" | "unavailable" | 
 function MetricGroup({ title, rows }: { title: string; rows: MetricRow[] }) {
   return (
     <div className="min-w-0">
-      <div className="mb-2 text-[11px] font-semibold text-[#59636f]">{title}</div>
-      <div className="divide-y divide-[#151b22] border-y border-[#151b22]">
+      <div className="mb-2 text-[11px] font-semibold text-slate-400">{title}</div>
+      <div className="divide-y divide-slate-100 border-y border-slate-100">
         {rows.map((row) => (
           <div key={row.label} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] gap-3 py-2.5 text-sm">
-            <div className="min-w-0 text-[#8a939f]">{row.label}</div>
-            <div className={cn("min-w-0 text-right font-[var(--font-mono)] text-[#d6dde5]", row.tone === "green" && "text-[#00c076]", row.tone === "red" && "text-[#f84960]", row.tone === "amber" && "text-[#f7b500]")}>
+            <div className="min-w-0 text-slate-500">{row.label}</div>
+            <div className={cn("min-w-0 text-right font-[var(--font-mono)] text-slate-800", row.tone === "green" && "text-emerald-600", row.tone === "red" && "text-red-600", row.tone === "amber" && "text-amber-600")}>
               {row.value}
-              {row.hint ? <span className="ml-1 font-sans text-[11px] text-[#59636f]">{row.hint}</span> : null}
+              {row.hint ? <span className="ml-1 font-sans text-[11px] text-slate-400">{row.hint}</span> : null}
             </div>
           </div>
         ))}
@@ -146,8 +146,8 @@ export function AssetTechnicalPanel({
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-[#a3ff12]" />
-          <h3 className="text-sm font-semibold text-[#f3f6f8]">技术指标</h3>
+          <Activity className="h-4 w-4 text-[var(--primary)]" />
+          <h3 className="text-sm font-semibold text-slate-900">技术指标</h3>
           {signal ? (
             <>
               <DaaSurfaceStatusPill tone={scoreTone(signal.scorePct)}>评分 {signal.scorePct.toFixed(0)}</DaaSurfaceStatusPill>
@@ -159,7 +159,7 @@ export function AssetTechnicalPanel({
           type="button"
           onClick={() => void load(true)}
           disabled={refreshing || loading}
-          className="inline-flex items-center gap-1 rounded-[6px] px-2 py-1 text-[11px] text-[#59636f] transition-colors hover:bg-[#151b22] hover:text-[#d6dde5] disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-[6px] px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
           aria-label="刷新技术指标"
         >
           {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -168,21 +168,21 @@ export function AssetTechnicalPanel({
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-8 text-sm text-[#8a939f]">
+        <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" />
           加载技术指标…
         </div>
       ) : null}
 
       {error ? (
-        <div className="flex items-center gap-2 rounded-[12px] border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-sm text-amber-300">
+        <div className="flex items-center gap-2 rounded-[12px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
           <AlertCircle className="h-4 w-4" />
           {error}
         </div>
       ) : null}
 
       {!loading && !error && !signal ? (
-        <div className="rounded-[10px] border border-dashed border-[#252d36] bg-[#050607] px-4 py-8 text-center text-sm text-[#8a939f]">
+        <div className="rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
           历史行情不足，暂时无法生成技术指标。
         </div>
       ) : null}
@@ -197,10 +197,10 @@ export function AssetTechnicalPanel({
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <div>
-              <div className="mb-2 text-[11px] font-semibold text-[#59636f]">信号理由</div>
+              <div className="mb-2 text-[11px] font-semibold text-slate-400">信号理由</div>
               <div className="flex flex-wrap gap-2">
                 {signal.reasons.map((reason) => (
-                  <span key={reason} className="rounded-[6px] border border-[#1a222a] bg-[#050607] px-3 py-1 text-xs text-[#8a939f]">
+                  <span key={reason} className="rounded-[6px] border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
                     {reason}
                   </span>
                 ))}
@@ -208,16 +208,16 @@ export function AssetTechnicalPanel({
             </div>
 
             <div>
-              <div className="mb-2 text-[11px] font-semibold text-[#59636f]">资产特化指标</div>
-              <div className="divide-y divide-[#151b22] border-y border-[#151b22]">
+              <div className="mb-2 text-[11px] font-semibold text-slate-400">资产特化指标</div>
+              <div className="divide-y divide-slate-100 border-y border-slate-100">
                 {signal.specific.map((item) => (
                   <div key={item.key} className="grid grid-cols-[minmax(0,0.9fr)_auto] gap-3 py-2.5 text-sm">
                     <div className="min-w-0">
-                      <div className="truncate text-[#d6dde5]">{item.label}</div>
-                      {item.description ? <div className="mt-0.5 line-clamp-1 text-xs text-[#59636f]">{item.description}</div> : null}
+                      <div className="truncate text-slate-800">{item.label}</div>
+                      {item.description ? <div className="mt-0.5 line-clamp-1 text-xs text-slate-400">{item.description}</div> : null}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-[var(--font-mono)] text-[#d6dde5]">
+                      <span className="font-[var(--font-mono)] text-slate-800">
                         {typeof item.value === "number" ? formatNumber(item.value, 2) : item.value}
                         {item.unit ? ` ${item.unit}` : ""}
                       </span>

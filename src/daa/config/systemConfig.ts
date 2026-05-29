@@ -159,29 +159,10 @@ export type DaaSystemConfig = {
     /** medium+ conviction thesis 超过此天数未被调查时，强制占用 1 个调查槽位（默认 7 天，防止 LLM 永远只调查 uncertain） */
     thesisStalenessDays?: number;
   };
-  /** 观察列表入场候选过滤器 — 信号达标时为 watchlist 资产生成 BUY 提案 */
-  watchlistEntry?: {
-    /** 全局开关（默认 false，单资产还要纳入入场候选才会触发） */
+  /** AI 目标权重池：Agent 输出的目标权重落到 asset_universe.targetWeightHint 的开关 */
+  aiTargetWeightPool?: {
     enabled: boolean;
-    /** 单次 cron 最多生成的入场候选提案数，防止现金一次耗尽 */
-    maxPerCycle: number;
-    /** 全局默认阈值，单资产 entry_rules_json 未覆盖时使用 */
-    defaultRules: {
-      minTechnicalScore: number;
-      minValuationScore: number;
-      minFusionScore: number;
-      /** 是否要求技术面 momentumRegime=strong */
-      requireStrongMomentum: boolean;
-    };
-    /** AI 自动维护观察列表目标权重池：只在开关开启后允许 Agent 写入 watchlist 目标权重 */
-    aiTargetWeightPool: {
-      enabled: boolean;
-      minConfidence: number;
-      /** 写入目标权重时同步纳入入场候选，让信号/风控链路继续接管买入 */
-      autoEnableEntry: boolean;
-    };
-    /** 单次入场金额上限（以可用现金的百分比为上限，0-1） */
-    notionalCashCapPct: number;
+    minConfidence: number;
   };
   notification: {
     telegram: {
@@ -376,21 +357,9 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     memoryDecayRate: 0.97,
     thesisStalenessDays: 7,
   },
-  watchlistEntry: {
+  aiTargetWeightPool: {
     enabled: true,
-    maxPerCycle: 2,
-    defaultRules: {
-      minTechnicalScore: 65,
-      minValuationScore: 60,
-      minFusionScore: 62,
-      requireStrongMomentum: false,
-    },
-    aiTargetWeightPool: {
-      enabled: true,
-      minConfidence: 0,
-      autoEnableEntry: true,
-    },
-    notionalCashCapPct: 0.3,
+    minConfidence: 0,
   },
   notification: {
     telegram: {
@@ -835,32 +804,12 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         thesisStalenessDays: clamp(Math.trunc(Number(ca.thesisStalenessDays) || fb.thesisStalenessDays || 7), 1, 60),
       };
     })(),
-    watchlistEntry: (() => {
-      const we = isRecord(source.watchlistEntry) ? source.watchlistEntry : {};
-      const fb = fallback.watchlistEntry ?? {
-        enabled: true,
-        maxPerCycle: 2,
-        defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
-        aiTargetWeightPool: { enabled: true, minConfidence: 0, autoEnableEntry: true },
-        notionalCashCapPct: 0.3,
-      };
-      const rules = isRecord(we.defaultRules) ? we.defaultRules : {};
-      const aiTargetWeightPool = isRecord(we.aiTargetWeightPool) ? we.aiTargetWeightPool : {};
+    aiTargetWeightPool: (() => {
+      const raw = isRecord(source.aiTargetWeightPool) ? source.aiTargetWeightPool : {};
+      const fb = fallback.aiTargetWeightPool ?? { enabled: true, minConfidence: 0 };
       return {
-        enabled: toBool(we.enabled, fb.enabled),
-        maxPerCycle: clamp(Math.trunc(Number(we.maxPerCycle) || fb.maxPerCycle), 1, 10),
-        defaultRules: {
-          minTechnicalScore: clamp(Number(rules.minTechnicalScore) || fb.defaultRules.minTechnicalScore, 0, 100),
-          minValuationScore: clamp(Number(rules.minValuationScore) || fb.defaultRules.minValuationScore, 0, 100),
-          minFusionScore: clamp(Number(rules.minFusionScore) || fb.defaultRules.minFusionScore, 0, 100),
-          requireStrongMomentum: toBool(rules.requireStrongMomentum, fb.defaultRules.requireStrongMomentum),
-        },
-        aiTargetWeightPool: {
-          enabled: toBool(aiTargetWeightPool.enabled, fb.aiTargetWeightPool.enabled),
-          minConfidence: clamp(Number(aiTargetWeightPool.minConfidence) || fb.aiTargetWeightPool.minConfidence, 0, 100),
-          autoEnableEntry: toBool(aiTargetWeightPool.autoEnableEntry, fb.aiTargetWeightPool.autoEnableEntry),
-        },
-        notionalCashCapPct: clamp(Number(we.notionalCashCapPct) || fb.notionalCashCapPct, 0.05, 1.0),
+        enabled: toBool(raw.enabled, fb.enabled),
+        minConfidence: clamp(Number(raw.minConfidence) || fb.minConfidence, 0, 100),
       };
     })(),
     notification: {

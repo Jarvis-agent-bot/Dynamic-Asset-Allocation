@@ -274,4 +274,94 @@ export const WORKBENCH_FEATURED_ASSETS_CATALOG_: WorkbenchFeaturedCatalogItem[] 
     symbol: "FXY", market: "US", assetClass: "CURRENCY", name: "Invesco CurrencyShares Japanese Yen Trust", displayNameZh: "日元 ETF",
     currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "日元避险敞口", roleKey: "currency_hedge", allocationNoteZh: "用于小比例表达日元避险属性。", suggestedWeightBandZh: "0%-8%", themeKey: "currency_hedge", themeLabelZh: "汇率对冲",
   }),
+
+  // ── A 股核心宽基扩展 ──
+  withRole({
+    symbol: "510500.SS", market: "CN", assetClass: "ETF", name: "CSI 500 ETF", displayNameZh: "中证 500 ETF",
+    currency: "CNY", exchange: "SSE", thesisTagZh: "A 股中盘成长", roleKey: "regional_diversifier", allocationNoteZh: "A 股中盘代表，配合沪深 300 补全大中盘敞口。", suggestedWeightBandZh: "0%-10%", themeKey: "global_region", themeLabelZh: "全球区域",
+  }),
+  withRole({
+    symbol: "159915.SZ", market: "CN", assetClass: "ETF", name: "ChiNext ETF", displayNameZh: "创业板 ETF",
+    currency: "CNY", exchange: "SZSE", thesisTagZh: "A 股成长板块", roleKey: "satellite_theme", allocationNoteZh: "创业板高弹性，适合作为成长主题小比例配置。", suggestedWeightBandZh: "0%-8%", themeKey: "satellite_theme", themeLabelZh: "A 股成长",
+  }),
+  withRole({
+    symbol: "510880.SS", market: "CN", assetClass: "ETF", name: "Dividend ETF", displayNameZh: "上证红利 ETF",
+    currency: "CNY", exchange: "SSE", thesisTagZh: "A 股高股息", roleKey: "defensive_bond", allocationNoteZh: "A 股高股息低波动代表，可承担防守收益角色。", suggestedWeightBandZh: "0%-12%", themeKey: "defensive_income", themeLabelZh: "防守收益",
+  }),
+
+  // ── A 股白马股 ──
+  withRole({
+    symbol: "600519.SS", market: "CN", assetClass: "EQUITY", name: "Kweichow Moutai", displayNameZh: "贵州茅台",
+    currency: "CNY", exchange: "SSE", thesisTagZh: "高端消费龙头", roleKey: "satellite_theme", allocationNoteZh: "高端白酒龙头，估值和消费景气共同驱动。", suggestedWeightBandZh: "0%-6%", themeKey: "satellite_theme", themeLabelZh: "A 股白马",
+  }),
+  withRole({
+    symbol: "300750.SZ", market: "CN", assetClass: "EQUITY", name: "Contemporary Amperex Technology (CATL)", displayNameZh: "宁德时代",
+    currency: "CNY", exchange: "SZSE", thesisTagZh: "动力电池龙头", roleKey: "satellite_theme", allocationNoteZh: "全球动力电池龙头，新能源汽车与储能景气敞口。", suggestedWeightBandZh: "0%-6%", themeKey: "satellite_theme", themeLabelZh: "A 股白马",
+  }),
+  withRole({
+    symbol: "601318.SS", market: "CN", assetClass: "EQUITY", name: "Ping An Insurance", displayNameZh: "中国平安",
+    currency: "CNY", exchange: "SSE", thesisTagZh: "保险与综合金融", roleKey: "satellite_theme", allocationNoteZh: "保险与综合金融，受利率与寿险新业务价值驱动。", suggestedWeightBandZh: "0%-5%", themeKey: "satellite_theme", themeLabelZh: "A 股白马",
+  }),
+  withRole({
+    symbol: "600036.SS", market: "CN", assetClass: "EQUITY", name: "China Merchants Bank", displayNameZh: "招商银行",
+    currency: "CNY", exchange: "SSE", thesisTagZh: "零售银行龙头", roleKey: "satellite_theme", allocationNoteZh: "零售银行龙头，关注净息差、信贷质量与高股息。", suggestedWeightBandZh: "0%-5%", themeKey: "satellite_theme", themeLabelZh: "A 股白马",
+  }),
+  withRole({
+    symbol: "002594.SZ", market: "CN", assetClass: "EQUITY", name: "BYD Company", displayNameZh: "比亚迪",
+    currency: "CNY", exchange: "SZSE", thesisTagZh: "新能源汽车龙头", roleKey: "satellite_theme", allocationNoteZh: "新能源汽车产业链龙头，涵盖电池、整车、储能。", suggestedWeightBandZh: "0%-5%", themeKey: "satellite_theme", themeLabelZh: "A 股白马",
+  }),
+
+  // ── 港股扩展 ──
+  withRole({
+    symbol: "3690.HK", market: "HK", assetClass: "EQUITY", name: "Meituan", displayNameZh: "美团",
+    currency: "HKD", exchange: "HKEX", thesisTagZh: "本地生活平台", roleKey: "satellite_theme", allocationNoteZh: "本地生活与即时零售平台，关注外卖到家与到店利润率。", suggestedWeightBandZh: "0%-6%", themeKey: "satellite_theme", themeLabelZh: "港股平台",
+  }),
+  withRole({
+    symbol: "9988.HK", market: "HK", assetClass: "EQUITY", name: "Alibaba Group", displayNameZh: "阿里巴巴",
+    currency: "HKD", exchange: "HKEX", thesisTagZh: "电商与云计算", roleKey: "satellite_theme", allocationNoteZh: "电商主业与云业务双轮，估值受电商竞争与回购影响。", suggestedWeightBandZh: "0%-6%", themeKey: "satellite_theme", themeLabelZh: "港股平台",
+  }),
+  withRole({
+    symbol: "1211.HK", market: "HK", assetClass: "EQUITY", name: "BYD Company (H Share)", displayNameZh: "比亚迪股份 H 股",
+    currency: "HKD", exchange: "HKEX", thesisTagZh: "新能源汽车 H 股", roleKey: "satellite_theme", allocationNoteZh: "比亚迪港股通道，可与 A 股配合做 AH 折溢价观察。", suggestedWeightBandZh: "0%-5%", themeKey: "satellite_theme", themeLabelZh: "港股平台",
+  }),
+  withRole({
+    symbol: "0883.HK", market: "HK", assetClass: "EQUITY", name: "CNOOC Limited", displayNameZh: "中海油",
+    currency: "HKD", exchange: "HKEX", thesisTagZh: "油气与高股息", roleKey: "real_asset", allocationNoteZh: "上游油气敞口，分红与油价杠杆兼具。", suggestedWeightBandZh: "0%-5%", themeKey: "commodity_resource", themeLabelZh: "商品/资源",
+  }),
+  withRole({
+    symbol: "0941.HK", market: "HK", assetClass: "EQUITY", name: "China Mobile", displayNameZh: "中国移动",
+    currency: "HKD", exchange: "HKEX", thesisTagZh: "高股息通信", roleKey: "defensive_bond", allocationNoteZh: "高股息低波动通信龙头，可承担稳健收益角色。", suggestedWeightBandZh: "0%-8%", themeKey: "defensive_income", themeLabelZh: "防守收益",
+  }),
+
+  // ── 日股 / 欧股 / 印度区域 ETF（US-listed，便于统一行情通路） ──
+  withRole({
+    symbol: "EWJ", market: "US", assetClass: "ETF", name: "iShares MSCI Japan ETF", displayNameZh: "日本股票 ETF",
+    currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "日本市场宽基", roleKey: "regional_diversifier", allocationNoteZh: "MSCI 日本指数敞口，承担日股区域多元化。", suggestedWeightBandZh: "0%-15%", themeKey: "global_region", themeLabelZh: "全球区域",
+  }),
+  withRole({
+    symbol: "DXJ", market: "US", assetClass: "ETF", name: "WisdomTree Japan Hedged Equity Fund", displayNameZh: "日股汇率对冲 ETF",
+    currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "日股 + 日元对冲", roleKey: "regional_diversifier", allocationNoteZh: "对冲日元下跌的日股敞口，适合美元基准账户。", suggestedWeightBandZh: "0%-10%", themeKey: "global_region", themeLabelZh: "全球区域",
+  }),
+  withRole({
+    symbol: "VGK", market: "US", assetClass: "ETF", name: "Vanguard FTSE Europe ETF", displayNameZh: "欧洲股票 ETF",
+    currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "欧洲发达市场", roleKey: "regional_diversifier", allocationNoteZh: "FTSE 欧洲发达市场敞口。", suggestedWeightBandZh: "0%-15%", themeKey: "global_region", themeLabelZh: "全球区域",
+  }),
+  withRole({
+    symbol: "HEDJ", market: "US", assetClass: "ETF", name: "WisdomTree Europe Hedged Equity Fund", displayNameZh: "欧股欧元对冲 ETF",
+    currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "欧股 + 欧元对冲", roleKey: "regional_diversifier", allocationNoteZh: "对冲欧元波动的欧股敞口，适合美元基准账户。", suggestedWeightBandZh: "0%-10%", themeKey: "global_region", themeLabelZh: "全球区域",
+  }),
+  withRole({
+    symbol: "INDA", market: "US", assetClass: "ETF", name: "iShares MSCI India ETF", displayNameZh: "印度股票 ETF",
+    currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "印度长期成长", roleKey: "regional_diversifier", allocationNoteZh: "印度大盘敞口，适合作为新兴市场结构性增长。", suggestedWeightBandZh: "0%-10%", themeKey: "global_region", themeLabelZh: "全球区域",
+  }),
+
+  // ── 短债与浮息（cash_buffer 强化） ──
+  withRole({
+    symbol: "SHV", market: "US", assetClass: "BOND", name: "iShares Short Treasury Bond ETF", displayNameZh: "1 年内美国短债 ETF",
+    currency: "USD", exchange: "NASDAQ", thesisTagZh: "短期国债", roleKey: "cash_buffer", allocationNoteZh: "1 年内国债敞口，作为 SGOV/BIL 之外的现金替代选项。", suggestedWeightBandZh: "0%-25%", themeKey: "cash_equivalent", themeLabelZh: "现金替代",
+  }),
+  withRole({
+    symbol: "USFR", market: "US", assetClass: "BOND", name: "WisdomTree Floating Rate Treasury Fund", displayNameZh: "美国浮息国债 ETF",
+    currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "浮息国债", roleKey: "cash_buffer", allocationNoteZh: "浮息国债，对短端利率上行敏感度低于固定票息短债。", suggestedWeightBandZh: "0%-20%", themeKey: "cash_equivalent", themeLabelZh: "现金替代",
+  }),
 ];

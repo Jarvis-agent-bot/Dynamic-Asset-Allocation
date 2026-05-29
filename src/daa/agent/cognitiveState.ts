@@ -43,10 +43,6 @@ export interface WatchlistSnapshot {
     symbol: string;
     lastPrice: number;
     targetWeightPct: number;
-    autoEntryEnabled: boolean;
-    entryTargetWeightPct: number | null;
-    entryCooldownDays: number;
-    lastEntryTriggeredAt: string | null;
     fxMissing: boolean;
     notes: string | null;
     tags: string[];

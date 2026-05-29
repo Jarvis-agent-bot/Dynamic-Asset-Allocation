@@ -27,7 +27,6 @@ describe("buildCycleDraftFromBootstrap", () => {
           lastPrice: 100,
           fxRateToBase: 1,
           watchEnabled: true,
-          autoEntryEnabled: false,
         }),
       ],
     });

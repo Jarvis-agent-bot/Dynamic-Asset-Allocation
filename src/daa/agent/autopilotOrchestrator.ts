@@ -70,7 +70,6 @@ type AutopilotLoopResult = {
     persistedCount: number;
     failedCount: number;
     minConfidence: number;
-    autoEnableEntry: boolean;
     reason: string | null;
   };
 };
@@ -160,7 +159,6 @@ function buildSkippedTargetWeightPool(
     persistedCount: 0,
     failedCount: 0,
     minConfidence: aiTargetWeightPool?.minConfidence ?? 70,
-    autoEnableEntry: aiTargetWeightPool?.autoEnableEntry ?? true,
     reason,
   };
 }
@@ -257,7 +255,6 @@ async function maybePersistAgentTargetWeightPool(input: {
     persistedCount: 0,
     failedCount: 0,
     minConfidence: aiTargetWeightPool.minConfidence,
-    autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
     reason: null,
   };
 
@@ -270,7 +267,6 @@ async function maybePersistAgentTargetWeightPool(input: {
 
   const persisted = await persistAgentTargetWeightPool({
     targetWeights: input.targetPlan.targetWeights,
-    autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
   });
   return {
     ...base,
@@ -459,7 +455,6 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
         persistedCount: 0,
         failedCount: 0,
         minConfidence: aiTargetWeightPool.minConfidence,
-        autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
         reason: `AI 目标权重计划构建失败：${targetPlanError}`,
       };
     } else if (input.source === "cron_cognitive_agent") {
@@ -474,7 +469,6 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
         persistedCount: 0,
         failedCount: 0,
         minConfidence: aiTargetWeightPool.minConfidence,
-        autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
         reason: targetPlan
           ? "定期 Agent 审核使用临时目标权重，只有进入再平衡周期或执行成交后才写入持久目标。"
           : "定期 Agent 审核未形成目标权重计划。",
@@ -493,7 +487,6 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
           persistedCount: 0,
           failedCount: 0,
           minConfidence: aiTargetWeightPool.minConfidence,
-          autoEnableEntry: aiTargetWeightPool.autoEnableEntry,
           reason: "AI 目标权重池写入失败。",
         };
       });

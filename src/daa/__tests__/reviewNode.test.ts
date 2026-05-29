@@ -25,6 +25,7 @@ vi.mock("@/src/daa/agent/helpers/llm", () => ({
       actualOutcome: "价格上涨，论点部分兑现",
       accuracyScore: 75,
       lesson: null,
+      shouldInvalidate: false,
       shouldArchive: false,
     },
     tokensUsed: 120,

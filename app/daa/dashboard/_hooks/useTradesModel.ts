@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getTradesReadModel } from "@/src/daa/modules/read/readApi";
 import type { TradesReadModel } from "@/src/daa/modules/read/readModels";
 import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 
-export type TradeTab = "cycles" | "orders" | "reports";
+export type TradeTab = "cycles" | "orders";
 
 function maxIso(values: Array<string | null | undefined>): string | null {
   const timestamps = values
@@ -24,6 +24,23 @@ export type TradeFilters = {
   status?: string;
 };
 
+function readFiltersFromUrl(): TradeFilters {
+  if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  const filters: TradeFilters = {};
+  const start = params.get("start") ?? params.get("startDate");
+  const end = params.get("end") ?? params.get("endDate");
+  const symbol = params.get("symbol");
+  const side = params.get("side");
+  const status = params.get("status");
+  if (start) filters.startDate = start;
+  if (end) filters.endDate = end;
+  if (symbol) filters.symbol = symbol;
+  if (side) filters.side = side;
+  if (status) filters.status = status;
+  return filters;
+}
+
 export function useTradesModel(input: {
   tradeLimit?: number;
   reportLimit?: number;
@@ -36,7 +53,24 @@ export function useTradesModel(input: {
   const [error, setError] = useState("");
   const [expandedReportCycleId, setExpandedReportCycleId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TradeTab>("cycles");
-  const [filters, setFilters] = useState<TradeFilters>({});
+  const [filters, setFilters] = useState<TradeFilters>(() => readFiltersFromUrl());
+
+  // 同步 filters 到 URL（只在浏览器中）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    for (const key of ["start", "end", "symbol", "side", "status"]) params.delete(key);
+    if (filters.startDate) params.set("start", filters.startDate);
+    if (filters.endDate) params.set("end", filters.endDate);
+    if (filters.symbol) params.set("symbol", filters.symbol);
+    if (filters.side) params.set("side", filters.side);
+    if (filters.status) params.set("status", filters.status);
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(null, "", nextUrl);
+    }
+  }, [filters]);
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);

@@ -75,7 +75,7 @@ export function buildPrioritizePrompt(ctx: {
   const watchlistSummary = (ctx.watchlist ?? [])
     .slice(0, 30)
     .map((w) => {
-      const targetPct = w.entryTargetWeightPct ?? (w.targetWeightPct > 0 ? w.targetWeightPct : null);
+      const targetPct = w.targetWeightPct > 0 ? w.targetWeightPct : null;
       return `${w.assetKey} 现价${w.lastPrice > 0 ? w.lastPrice.toFixed(2) : "N/A"}${targetPct ? ` 观察目标${targetPct.toFixed(1)}%` : ""}${w.notes ? ` 备注=${sanitizeForPrompt(w.notes, 60)}` : ""}`;
     })
     .join("\n");
@@ -575,7 +575,13 @@ Regime: ${ctx.marketRegime}
 VIX: ${ctx.vix ?? "N/A"}
 
 ## 任务
-基于论点创建时的判断和实际市场表现，评估准确度。accuracyScore 0=完全错误 1=完全准确。
+基于论点创建时的判断和实际市场表现，评估准确度并决定论点去留：
+- accuracyScore: 0=完全错误，1=完全准确
+- shouldInvalidate: 实际走势否定了原判断（如看多但跌 >15%、或核心逻辑被新事实推翻）→ true
+- shouldArchive: 原判断已兑现/play out（如目标已达、催化剂已落地）→ true
+- 两者都 false 时论点继续观察，会在下个周期再复盘
+
+注意：shouldInvalidate 和 shouldArchive 互斥，最多一个为 true。
 
 ## 输出格式（严格 JSON）
 \`\`\`json
@@ -583,17 +589,43 @@ VIX: ${ctx.vix ?? "N/A"}
   "actualOutcome": "实际发生了什么",
   "accuracyScore": 0.7,
   "lesson": "从这次复盘中学到的教训（如果有）",
+  "shouldInvalidate": false,
   "shouldArchive": false
 }
 \`\`\`
 
 ## 示例输出
+
+继续观察：
 \`\`\`json
 {
   "actualOutcome": "看多NVDA的判断基本正确，期间上涨18%，但波动超预期，中间有一次12%回撤",
   "accuracyScore": 0.7,
   "lesson": "高波动资产即使方向正确也需要设置止损，conviction=high不等于低风险",
+  "shouldInvalidate": false,
   "shouldArchive": false
+}
+\`\`\`
+
+判断被否定（失效）：
+\`\`\`json
+{
+  "actualOutcome": "看多XX但期间下跌22%，原因是核心催化剂业绩miss，论点已被市场否决",
+  "accuracyScore": 0.1,
+  "lesson": "看多需要更明确的盈利可见性，避免在催化剂未确认前重仓",
+  "shouldInvalidate": true,
+  "shouldArchive": false
+}
+\`\`\`
+
+判断已兑现（归档）：
+\`\`\`json
+{
+  "actualOutcome": "黄金避险论点完全兑现，期间GLD上涨14%，地缘风险催化剂已充分定价",
+  "accuracyScore": 0.95,
+  "lesson": "VIX > 25 同时金银比 > 80 是高确定性的金价上行信号",
+  "shouldInvalidate": false,
+  "shouldArchive": true
 }
 \`\`\`
 
@@ -702,7 +734,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   if (briefing.autopilotCoverage) {
     const c = briefing.autopilotCoverage;
     lines.push("<b>\u{1F9ED} 自动驾驶覆盖</b>");
-    lines.push(`• 持仓复核 <code>${c.holdingAssets}</code> 个 | 观察候选 <code>${c.watchlistCandidates}</code> 个 | 已设目标 <code>${c.watchlistTargetedAssets}</code> 个 | 入场候选就绪 <code>${c.autoEntryReadyAssets}</code> 个 | 大脑目标计划 <code>${c.acceptedBrainPlanIntents}/${c.brainPlanIntents}</code> 条`);
+    lines.push(`• 持仓复核 <code>${c.holdingAssets}</code> 个 | 观察候选 <code>${c.watchlistCandidates}</code> 个 | 已设目标 <code>${c.watchlistTargetedAssets}</code> 个 | 大脑目标计划 <code>${c.acceptedBrainPlanIntents}/${c.brainPlanIntents}</code> 条`);
     lines.push("");
   }
 

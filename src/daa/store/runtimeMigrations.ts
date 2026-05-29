@@ -792,20 +792,6 @@ const MIGRATIONS_: Migration[] = [
     },
   },
   {
-    id: "20260417_watchlist_auto_entry",
-    async apply(query) {
-      // 观察列表入场候选字段
-      await query(`
-        ALTER TABLE daa_watchlist_entries
-          ADD COLUMN IF NOT EXISTS auto_entry_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS entry_target_weight_pct NUMERIC,
-          ADD COLUMN IF NOT EXISTS entry_rules_json JSONB,
-          ADD COLUMN IF NOT EXISTS entry_cooldown_days INTEGER NOT NULL DEFAULT 14,
-          ADD COLUMN IF NOT EXISTS last_entry_triggered_at TIMESTAMPTZ
-      `);
-    },
-  },
-  {
     id: "20260419_pg_trgm_episodic",
     async apply(query) {
       // pg_trgm 全文子串索引 — 为 Agent 记忆和证据内容提供关键字搜索能力
@@ -880,11 +866,6 @@ const MIGRATIONS_: Migration[] = [
       if (await tableExists(query, "daa_watchlist_entries")) {
         await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_above NUMERIC");
         await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
-        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS auto_entry_enabled BOOLEAN NOT NULL DEFAULT FALSE");
-        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS entry_target_weight_pct NUMERIC");
-        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS entry_rules_json JSONB");
-        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS entry_cooldown_days INTEGER NOT NULL DEFAULT 14");
-        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS last_entry_triggered_at TIMESTAMPTZ");
       }
 
       if (await tableExists(query, "daa_positions_v2")) {

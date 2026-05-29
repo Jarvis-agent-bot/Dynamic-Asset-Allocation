@@ -15,10 +15,13 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 
+import { useState } from "react";
+
 import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DaaSurfaceActionButton, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import { PortfolioCashEntryPopover } from "./PortfolioCashEntryPopover";
 
 type HomeAction = {
   label: string;
@@ -110,10 +113,11 @@ export function PortfolioHomeOverview(props: {
   refreshing: boolean;
   priceStreamConnected?: boolean;
   onRefresh: () => void;
-  onDeposit: () => void;
-  onWithdraw: () => void;
+  onCashRefresh: () => void;
   onOpenRebalance: () => void;
 }) {
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const basketCount = props.rows.filter((row) => row.watchEnabled && row.targetWeightHint > 0).length;
   const investedRatio = props.totalEquity > 0 ? (props.holdingsValue / props.totalEquity) * 100 : 0;
   const cashRatio = props.totalEquity > 0 ? (props.availableCashValue / props.totalEquity) * 100 : 0;
@@ -132,7 +136,7 @@ export function PortfolioHomeOverview(props: {
     totalEquity: props.totalEquity,
     latestCycle: props.latestCycle,
     maxDriftPct,
-    onDeposit: props.onDeposit,
+    onDeposit: () => setDepositOpen(true),
     onOpenRebalance: props.onOpenRebalance,
     onRefresh: props.onRefresh,
   });
@@ -215,12 +219,20 @@ export function PortfolioHomeOverview(props: {
               <RefreshCcw className={cn("h-3.5 w-3.5", props.refreshing ? "animate-spin" : "")} />
               {props.refreshing ? "刷新中" : "刷新"}
             </DaaSurfaceActionButton>
-            <DaaSurfaceActionButton tone="success" onClick={props.onDeposit} className="justify-center">
-              入金
-            </DaaSurfaceActionButton>
-            <DaaSurfaceActionButton tone="warning" onClick={props.onWithdraw} className="justify-center">
-              出金
-            </DaaSurfaceActionButton>
+            <PortfolioCashEntryPopover
+              side="deposit"
+              baseCurrency={props.baseCurrency}
+              onSuccess={props.onCashRefresh}
+              open={depositOpen}
+              onOpenChange={setDepositOpen}
+            />
+            <PortfolioCashEntryPopover
+              side="withdraw"
+              baseCurrency={props.baseCurrency}
+              onSuccess={props.onCashRefresh}
+              open={withdrawOpen}
+              onOpenChange={setWithdrawOpen}
+            />
           </div>
         </div>
       </div>

@@ -11,21 +11,9 @@ import {
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
-const DEFAULT_WATCHLIST_ENTRY_CONFIG: NonNullable<DaaSystemConfig["watchlistEntry"]> = {
+const DEFAULT_AI_TARGET_WEIGHT_POOL: NonNullable<DaaSystemConfig["aiTargetWeightPool"]> = {
   enabled: true,
-  maxPerCycle: 2,
-  defaultRules: {
-    minTechnicalScore: 65,
-    minValuationScore: 60,
-    minFusionScore: 62,
-    requireStrongMomentum: false,
-  },
-  aiTargetWeightPool: {
-    enabled: true,
-    minConfidence: 0,
-    autoEnableEntry: true,
-  },
-  notionalCashCapPct: 0.3,
+  minConfidence: 0,
 };
 
 export function SettingsStrategySection(props: {
@@ -458,17 +446,17 @@ export function SettingsStrategySection(props: {
         </div>
       </SectionCard>
 
-      <SectionCard title="观察列表入场候选过滤器">
+      <SectionCard title="AI 目标权重池">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
-            checked={config.watchlistEntry?.enabled ?? false}
+            checked={config.aiTargetWeightPool?.enabled !== false}
             onChange={(value) =>
               setConfig((prev) =>
                 prev
                   ? {
                       ...prev,
-                      watchlistEntry: {
-                        ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
+                      aiTargetWeightPool: {
+                        ...(prev.aiTargetWeightPool ?? DEFAULT_AI_TARGET_WEIGHT_POOL),
                         enabled: value,
                       },
                     }
@@ -476,98 +464,24 @@ export function SettingsStrategySection(props: {
               )
             }
           >
-            启用观察列表入场候选过滤
-          </CheckboxRow>
-
-          <CheckboxRow
-            checked={config.watchlistEntry?.aiTargetWeightPool.enabled ?? false}
-            onChange={(value) =>
-              setConfig((prev) => {
-                if (!prev) return prev;
-                const current = prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG;
-                return {
-                  ...prev,
-                  watchlistEntry: {
-                    ...current,
-                    enabled: value ? true : current.enabled,
-                    aiTargetWeightPool: {
-                      ...(current.aiTargetWeightPool ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.aiTargetWeightPool),
-                      enabled: value,
-                    },
-                  },
-                };
-              })
-            }
-          >
-            AI 全自动维护观察列表目标权重池
-          </CheckboxRow>
-
-          <CheckboxRow
-            checked={config.watchlistEntry?.aiTargetWeightPool.autoEnableEntry ?? true}
-            onChange={(value) =>
-              setConfig((prev) => {
-                if (!prev) return prev;
-                const current = prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG;
-                return {
-                  ...prev,
-                  watchlistEntry: {
-                    ...current,
-                    aiTargetWeightPool: {
-                      ...(current.aiTargetWeightPool ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.aiTargetWeightPool),
-                      autoEnableEntry: value,
-                    },
-                  },
-                };
-              })
-            }
-          >
-            AI 写入权重后纳入单资产入场候选
+            将 Agent 输出的目标权重落到资产 targetWeightHint
           </CheckboxRow>
 
           <div>
-            <FieldLabel>AI 写入目标权重最低置信度</FieldLabel>
+            <FieldLabel>最低置信度</FieldLabel>
             <NumberInput
-              value={config.watchlistEntry?.aiTargetWeightPool.minConfidence ?? 70}
+              value={config.aiTargetWeightPool?.minConfidence ?? 0}
               min={0}
               max={100}
-              step={1}
-              onChange={(value) =>
-                setConfig((prev) => {
-                  if (!prev) return prev;
-                  const current = prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG;
-                  return {
-                    ...prev,
-                    watchlistEntry: {
-                      ...current,
-                      aiTargetWeightPool: {
-                        ...(current.aiTargetWeightPool ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.aiTargetWeightPool),
-                        minConfidence: Math.max(0, Math.min(100, value || 70)),
-                      },
-                    },
-                  };
-                })
-              }
-            />
-            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
-              开启后，Agent 的高置信目标权重计划会先写入观察池；买入仍需通过技术 / 估值阈值、价格 / FX、冷静期和统一风控。
-            </div>
-          </div>
-
-          <div>
-            <FieldLabel>单次最多生成候选提案 (个)</FieldLabel>
-            <NumberInput
-              value={config.watchlistEntry?.maxPerCycle ?? 2}
-              min={1}
-              max={10}
               step={1}
               onChange={(value) =>
                 setConfig((prev) =>
                   prev
                     ? {
                         ...prev,
-                        watchlistEntry: {
-                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
-                          maxPerCycle: Math.max(1, Math.min(10, value || 2)),
+                        aiTargetWeightPool: {
+                          ...(prev.aiTargetWeightPool ?? DEFAULT_AI_TARGET_WEIGHT_POOL),
+                          minConfidence: Math.max(0, Math.min(100, value || 0)),
                         },
                       }
                     : prev,
@@ -575,123 +489,8 @@ export function SettingsStrategySection(props: {
               }
             />
             <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
-              当前语义：Watchlist 只是候选池。系统只会为已纳入入场候选、具备有效目标权重、价格 / FX 正常且不在冷静期内的观察标的生成买入提案。
+              Agent 输出 targetAllocationPlan 时，只有置信度 ≥ 此阈值的 intent 才会写入持久目标权重；后续 BUY/SELL 通过 cycle 的 drift 计算 + AutomationAuthority 统一执行，不再走规则触发器。
             </div>
-          </div>
-
-          <div>
-            <FieldLabel>单次入场占可用现金上限 (%)</FieldLabel>
-            <NumberInput
-              value={Math.round(((config.watchlistEntry?.notionalCashCapPct ?? 0.3) * 100))}
-              min={5}
-              max={100}
-              step={5}
-              onChange={(value) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        watchlistEntry: {
-                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
-                          notionalCashCapPct: Math.max(0.05, Math.min(1, (value || 30) / 100)),
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
-
-          <div>
-            <FieldLabel>默认技术阈值</FieldLabel>
-            <NumberInput
-              value={config.watchlistEntry?.defaultRules.minTechnicalScore ?? 65}
-              min={0}
-              max={100}
-              step={1}
-              onChange={(value) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        watchlistEntry: {
-                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
-                          defaultRules: {
-                            ...(prev.watchlistEntry?.defaultRules ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.defaultRules),
-                            minTechnicalScore: Math.max(0, Math.min(100, value || 65)),
-                          },
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
-
-          <div>
-            <FieldLabel>默认估值阈值</FieldLabel>
-            <NumberInput
-              value={config.watchlistEntry?.defaultRules.minValuationScore ?? 60}
-              min={0}
-              max={100}
-              step={1}
-              onChange={(value) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        watchlistEntry: {
-                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
-                          defaultRules: {
-                            ...(prev.watchlistEntry?.defaultRules ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.defaultRules),
-                            minValuationScore: Math.max(0, Math.min(100, value || 60)),
-                          },
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
-
-          <div>
-            <FieldLabel>默认融合阈值</FieldLabel>
-            <NumberInput
-              value={config.watchlistEntry?.defaultRules.minFusionScore ?? 62}
-              min={0}
-              max={100}
-              step={1}
-              onChange={(value) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        watchlistEntry: {
-                          ...(prev.watchlistEntry ?? DEFAULT_WATCHLIST_ENTRY_CONFIG),
-                          defaultRules: {
-                            ...(prev.watchlistEntry?.defaultRules ?? DEFAULT_WATCHLIST_ENTRY_CONFIG.defaultRules),
-                            minFusionScore: Math.max(0, Math.min(100, value || 62)),
-                          },
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
-
-          <div style={{
-            gridColumn: "1 / -1",
-            marginTop: 4,
-            padding: "8px 12px",
-            background: "rgba(56, 189, 248, 0.06)",
-            border: "1px solid rgba(56, 189, 248, 0.18)",
-            borderRadius: 8,
-            fontSize: 12,
-            lineHeight: 1.6,
-            color: "var(--muted)",
-          }}>
-            仅对观察列表中「未持仓」、「过冷静期」且「设置了目标权重」的资产生效。到 Portfolio 详情页可为每个资产单独调节阈值与冷静期。
           </div>
         </div>
       </SectionCard>

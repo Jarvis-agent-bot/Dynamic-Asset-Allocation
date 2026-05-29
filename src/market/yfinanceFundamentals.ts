@@ -69,6 +69,12 @@ export type YfinanceFundamentalSnapshot = {
   totalCash: number | null;
   totalDebt: number | null;
   enterpriseValue: number | null;
+  /** Yahoo financialData.debtToEquity，百分比形式（167.3 = 167.3%）。 */
+  debtToEquity: number | null;
+  /** defaultKeyStatistics.trailingEps，最近 12 个月 EPS。 */
+  trailingEps: number | null;
+  /** netIncomeToCommon 或 profitMargins × totalRevenue 推导。 */
+  netIncome: number | null;
   sector: string | null;
   sectorKey: string | null;
   industry: string | null;
@@ -220,6 +226,9 @@ type QuoteSummaryStats = {
   totalCash: number | null;
   totalDebt: number | null;
   enterpriseValue: number | null;
+  debtToEquity: number | null;
+  trailingEps: number | null;
+  netIncome: number | null;
   sector: string | null;
   sectorKey: string | null;
   industry: string | null;
@@ -310,6 +319,9 @@ function readQuoteSummaryStats(payload: unknown): QuoteSummaryStats {
     totalCash: readNumber(financialData, "totalCash"),
     totalDebt: readNumber(financialData, "totalDebt"),
     enterpriseValue: readNumber(defaultStats, "enterpriseValue"),
+    debtToEquity: readNumber(financialData, "debtToEquity"),
+    trailingEps: readNumber(defaultStats, "trailingEps"),
+    netIncome: readNumber(defaultStats, "netIncomeToCommon"),
     sector: readTextMetric(assetProfile, "sector"),
     sectorKey: readTextMetric(assetProfile, "sectorKey"),
     industry: readTextMetric(assetProfile, "industry"),
@@ -358,6 +370,9 @@ function readQuoteBatchStats(row: Record<string, unknown>): QuoteSummaryStats {
     totalCash: null,
     totalDebt: null,
     enterpriseValue: readNumber(row, "enterpriseValue"),
+    debtToEquity: null,
+    trailingEps: readNumber(row, "trailingEps"),
+    netIncome: null,
     sector: null,
     sectorKey: null,
     industry: null,
@@ -491,6 +506,9 @@ function normalizeYfinanceQuoteBatchRow(row: Record<string, unknown>, updatedAt:
     totalCash: null,
     totalDebt: null,
     enterpriseValue: quoteStats.enterpriseValue,
+    debtToEquity: null,
+    trailingEps: quoteStats.trailingEps,
+    netIncome: null,
     sector: null,
     sectorKey: null,
     industry: null,
@@ -614,6 +632,12 @@ export function normalizeYfinanceFundamentalsPayload(input: {
     totalCash: quoteStats.totalCash,
     totalDebt: quoteStats.totalDebt,
     enterpriseValue: quoteStats.enterpriseValue,
+    debtToEquity: quoteStats.debtToEquity,
+    trailingEps: quoteStats.trailingEps,
+    netIncome: quoteStats.netIncome
+      ?? (quoteStats.totalRevenue != null && quoteStats.profitMarginsPct != null
+        ? quoteStats.totalRevenue * (quoteStats.profitMarginsPct / 100)
+        : null),
     sector: quoteStats.sector,
     sectorKey: quoteStats.sectorKey,
     industry: quoteStats.industry,

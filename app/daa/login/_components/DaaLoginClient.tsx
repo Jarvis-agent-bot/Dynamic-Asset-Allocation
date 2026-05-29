@@ -274,7 +274,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             精准<em className="not-italic" style={{ color: "var(--primary)" }}>决策。</em>
           </h1>
           <p className="max-w-sm text-[15px] leading-relaxed" style={{ color: "var(--muted)" }}>
-            基于多信号融合与量化模型，实现资产组合的动态再平衡与风险管理。
+            基于 Cognitive Agent 驱动的资产研究与动态再平衡，结合人类审阅与本地风控。
           </p>
         </div>
 

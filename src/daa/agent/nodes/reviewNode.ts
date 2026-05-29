@@ -65,6 +65,7 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
           actualOutcome: string;
           accuracyScore: number;
           lesson: string | null;
+          shouldInvalidate: boolean;
           shouldArchive: boolean;
         }>(prompt, "cognitiveGraph.review");
 
@@ -72,7 +73,12 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
 
         // P0-2: 校验 review 输出
         if (data) {
-          const valErrors = validateShape(data, { actualOutcome: "string", accuracyScore: "number", shouldArchive: "boolean" });
+          const valErrors = validateShape(data, {
+            actualOutcome: "string",
+            accuracyScore: "number",
+            shouldInvalidate: "boolean",
+            shouldArchive: "boolean",
+          });
           if (valErrors.length > 0) {
             logSwallowed(`cognitiveGraph.review.validation.${thread.id}`, new Error(valErrors.join("; ")));
           }
@@ -102,8 +108,10 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
             });
           }
 
-          // 更新 thesis：设定下次复盘或归档
-          if (data.shouldArchive) {
+          // 更新 thesis：失效 / 归档 / 继续观察（按优先级判定）
+          if (data.shouldInvalidate) {
+            await thesisStore.updateThesis(thread.id, { status: "invalidated" });
+          } else if (data.shouldArchive) {
             await thesisStore.updateThesis(thread.id, { status: "archived" });
           } else {
             await thesisStore.updateThesis(thread.id, {
@@ -116,7 +124,9 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
           node: "review",
           threadId: thread.id,
           input: thread.title,
-          output: data ? `accuracy=${data.accuracyScore}, archive=${data.shouldArchive}` : "no result",
+          output: data
+            ? `accuracy=${data.accuracyScore}, ${data.shouldInvalidate ? "invalidated" : data.shouldArchive ? "archived" : "kept"}`
+            : "no result",
           tokensUsed,
           durationMs: Date.now() - t0,
         });

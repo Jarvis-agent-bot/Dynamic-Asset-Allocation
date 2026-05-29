@@ -275,6 +275,8 @@ export function WatchlistItemList(props: {
   const router = useRouter();
   const { rows } = props;
   const [activeCategory, setActiveCategory] = useState("all");
+  const [sortKey, setSortKey] = useState<"default" | "change_desc" | "change_asc" | "name_asc" | "target_desc">("default");
+  const [showAll, setShowAll] = useState(false);
 
   const watchRows = useMemo(() => rows.filter((r) => r.watchEnabled), [rows]);
 
@@ -290,10 +292,29 @@ export function WatchlistItemList(props: {
     return HOLDING_CATEGORY_META.filter((m) => m.key === "all" || keys.has(m.key));
   }, [watchRows]);
 
-  const filteredRows = useMemo(() => {
+  const categoryFiltered = useMemo(() => {
     if (activeCategory === "all") return watchRows;
     return watchRows.filter((r) => holdingCategoryKey(r.market, r.assetClass) === activeCategory);
   }, [watchRows, activeCategory]);
+
+  const sortedRows = useMemo(() => {
+    if (sortKey === "default") return categoryFiltered;
+    const arr = categoryFiltered.slice();
+    const changePct = (r: AssetUniverseView): number => {
+      const s = sparklines[r.yfinanceSymbol || r.symbol] ?? sparklines[r.symbol] ?? null;
+      const change = deriveAssetPriceChange(r, s);
+      return change?.changePct ?? 0;
+    };
+    if (sortKey === "change_desc") arr.sort((a, b) => changePct(b) - changePct(a));
+    else if (sortKey === "change_asc") arr.sort((a, b) => changePct(a) - changePct(b));
+    else if (sortKey === "name_asc") arr.sort((a, b) => assetDisplayName(a).localeCompare(assetDisplayName(b), "zh-CN"));
+    else if (sortKey === "target_desc") arr.sort((a, b) => (b.targetWeightHint ?? 0) - (a.targetWeightHint ?? 0));
+    return arr;
+  }, [categoryFiltered, sortKey, sparklines]);
+
+  const PAGE_SIZE = 20;
+  const totalCount = sortedRows.length;
+  const filteredRows = showAll || totalCount <= PAGE_SIZE ? sortedRows : sortedRows.slice(0, PAGE_SIZE);
 
   const handleRowClick = useCallback((row: AssetUniverseView) => {
     router.push(`/daa/dashboard/portfolio/${encodeURIComponent(row.assetKey)}`);
@@ -303,29 +324,46 @@ export function WatchlistItemList(props: {
 
   return (
     <div className="space-y-2">
-      {/* 分类 Tab */}
-      {availableCategories.length > 2 ? (
-        <div className="flex flex-wrap gap-1.5 px-1" role="tablist">
-          {availableCategories.map((cat) => (
-            <button
-              key={cat.key}
-              type="button"
-              role="tab"
-              aria-selected={activeCategory === cat.key}
-              onClick={() => setActiveCategory(cat.key)}
-              className={cn(
-                "rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors",
-                activeCategory === cat.key
-                  ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-                  : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)]",
-              )}
-            >
-              {cat.label}
-              {cat.key === "all" ? ` ${watchRows.length}` : ""}
-            </button>
-          ))}
+      {/* 分类 Tab + 排序 */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        {availableCategories.length > 2 ? (
+          <div className="flex flex-wrap gap-1.5" role="tablist">
+            {availableCategories.map((cat) => (
+              <button
+                key={cat.key}
+                type="button"
+                role="tab"
+                aria-selected={activeCategory === cat.key}
+                onClick={() => setActiveCategory(cat.key)}
+                className={cn(
+                  "rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors",
+                  activeCategory === cat.key
+                    ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)]",
+                )}
+              >
+                {cat.label}
+                {cat.key === "all" ? ` ${watchRows.length}` : ""}
+              </button>
+            ))}
+          </div>
+        ) : <div />}
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] text-[var(--faint)]">排序</label>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
+            className="h-7 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[rgba(8,12,20,0.78)] px-2 text-[11px] text-[var(--muted)] outline-none"
+            aria-label="排序方式"
+          >
+            <option value="default">默认</option>
+            <option value="change_desc">涨幅 高→低</option>
+            <option value="change_asc">跌幅 高→低</option>
+            <option value="target_desc">目标权重 高→低</option>
+            <option value="name_asc">名称 A-Z</option>
+          </select>
         </div>
-      ) : null}
+      </div>
 
       <div className="divide-y divide-[rgba(255,255,255,0.04)]">
         {filteredRows.map((row) => (
@@ -347,6 +385,16 @@ export function WatchlistItemList(props: {
 
       {filteredRows.length === 0 ? (
         <div className="py-8 text-center text-sm text-[var(--muted)]">该分类下暂无观察标的</div>
+      ) : null}
+
+      {!showAll && totalCount > PAGE_SIZE ? (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="mx-auto block rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+        >
+          展开剩余 {totalCount - PAGE_SIZE} 条
+        </button>
       ) : null}
     </div>
   );

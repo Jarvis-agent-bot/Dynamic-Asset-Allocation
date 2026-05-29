@@ -10,11 +10,14 @@ import {
 import {
   riskOverallTone,
   riskStatusLabel,
+  riskRuleLabel,
+  riskItemTone,
   cycleStatusLabel,
   cycleStatusTone,
 } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
+import { topRiskItems } from "./rebalanceDecisionState";
 
 export function ExecutionPanel(props: {
   currentCycle: RebalanceCycle | null;
@@ -81,12 +84,29 @@ export function ExecutionPanel(props: {
             </div>
           ) : null}
 
-          {/* 风控阻断原因 */}
-          {riskCheck?.overallStatus === "block" ? (
-            <div className="rounded-[8px] border border-red-500/20 bg-red-500/8 px-3 py-2 text-xs text-red-300">
-              {riskCheck.items.find((i) => i.status === "block")?.message || "风控阻断"}
-            </div>
-          ) : null}
+          {/* 风控 top-3 摘要 */}
+          {(() => {
+            const top = topRiskItems(riskCheck, 3);
+            if (top.length === 0) return null;
+            const blocked = riskCheck?.overallStatus === "block";
+            return (
+              <div className={`rounded-[10px] border px-3 py-2.5 ${blocked ? "border-red-500/22 bg-red-500/8" : "border-amber-400/22 bg-amber-500/8"}`}>
+                <div className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wider ${blocked ? "text-red-200" : "text-amber-200"}`}>
+                  {blocked ? "执行前阻断" : "执行前提示"} · {top.length}/{(riskCheck?.items?.length ?? 0)} 项
+                </div>
+                <ul className="space-y-1.5">
+                  {top.map((item, idx) => (
+                    <li key={`${item.rule}-${idx}`} className="flex items-start gap-2 text-xs leading-5">
+                      <DaaSurfaceStatusPill tone={riskItemTone(item.status)} className="text-[9px]">
+                        {riskRuleLabel(item.rule)}
+                      </DaaSurfaceStatusPill>
+                      <span className="min-w-0 flex-1 text-[var(--muted)]">{item.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
         </div>
 
         {/* 操作按钮 */}

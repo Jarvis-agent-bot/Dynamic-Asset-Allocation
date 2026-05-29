@@ -288,7 +288,6 @@ function buildAutopilotLoopResult(): Awaited<ReturnType<typeof runAutopilotLoop>
       persistedCount: 0,
       failedCount: 0,
       minConfidence: 0,
-      autoEnableEntry: true,
       reason: null,
     },
   };

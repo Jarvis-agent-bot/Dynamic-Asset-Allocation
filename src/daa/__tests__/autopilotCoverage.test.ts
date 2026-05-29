@@ -19,10 +19,6 @@ describe("buildAutopilotCoverageSummary", () => {
             symbol: "QQQ",
             lastPrice: 600,
             targetWeightPct: 0,
-            autoEntryEnabled: false,
-            entryTargetWeightPct: null,
-            entryCooldownDays: 14,
-            lastEntryTriggeredAt: null,
             fxMissing: false,
             notes: null,
             tags: [],
@@ -32,10 +28,6 @@ describe("buildAutopilotCoverageSummary", () => {
             symbol: "SPY",
             lastPrice: 700,
             targetWeightPct: 3,
-            autoEntryEnabled: true,
-            entryTargetWeightPct: null,
-            entryCooldownDays: 14,
-            lastEntryTriggeredAt: null,
             fxMissing: false,
             notes: null,
             tags: [],
@@ -59,7 +51,6 @@ describe("buildAutopilotCoverageSummary", () => {
     expect(summary.holdingAssets).toBe(1);
     expect(summary.watchlistCandidates).toBe(2);
     expect(summary.watchlistTargetedAssets).toBe(1);
-    expect(summary.autoEntryReadyAssets).toBe(1);
     expect(summary.brainPlanIntents).toBe(2);
     expect(summary.acceptedBrainPlanIntents).toBe(1);
   });

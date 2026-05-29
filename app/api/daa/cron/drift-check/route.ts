@@ -112,15 +112,12 @@ async function runDriftCheck() {
       cycle: RebalanceCycle | null;
     } | null = null;
 
-    if (policy.enabled && policy.execution.autoGenerateEnabled) {
-      const hasWatchlistEntryPath = system.config.watchlistEntry?.enabled === true;
-      if (hasDrift || hasWatchlistEntryPath) {
-        generated = await generateWorkbenchRebalanceCycle({
-          triggerSource: "drift",
-          triggerReason: hasDrift ? "偏移量阈值触发" : "观察列表入场候选检查",
-          manual: false,
-        });
-      }
+    if (policy.enabled && policy.execution.autoGenerateEnabled && hasDrift) {
+      generated = await generateWorkbenchRebalanceCycle({
+        triggerSource: "drift",
+        triggerReason: "偏移量阈值触发",
+        manual: false,
+      });
     }
 
     const cycle = generated?.cycle ?? null;

@@ -30,7 +30,6 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className="dark"
       suppressHydrationWarning
     >
       <head>
@@ -38,7 +37,7 @@ export default function RootLayout({
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
-        <meta name="color-scheme" content="dark" />
+        <meta name="color-scheme" content="light" />
 
         {analyticsEnabled ? (
           <>
@@ -59,7 +58,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
-        <Toaster theme="dark" />
+        <Toaster theme="light" />
       </body>
     </html>
   );

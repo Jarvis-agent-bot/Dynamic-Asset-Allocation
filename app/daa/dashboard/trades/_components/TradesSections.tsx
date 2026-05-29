@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Filter, RefreshCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, Filter, HelpCircle, RefreshCcw } from "lucide-react";
+
+import type { WorkbenchRebalanceCycleReport } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
@@ -82,7 +84,12 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
         <Separator />
         <Metric label="成交额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} />
         <Separator />
-        <Metric label="已实现 P&L" value={formatCurrency(model.realizedPnl, model.baseCurrency)} tone={model.realizedPnl >= 0 ? "green" : "red"} />
+        <Metric
+          label="已实现 P&L"
+          value={formatCurrency(model.realizedPnl, model.baseCurrency)}
+          tone={model.realizedPnl >= 0 ? "green" : "red"}
+          hint="来自已完成调仓周期复盘报告的实现损益合计，含手续费与汇率影响"
+        />
 
         <div className="ml-auto flex items-center gap-2">
           {model.latestActivityAt ? (
@@ -141,10 +148,17 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
   );
 }
 
-function Metric(props: { label: string; value: string; sub?: string; tone?: "green" | "red" }) {
+function Metric(props: { label: string; value: string; sub?: string; tone?: "green" | "red"; hint?: string }) {
   return (
     <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{props.label}</div>
+      <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+        {props.label}
+        {props.hint ? (
+          <span className="inline-flex" title={props.hint}>
+            <HelpCircle className="h-3 w-3 cursor-help text-[var(--faint)]" />
+          </span>
+        ) : null}
+      </div>
       <div className={cn("font-[var(--font-mono)] text-sm font-semibold", props.tone === "green" ? "text-emerald-400" : props.tone === "red" ? "text-red-400" : "text-[var(--text)]")}>
         {props.value}
       </div>
@@ -170,26 +184,25 @@ export function TradesErrorState({ error }: { error: string }) {
 /* ------------------------------------------------------------------ */
 
 const TAB_META: Record<TradeTab, string> = {
-  cycles: "再平衡周期",
-  orders: "订单明细",
-  reports: "复盘报告",
+  cycles: "调仓周期",
+  orders: "订单流",
 };
 
 export function TradesTabsPanel({ model }: { model: TradesModel }) {
+  const safeTab: TradeTab = model.activeTab === "cycles" || model.activeTab === "orders" ? model.activeTab : "cycles";
   return (
     <div className="space-y-3">
-      {/* Tab 切换 */}
       <div className="inline-flex rounded-[12px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-1" role="tablist">
         {(Object.keys(TAB_META) as TradeTab[]).map((tab) => (
           <button
             key={tab}
             type="button"
             role="tab"
-            aria-selected={tab === model.activeTab}
+            aria-selected={tab === safeTab}
             onClick={() => model.setActiveTab(tab)}
             className={cn(
               "rounded-[10px] px-3 py-2 text-sm transition-colors",
-              tab === model.activeTab ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
+              tab === safeTab ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
             {TAB_META[tab]}
@@ -197,23 +210,28 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
         ))}
       </div>
 
-      {model.activeTab === "cycles" ? <CyclesPanel model={model} /> : null}
-      {model.activeTab === "orders" ? <OrdersPanel model={model} /> : null}
-      {model.activeTab === "reports" ? <ReportsPanel model={model} /> : null}
+      {safeTab === "cycles" ? <CyclesTimeline model={model} /> : null}
+      {safeTab === "orders" ? <OrdersPanel model={model} /> : null}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Cycles                                                             */
+/*  Cycles timeline（含复盘报告内联展开）                                */
 /* ------------------------------------------------------------------ */
 
-function CyclesPanel({ model }: { model: TradesModel }) {
+function CyclesTimeline({ model }: { model: TradesModel }) {
+  const reportsByCycle = useMemo(() => {
+    const map = new Map<string, WorkbenchRebalanceCycleReport>();
+    for (const report of model.sortedReports) map.set(report.cycleId, report);
+    return map;
+  }, [model.sortedReports]);
+
   if (model.cycles.length <= 0) {
     return (
       <DaaSurfaceEmptyState
-        title="暂无再平衡周期"
-        description="前往调仓页生成首个再平衡建议。"
+        title="暂无调仓周期"
+        description="前往调仓页生成首个调仓建议。"
         className="py-14"
         action={<Link href="/daa/dashboard/rebalance" className="text-sm text-[var(--primary)] hover:underline">前往调仓 →</Link>}
       />
@@ -221,29 +239,75 @@ function CyclesPanel({ model }: { model: TradesModel }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--border)]">
-      <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
-        <thead>
-          <tr>
-            <TH>周期</TH><TH>状态</TH><TH>触发</TH><TH align="right">订单</TH><TH align="right">金额</TH><TH align="right">时间</TH>
-          </tr>
-        </thead>
-        <tbody>
-          {model.cycles.map((c) => {
-            const count = c.executionSummary ? (c.executionSummary.ordersExecuted ?? 0) + (c.executionSummary.ordersSubmitted ?? 0) + (c.executionSummary.ordersFailed ?? 0) : c.executedOrders.length;
-            return (
-              <tr key={c.cycleId} className="transition-colors hover:bg-[rgba(255,255,255,0.02)]">
-                <TD mono><Link href={`/daa/dashboard/rebalance?cycleId=${c.cycleId}`} className="text-[var(--primary)] hover:underline">{c.cycleId.slice(0, 8)}</Link></TD>
-                <TD><DaaSurfaceStatusPill tone={STATUS_TONE[c.status] ?? "slate"}>{cycleStatusLabel(c.status)}</DaaSurfaceStatusPill></TD>
-                <TD>{triggerSourceLabel(c.triggerSource)}</TD>
-                <TD mono align="right">{count}</TD>
-                <TD mono align="right">{formatCurrency(c.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</TD>
-                <TD align="right">{formatDateTime(c.createdAt)}</TD>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {model.cycles.map((c) => {
+        const report = reportsByCycle.get(c.cycleId) ?? null;
+        const expanded = model.expandedReportCycleId === c.cycleId;
+        const count = c.executionSummary
+          ? (c.executionSummary.ordersExecuted ?? 0) + (c.executionSummary.ordersSubmitted ?? 0) + (c.executionSummary.ordersFailed ?? 0)
+          : c.executedOrders.length;
+        const notional = c.executionSummary?.totalNotional ?? 0;
+        const canExpand = report != null;
+
+        return (
+          <div key={c.cycleId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.34)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href={`/daa/dashboard/rebalance?cycleId=${c.cycleId}`}
+                  className="font-[var(--font-mono)] text-sm text-[var(--primary)] hover:underline"
+                >
+                  {c.cycleId.slice(0, 8)}
+                </Link>
+                <DaaSurfaceStatusPill tone={STATUS_TONE[c.status] ?? "slate"}>{cycleStatusLabel(c.status)}</DaaSurfaceStatusPill>
+                <span className="text-xs text-[var(--faint)]">{triggerSourceLabel(c.triggerSource)}</span>
+                <span className="text-xs text-[var(--muted)]">订单 {count} · {formatCurrency(notional, model.baseCurrency)}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="hidden text-xs text-[var(--faint)] sm:inline">{formatDateTime(c.createdAt)}</span>
+                {canExpand ? (
+                  <button
+                    type="button"
+                    onClick={() => model.setExpandedReportCycleId(expanded ? null : c.cycleId)}
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  >
+                    {expanded ? "收起复盘" : "查看复盘"}
+                    {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-[var(--faint)]">无复盘</span>
+                )}
+              </div>
+            </div>
+
+            {expanded && report ? (
+              <div className="space-y-3 border-t border-[var(--border)] px-4 py-3">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <MetricBlock title="执行概览" items={[
+                    `订单 ${count}`,
+                    `金额 ${formatCurrency(report.executionSummary?.totalNotional ?? 0, model.baseCurrency)}`,
+                    `费用 ${formatCurrency(report.pnlAttribution.feeTotal, model.baseCurrency)}`,
+                  ]} />
+                  <MetricBlock title="收益归因" items={[
+                    `已实现 ${formatCurrency(report.pnlAttribution.realizedPnl, model.baseCurrency)}`,
+                    `未实现 ${formatCurrency(report.pnlAttribution.unrealizedPnl, model.baseCurrency)}`,
+                    `汇率 ${formatCurrency(report.pnlAttribution.fxImpact, model.baseCurrency)}`,
+                  ]} />
+                  <MetricBlock title="风控变化" items={[
+                    `回撤 ${report.riskDelta.maxDrawdownBefore.toFixed(1)}% → ${report.riskDelta.maxDrawdownAfter.toFixed(1)}%`,
+                    `集中度 ${report.riskDelta.hhiBefore.toFixed(1)}% → ${report.riskDelta.hhiAfter.toFixed(1)}%`,
+                    `漂移 ${report.riskDelta.maxDriftBefore.toFixed(1)}% → ${report.riskDelta.maxDriftAfter.toFixed(1)}%`,
+                  ]} />
+                </div>
+                <div className="flex flex-wrap gap-4 text-xs text-[var(--muted)]">
+                  <span>权益 {formatCurrency(report.beforeSnapshot.totalEquity, model.baseCurrency)} → {formatCurrency(report.afterSnapshot.totalEquity, model.baseCurrency)}</span>
+                  <span>贡献前三: {report.pnlAttribution.topContributors.slice(0, 3).map((c) => `${c.symbol} ${formatCurrency(c.pnl, model.baseCurrency)}`).join("、") || "—"}</span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -298,79 +362,6 @@ function OrdersPanel({ model }: { model: TradesModel }) {
           </button>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Reports                                                            */
-/* ------------------------------------------------------------------ */
-
-function ReportsPanel({ model }: { model: TradesModel }) {
-  if (model.sortedReports.length <= 0) {
-    return (
-      <DaaSurfaceEmptyState
-        title="暂无复盘报告"
-        description="完成一次实际执行后会自动生成复盘报告。"
-        className="py-14"
-        action={<Link href="/daa/dashboard/rebalance" className="text-sm text-[var(--primary)] hover:underline">前往调仓 →</Link>}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {model.sortedReports.map((r) => {
-        const expanded = model.expandedReportCycleId === r.cycleId;
-        const orderCount = (r.executionSummary?.ordersExecuted ?? 0) + (r.executionSummary?.ordersSubmitted ?? 0) + (r.executionSummary?.ordersFailed ?? 0);
-        return (
-          <div key={r.cycleId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.34)]">
-            <button
-              type="button"
-              onClick={() => model.setExpandedReportCycleId(expanded ? null : r.cycleId)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            >
-              <div className="flex items-center gap-3">
-                <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">{r.cycleId.slice(0, 8)}</span>
-                <DaaSurfaceStatusPill tone={STATUS_TONE[r.status] ?? "slate"}>{cycleStatusLabel(r.status)}</DaaSurfaceStatusPill>
-                <span className="text-xs text-[var(--faint)]">{triggerSourceLabel(r.triggerSource)}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="hidden text-xs text-[var(--faint)] sm:inline">{formatDateTime(r.reportCreatedAt)}</span>
-                {expanded ? <ChevronUp className="h-4 w-4 text-[var(--faint)]" /> : <ChevronDown className="h-4 w-4 text-[var(--faint)]" />}
-              </div>
-            </button>
-
-            {expanded ? (
-              <div className="border-t border-[var(--border)] px-4 py-3 space-y-3">
-                {/* 三列指标 */}
-                <div className="grid gap-3 md:grid-cols-3">
-                  <MetricBlock title="执行概览" items={[
-                    `订单 ${orderCount}`,
-                    `金额 ${formatCurrency(r.executionSummary?.totalNotional ?? 0, model.baseCurrency)}`,
-                    `费用 ${formatCurrency(r.pnlAttribution.feeTotal, model.baseCurrency)}`,
-                  ]} />
-                  <MetricBlock title="收益归因" items={[
-                    `已实现 ${formatCurrency(r.pnlAttribution.realizedPnl, model.baseCurrency)}`,
-                    `未实现 ${formatCurrency(r.pnlAttribution.unrealizedPnl, model.baseCurrency)}`,
-                    `汇率 ${formatCurrency(r.pnlAttribution.fxImpact, model.baseCurrency)}`,
-                  ]} />
-                  <MetricBlock title="风控变化" items={[
-                    `回撤 ${r.riskDelta.maxDrawdownBefore.toFixed(1)}% → ${r.riskDelta.maxDrawdownAfter.toFixed(1)}%`,
-                    `集中度 ${r.riskDelta.hhiBefore.toFixed(1)}% → ${r.riskDelta.hhiAfter.toFixed(1)}%`,
-                    `漂移 ${r.riskDelta.maxDriftBefore.toFixed(1)}% → ${r.riskDelta.maxDriftAfter.toFixed(1)}%`,
-                  ]} />
-                </div>
-                {/* 权益变化 + 贡献 */}
-                <div className="flex flex-wrap gap-4 text-xs text-[var(--muted)]">
-                  <span>权益 {formatCurrency(r.beforeSnapshot.totalEquity, model.baseCurrency)} → {formatCurrency(r.afterSnapshot.totalEquity, model.baseCurrency)}</span>
-                  <span>贡献前三: {r.pnlAttribution.topContributors.slice(0, 3).map((c) => `${c.symbol} ${formatCurrency(c.pnl, model.baseCurrency)}`).join("、") || "—"}</span>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
     </div>
   );
 }

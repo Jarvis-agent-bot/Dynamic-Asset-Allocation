@@ -63,10 +63,6 @@ export type AssetUniverseView = {
   unrealizedPnlPct: number | null;
   holdingTags: string[];
   watchEnabled: boolean;
-  autoEntryEnabled: boolean;
-  entryTargetWeightPct: number | null;
-  entryCooldownDays: number;
-  lastEntryTriggeredAt: string | null;
   targetWeightHint: number;
   watchTags: string[];
   notes: string | null;

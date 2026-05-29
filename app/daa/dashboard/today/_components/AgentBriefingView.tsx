@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * Agent Briefing 视图 — 将日报压缩为 Today 页可执行的复核清单。
+ * Agent Briefing 视图 — 以三列看板呈现今日需要复核的变化、仓位缺口与论点风险。
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, RefreshCw, RotateCcw, Search, Zap } from "lucide-react";
+import { AlertTriangle, Loader2, Network, RefreshCw, RotateCcw, Search, Zap } from "lucide-react";
 
 import {
   DaaSurfaceActionButton,
@@ -89,19 +89,9 @@ interface AgentStatus {
   schedule: { mode: string; timesUtc: string[] } | null;
 }
 
-type ReviewTone = "amber" | "blue" | "orange" | "red" | "slate";
+type ActionTone = "red" | "amber" | "blue" | "orange" | "slate";
 
-interface ReviewItem {
-  key: string;
-  label: string;
-  title: string;
-  detail: string;
-  action?: string;
-  meta?: string;
-  tone: ReviewTone;
-  href?: string;
-  priority: number;
-}
+const COLUMN_LIMIT = 6;
 
 /** 计算下次 cron 运行时间（UTC timesUtc，返回最近未来的一次） */
 function computeNextRun(timesUtc: string[]): Date | null {
@@ -146,7 +136,7 @@ function formatLatestRun(value?: string): string {
 }
 
 function formatSchedule(schedule: AgentStatus["schedule"]): string {
-  if (!schedule) return "手动";
+  if (!schedule) return "手动触发";
   const nextRun = computeNextRun(schedule.timesUtc);
   const modeLabel = schedule.mode === "2x_daily" ? "每日 2 次"
     : schedule.mode === "daily" ? "每日 1 次"
@@ -156,75 +146,24 @@ function formatSchedule(schedule: AgentStatus["schedule"]): string {
   return `${modeLabel} · 下次 ${nextRun.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} (${formatCountdown(nextRun)})`;
 }
 
-function countReviewItems(briefing: DailyBriefing | null): number {
-  if (!briefing) return 0;
-  return briefing.surprises.length
-    + briefing.cognitionGaps.length
-    + (briefing.thesisConflicts ?? []).length
-    + (briefing.thesisFailureImpacts ?? []).filter((r) => r.riskLevel !== "low").length;
+function surpriseAction(s: Surprise): { label: string; tone: ActionTone } {
+  if (s.severityScore >= 8) return { label: "立即复核", tone: "red" };
+  if (s.severityScore >= 5) return { label: "评估冲击", tone: "amber" };
+  return { label: "关注", tone: "slate" };
 }
 
-function buildReviewItems(briefing: DailyBriefing): ReviewItem[] {
-  const items: ReviewItem[] = [];
-
-  briefing.surprises.forEach((s, index) => {
-    items.push({
-      key: `surprise-${index}`,
-      label: "新变化",
-      title: s.title,
-      detail: s.description,
-      action: s.suggestedAction,
-      meta: `重要度 ${s.severityScore}`,
-      tone: s.severityScore >= 8 ? "red" : "amber",
-      priority: 90 + s.severityScore,
-    });
-  });
-
-  briefing.cognitionGaps.forEach((g, index) => {
-    const holdingLabel = g.portfolioWeight > 0 ? `持仓 ${(g.portfolioWeight * 100).toFixed(1)}%` : "观察资产";
-    items.push({
-      key: `gap-${index}`,
-      label: "需要复核",
-      title: formatAssetLabelByKey(g.assetKey),
-      detail: g.uncertaintyReason,
-      action: g.suggestedInvestigation,
-      meta: `${holdingLabel} · 上次复核 ${g.daysSinceLastInvestigation} 天前`,
-      tone: "blue",
-      priority: 70 + Math.min(g.daysSinceLastInvestigation, 30) + Math.round(g.portfolioWeight * 100),
-    });
-  });
-
-  (briefing.thesisConflicts ?? []).forEach((c, index) => {
-    items.push({
-      key: `conflict-${index}`,
-      label: "判断不一致",
-      title: c.overlappingAssets.map((k) => formatAssetLabelByKey(k)).join(", ") || "同一资产",
-      detail: `${c.thesisA.title} / ${c.thesisB.title}`,
-      meta: `${c.thesisA.conviction} vs ${c.thesisB.conviction}`,
-      tone: "orange",
-      priority: 80,
-    });
-  });
-
-  (briefing.thesisFailureImpacts ?? [])
-    .filter((r) => r.riskLevel !== "low")
-    .forEach((r, index) => {
-      items.push({
-        key: `risk-${index}`,
-        label: "高影响",
-        title: r.thesisTitle,
-        detail: `相关资产：${r.affectedAssets.slice(0, 3).map((a) => formatAssetLabelByKey(a.assetKey)).join(", ")}`,
-        meta: `相关持仓 ${(r.totalExposurePct * 100).toFixed(1)}%`,
-        tone: r.riskLevel === "critical" ? "red" : "amber",
-        href: `/daa/dashboard/today/thesis/${r.threadId}`,
-        priority: 85 + Math.round(r.totalExposurePct * 100),
-      });
-    });
-
-  return items.sort((a, b) => b.priority - a.priority).slice(0, 8);
+function gapAction(g: CognitionGap): { label: string; tone: ActionTone } {
+  if (g.portfolioWeight >= 0.05) return { label: "补做研究", tone: "blue" };
+  return { label: "重置观察", tone: "slate" };
 }
 
-function toneClasses(tone: ReviewTone): string {
+function riskAction(r: ThesisFailureImpact): { label: string; tone: ActionTone } {
+  if (r.riskLevel === "critical") return { label: "缩减暴露", tone: "red" };
+  if (r.riskLevel === "high") return { label: "评估对冲", tone: "amber" };
+  return { label: "保持监控", tone: "slate" };
+}
+
+function toneClasses(tone: ActionTone): string {
   if (tone === "red") return "border-red-400/22 bg-red-500/10 text-red-200";
   if (tone === "amber") return "border-amber-400/22 bg-amber-500/10 text-amber-200";
   if (tone === "blue") return "border-sky-400/22 bg-sky-500/10 text-sky-200";
@@ -232,9 +171,9 @@ function toneClasses(tone: ReviewTone): string {
   return "border-[var(--border)] bg-[rgba(255,255,255,0.04)] text-[var(--muted)]";
 }
 
-function ReviewBadge({ tone, children }: { tone: ReviewTone; children: string }) {
+function ActionBadge({ tone, children }: { tone: ActionTone; children: string }) {
   return (
-    <span className={`inline-flex shrink-0 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-medium ${toneClasses(tone)}`}>
+    <span className={`inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${toneClasses(tone)}`}>
       {children}
     </span>
   );
@@ -299,9 +238,24 @@ export default function AgentBriefingView() {
   const theses = status?.theses ?? [];
   const hasTheses = theses.length > 0;
   const briefing = status?.latestRun?.briefing ?? null;
-  const reviewCount = countReviewItems(briefing);
-  const latestRunAt = formatLatestRun(status?.latestRun?.createdAt);
-  const reviewItems = useMemo(() => briefing ? buildReviewItems(briefing) : [], [briefing]);
+
+  const sortedBuckets = useMemo(() => {
+    if (!briefing) {
+      return { surprises: [] as Surprise[], gaps: [] as CognitionGap[], conflicts: [] as ThesisConflict[], risks: [] as ThesisFailureImpact[] };
+    }
+    return {
+      surprises: briefing.surprises.slice().sort((a, b) => b.severityScore - a.severityScore),
+      gaps: briefing.cognitionGaps.slice().sort((a, b) => {
+        const wa = a.portfolioWeight * 100 + Math.min(a.daysSinceLastInvestigation, 60) / 4;
+        const wb = b.portfolioWeight * 100 + Math.min(b.daysSinceLastInvestigation, 60) / 4;
+        return wb - wa;
+      }),
+      conflicts: (briefing.thesisConflicts ?? []).slice(),
+      risks: (briefing.thesisFailureImpacts ?? []).filter((r) => r.riskLevel !== "low")
+        .slice()
+        .sort((a, b) => b.totalExposurePct - a.totalExposurePct),
+    };
+  }, [briefing]);
 
   if (loading) {
     return (
@@ -314,11 +268,13 @@ export default function AgentBriefingView() {
     );
   }
 
+  const totalToReview = sortedBuckets.surprises.length + sortedBuckets.gaps.length + sortedBuckets.conflicts.length + sortedBuckets.risks.length;
+
   return (
     <DaaSurfacePanel
       accent="cyan"
       title="今日复核"
-      subtitle="先看会影响仓位判断的事项；需要展开时直接追问 Agent。"
+      subtitle="按类型分栏排列，先处理左列的新变化，再回头扫缺口与风险。"
       action={(
         <div className="flex items-center gap-2">
           {!hasTheses ? (
@@ -346,10 +302,11 @@ export default function AgentBriefingView() {
       )}
     >
       <div className="space-y-5">
-        <div className="grid gap-4 border-b border-[var(--border)] pb-4 sm:grid-cols-3">
-          <SummaryStat label="待复核" value={reviewCount} hint={reviewCount > 0 ? "按影响排序" : "暂无"} />
-          <SummaryStat label="本轮更新" value={briefing?.thesesUpdated ?? 0} hint={`${briefing?.memoriesCreated ?? 0} 条记忆`} />
-          <SummaryStat label="最近运行" value={latestRunAt} hint={formatSchedule(status?.schedule ?? null)} />
+        <div className="grid gap-4 border-b border-[var(--border)] pb-4 sm:grid-cols-4">
+          <SummaryStat label="共计待复核" value={totalToReview} hint={hasTheses ? "按下方三列优先处理" : "Agent 未初始化"} />
+          <SummaryStat label="新变化" value={sortedBuckets.surprises.length} hint={sortedBuckets.surprises.filter((s) => s.severityScore >= 8).length > 0 ? `${sortedBuckets.surprises.filter((s) => s.severityScore >= 8).length} 条高重要度` : "暂无紧急"} />
+          <SummaryStat label="仓位缺口" value={sortedBuckets.gaps.length} hint={sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length > 0 ? `${sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length} 条高权重` : "全部已复核"} />
+          <SummaryStat label="最近运行" value={formatLatestRun(status?.latestRun?.createdAt)} hint={formatSchedule(status?.schedule ?? null)} />
         </div>
 
         {!hasTheses ? (
@@ -364,7 +321,7 @@ export default function AgentBriefingView() {
             )}
           />
         ) : briefing ? (
-          <BriefingSummary briefing={briefing} reviewItems={reviewItems} />
+          <BriefingKanban buckets={sortedBuckets} />
         ) : (
           <DaaSurfaceEmptyState
             title="还没有今日复核结果"
@@ -377,6 +334,10 @@ export default function AgentBriefingView() {
             )}
           />
         )}
+
+        {briefing && briefing.mindChangeConditions.length > 0 ? (
+          <MindChangeSection conditions={briefing.mindChangeConditions} />
+        ) : null}
 
         {runResult ? (
           <div className="rounded-[var(--radius-lg)] border border-[var(--primary-border)] bg-[var(--primary-bg)] px-4 py-3 text-xs leading-5 text-[var(--muted)]">
@@ -409,88 +370,224 @@ export default function AgentBriefingView() {
 function SummaryStat({ label, value, hint }: { label: string; value: string | number; hint: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] text-[var(--faint)]">{label}</div>
+      <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">{label}</div>
       <div className="mt-1 truncate font-[var(--font-mono)] text-lg text-[var(--text)]">{value}</div>
       <div className="mt-1 truncate text-xs text-[var(--muted)]">{hint}</div>
     </div>
   );
 }
 
-function BriefingSummary({ briefing, reviewItems }: { briefing: DailyBriefing; reviewItems: ReviewItem[] }) {
-  const conditions = briefing.mindChangeConditions.slice(0, 3);
+interface BriefingBuckets {
+  surprises: Surprise[];
+  gaps: CognitionGap[];
+  conflicts: ThesisConflict[];
+  risks: ThesisFailureImpact[];
+}
 
+function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
   return (
-    <div className="space-y-5">
-      <section>
-        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-          <Search className="h-4 w-4 text-[var(--primary)]" />
-          今天先看
-        </div>
-        {reviewItems.length > 0 ? (
-          <div className="divide-y divide-[var(--border)]">
-            {reviewItems.map((item) => (
-              <ReviewRow key={item.key} item={item} />
-            ))}
-          </div>
-        ) : (
-          <div className="py-6 text-sm text-[var(--muted)]">
-            当前没有需要立即复核的变化。
-          </div>
-        )}
-      </section>
+    <div className="grid gap-4 lg:grid-cols-3">
+      <KanbanColumn
+        icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
+        title="新变化"
+        subtitle="市场或新闻和现有论点冲突的事项"
+        count={buckets.surprises.length}
+        emptyText="今天没有出现明显的认知冲击"
+      >
+        {buckets.surprises.slice(0, COLUMN_LIMIT).map((s, i) => (
+          <SurpriseCard key={`s-${i}`} surprise={s} />
+        ))}
+      </KanbanColumn>
 
-      {conditions.length > 0 ? (
-        <section>
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-            <RotateCcw className="h-4 w-4 text-[var(--amber)]" />
-            什么会改变判断
-          </div>
-          <div className="space-y-3 border-l border-[var(--border)] pl-4">
-            {conditions.map((condition, index) => (
-              <div key={`${condition.thesisTitle}-${index}`} className="text-sm leading-6">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-[var(--text)]">{condition.thesisTitle}</span>
-                  <span className="text-xs text-[var(--faint)]">{condition.currentConviction}</span>
-                </div>
-                <div className="mt-1 text-xs leading-5 text-[var(--muted)]">
-                  {condition.conditions.slice(0, 2).join("；")}
-                </div>
-                {condition.monitoringIndicators.length > 0 ? (
-                  <div className="mt-1 text-[11px] text-[var(--faint)]">
-                    观察：{condition.monitoringIndicators.slice(0, 4).join(" / ")}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <KanbanColumn
+        icon={<Search className="h-4 w-4 text-sky-300" />}
+        title="仓位缺口"
+        subtitle="重要持仓但近期没有调查"
+        count={buckets.gaps.length}
+        emptyText="所有重要持仓均在近期复核窗口内"
+      >
+        {buckets.gaps.slice(0, COLUMN_LIMIT).map((g, i) => (
+          <GapCard key={`g-${i}`} gap={g} />
+        ))}
+      </KanbanColumn>
+
+      <KanbanColumn
+        icon={<Network className="h-4 w-4 text-orange-300" />}
+        title="论点冲突 · 风险"
+        subtitle="同资产矛盾论点 + 高暴露风险"
+        count={buckets.conflicts.length + buckets.risks.length}
+        emptyText="论点之间无冲突，风险暴露可控"
+      >
+        {buckets.conflicts.slice(0, 2).map((c, i) => (
+          <ConflictCard key={`c-${i}`} conflict={c} />
+        ))}
+        {buckets.risks.slice(0, COLUMN_LIMIT - Math.min(buckets.conflicts.length, 2)).map((r, i) => (
+          <RiskCard key={`r-${i}`} risk={r} />
+        ))}
+      </KanbanColumn>
     </div>
   );
 }
 
-function ReviewRow({ item }: { item: ReviewItem }) {
-  const title = item.href ? (
-    <Link href={item.href} className="font-medium text-[var(--text)] transition-colors hover:text-[var(--primary)]">
-      {item.title}
+function KanbanColumn({
+  icon,
+  title,
+  subtitle,
+  count,
+  emptyText,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  count: number;
+  emptyText: string;
+  children: React.ReactNode;
+}) {
+  const hasChildren = Array.isArray(children) ? children.flat().some(Boolean) : Boolean(children);
+  return (
+    <section className="flex min-w-0 flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(8,12,20,0.4)]">
+      <header className="flex items-start justify-between gap-2 border-b border-[var(--border)] px-3.5 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text)]">
+            {icon}
+            {title}
+            <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 font-[var(--font-mono)] text-[11px] text-[var(--muted)]">{count}</span>
+          </div>
+          <div className="mt-1 text-[11px] leading-4 text-[var(--faint)]">{subtitle}</div>
+        </div>
+      </header>
+      <div className="flex flex-col gap-2 p-2.5">
+        {hasChildren ? children : (
+          <div className="px-2 py-6 text-center text-xs text-[var(--muted)]">{emptyText}</div>
+        )}
+        {count > COLUMN_LIMIT ? (
+          <div className="px-2 pt-1 text-[11px] text-[var(--faint)]">
+            另有 {count - COLUMN_LIMIT} 条未显示
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function CardShell({
+  action,
+  meta,
+  title,
+  detail,
+  hint,
+  href,
+}: {
+  action: { label: string; tone: ActionTone };
+  meta?: string;
+  title: React.ReactNode;
+  detail?: React.ReactNode;
+  hint?: React.ReactNode;
+  href?: string;
+}) {
+  const titleNode = href ? (
+    <Link href={href} className="font-medium text-[var(--text)] transition-colors hover:text-[var(--primary)]">
+      {title}
     </Link>
   ) : (
-    <span className="font-medium text-[var(--text)]">{item.title}</span>
+    <span className="font-medium text-[var(--text)]">{title}</span>
   );
 
   return (
-    <div className="grid gap-3 py-3 text-sm sm:grid-cols-[96px_minmax(0,1fr)]">
-      <ReviewBadge tone={item.tone}>{item.label}</ReviewBadge>
-      <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-          {title}
-          {item.meta ? <span className="text-xs text-[var(--faint)]">{item.meta}</span> : null}
-        </div>
-        <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.detail}</div>
-        {item.action ? (
-          <div className="mt-1 text-xs leading-5 text-[var(--primary)]">{item.action}</div>
-        ) : null}
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(13,19,32,0.65)] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <ActionBadge tone={action.tone}>{action.label}</ActionBadge>
+        {meta ? <span className="truncate text-[11px] text-[var(--faint)]">{meta}</span> : null}
       </div>
+      <div className="mt-1.5 text-sm leading-5">{titleNode}</div>
+      {detail ? <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{detail}</div> : null}
+      {hint ? <div className="mt-1 text-xs leading-5 text-[var(--primary)]">{hint}</div> : null}
     </div>
+  );
+}
+
+function SurpriseCard({ surprise }: { surprise: Surprise }) {
+  return (
+    <CardShell
+      action={surpriseAction(surprise)}
+      meta={`重要度 ${surprise.severityScore}`}
+      title={surprise.title}
+      detail={surprise.description}
+      hint={surprise.suggestedAction}
+    />
+  );
+}
+
+function GapCard({ gap }: { gap: CognitionGap }) {
+  const weightLabel = gap.portfolioWeight > 0
+    ? `持仓 ${(gap.portfolioWeight * 100).toFixed(1)}% · 上次复核 ${gap.daysSinceLastInvestigation} 天前`
+    : `观察资产 · 上次复核 ${gap.daysSinceLastInvestigation} 天前`;
+  return (
+    <CardShell
+      action={gapAction(gap)}
+      meta={weightLabel}
+      title={formatAssetLabelByKey(gap.assetKey)}
+      detail={gap.uncertaintyReason}
+      hint={gap.suggestedInvestigation}
+    />
+  );
+}
+
+function ConflictCard({ conflict }: { conflict: ThesisConflict }) {
+  const title = conflict.overlappingAssets.length > 0
+    ? conflict.overlappingAssets.map((k) => formatAssetLabelByKey(k)).join("、")
+    : "同一资产";
+  return (
+    <CardShell
+      action={{ label: "对齐论点", tone: "orange" }}
+      meta={`${conflict.thesisA.conviction} vs ${conflict.thesisB.conviction}`}
+      title={title}
+      detail={`${conflict.thesisA.title} / ${conflict.thesisB.title}`}
+    />
+  );
+}
+
+function RiskCard({ risk }: { risk: ThesisFailureImpact }) {
+  const assetSummary = risk.affectedAssets.slice(0, 3).map((a) => formatAssetLabelByKey(a.assetKey)).join("、");
+  const moreCount = risk.affectedAssets.length > 3 ? risk.affectedAssets.length - 3 : 0;
+  return (
+    <CardShell
+      action={riskAction(risk)}
+      meta={`暴露 ${(risk.totalExposurePct * 100).toFixed(1)}% · 预估损失 ${(risk.estimatedLossPct * 100).toFixed(1)}%`}
+      title={risk.thesisTitle}
+      detail={moreCount > 0 ? `${assetSummary} 等 ${moreCount + 3} 个资产` : assetSummary}
+      href={`/daa/dashboard/today/thesis/${risk.threadId}`}
+    />
+  );
+}
+
+function MindChangeSection({ conditions }: { conditions: MindChangeCondition[] }) {
+  const top = conditions.slice(0, 3);
+  return (
+    <section>
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+        <RotateCcw className="h-4 w-4 text-amber-300" />
+        什么会改变判断
+      </div>
+      <div className="space-y-3 border-l border-[var(--border)] pl-4">
+        {top.map((condition, index) => (
+          <div key={`${condition.thesisTitle}-${index}`} className="text-sm leading-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-[var(--text)]">{condition.thesisTitle}</span>
+              <span className="text-xs text-[var(--faint)]">{condition.currentConviction}</span>
+            </div>
+            <div className="mt-1 text-xs leading-5 text-[var(--muted)]">
+              {condition.conditions.slice(0, 2).join("；")}
+            </div>
+            {condition.monitoringIndicators.length > 0 ? (
+              <div className="mt-1 text-[11px] text-[var(--faint)]">
+                观察：{condition.monitoringIndicators.slice(0, 4).join(" / ")}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
