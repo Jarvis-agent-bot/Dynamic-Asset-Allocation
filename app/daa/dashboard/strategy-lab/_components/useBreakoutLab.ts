@@ -7,19 +7,7 @@ import type {
   BreakoutLabRunParams,
   BreakoutLabRunResult,
 } from "@/src/daa/modules/strategyLab/breakoutLabService";
-
-function toLocalDateInputValue(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function defaultStartDate(yearsBack = 5): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - yearsBack);
-  return toLocalDateInputValue(d);
-}
+import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
 
 export type BreakoutConfigState = {
   assetsText: string; // 逗号/空格分隔的标的，如 "NVDA, AAPL, US::MSFT"
@@ -42,25 +30,27 @@ export type BreakoutConfigState = {
   trailingPct: number; // 百分比形式
 };
 
-export const DEFAULT_BREAKOUT_CONFIG: BreakoutConfigState = {
-  assetsText: "NVDA, AAPL, MSFT, GOOGL, META, AMZN, AMD, AVGO, MU, TSLA, PLTR, ORCL, SMH, QQQ, VOO",
-  startDate: defaultStartDate(5),
-  endDate: toLocalDateInputValue(new Date()),
-  initialCapital: 100_000,
-  baseCurrency: "USD",
-  riskPct: 1, // 百分比形式，提交时 /100
-  maxSlots: 3,
-  breakoutLookback: 20,
-  volMultiple: 1.5,
-  maFast: 20,
-  maSlow: 50,
-  maxExtensionPct: 20, // 百分比形式
-  stopPct: 8, // 百分比形式
-  rewardMultiple: 2,
-  useMaExit: true,
-  exitMode: "trailing", // 默认用跟踪止损（5y回测最优：+52.5% vs MA离场 +41.3%）
-  trailingPct: 12, // 百分比形式
-};
+function createDefaultBreakoutConfig(dateDefaults: StrategyLabDateDefaults): BreakoutConfigState {
+  return {
+    assetsText: "NVDA, AAPL, MSFT, GOOGL, META, AMZN, AMD, AVGO, MU, TSLA, PLTR, ORCL, SMH, QQQ, VOO",
+    startDate: dateDefaults.breakoutStartDate,
+    endDate: dateDefaults.breakoutEndDate,
+    initialCapital: 100_000,
+    baseCurrency: "USD",
+    riskPct: 1, // 百分比形式，提交时 /100
+    maxSlots: 3,
+    breakoutLookback: 20,
+    volMultiple: 1.5,
+    maFast: 20,
+    maSlow: 50,
+    maxExtensionPct: 20, // 百分比形式
+    stopPct: 8, // 百分比形式
+    rewardMultiple: 2,
+    useMaExit: true,
+    exitMode: "trailing", // 默认用跟踪止损（5y回测最优：+52.5% vs MA离场 +41.3%）
+    trailingPct: 12, // 百分比形式
+  };
+}
 
 export interface UseBreakoutLabResult {
   config: BreakoutConfigState;
@@ -81,8 +71,8 @@ function parseAssets(text: string): string[] {
     .filter(Boolean);
 }
 
-export function useBreakoutLab(): UseBreakoutLabResult {
-  const [config, setConfig] = useState<BreakoutConfigState>(DEFAULT_BREAKOUT_CONFIG);
+export function useBreakoutLab(dateDefaults: StrategyLabDateDefaults): UseBreakoutLabResult {
+  const [config, setConfig] = useState<BreakoutConfigState>(() => createDefaultBreakoutConfig(dateDefaults));
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BreakoutLabRunResult | null>(null);
   const [error, setError] = useState("");

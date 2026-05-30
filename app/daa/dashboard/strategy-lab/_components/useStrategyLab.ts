@@ -21,6 +21,7 @@ import {
 } from "./strategyLabWarningPresentation";
 import { resolveStrategyLabApplyMeta } from "./strategyLabApplyMeta";
 import { buildStrategyLabChartData } from "./strategyLabChartData";
+import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
 
 export const STRATEGY_OPTIONS = [
   { key: "equalWeight", label: "等权重", desc: "按相同比例配置所有资产" },
@@ -43,23 +44,6 @@ export function strategyLabel(key: string): string {
   return STRATEGY_OPTIONS.find((s) => s.key === key)?.label ?? key;
 }
 
-function toLocalDateInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function defaultStartDate(): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 1);
-  return toLocalDateInputValue(d);
-}
-
-function defaultEndDate(): string {
-  return toLocalDateInputValue(new Date());
-}
-
 export type ConfigState = {
   selectedAssets: string[];
   selectedStrategies: string[];
@@ -71,16 +55,18 @@ export type ConfigState = {
   minOrderNotional: number;
 };
 
-const DEFAULT_CONFIG: ConfigState = {
-  selectedAssets: [],
-  selectedStrategies: ["equalWeight"],
-  startDate: defaultStartDate(),
-  endDate: defaultEndDate(),
-  rebalanceFrequency: "monthly",
-  initialCapital: 100_000,
-  baseCurrency: "USD",
-  minOrderNotional: 50,
-};
+function createDefaultConfig(dateDefaults: StrategyLabDateDefaults): ConfigState {
+  return {
+    selectedAssets: [],
+    selectedStrategies: ["equalWeight"],
+    startDate: dateDefaults.rebalanceStartDate,
+    endDate: dateDefaults.rebalanceEndDate,
+    rebalanceFrequency: "monthly",
+    initialCapital: 100_000,
+    baseCurrency: "USD",
+    minOrderNotional: 50,
+  };
+}
 
 export interface UseStrategyLabResult {
   assets: AssetUniverseView[];
@@ -116,10 +102,10 @@ export interface UseStrategyLabResult {
   canApply: boolean;
 }
 
-export function useStrategyLab(): UseStrategyLabResult {
+export function useStrategyLab(dateDefaults: StrategyLabDateDefaults): UseStrategyLabResult {
   const [assets, setAssets] = useState<AssetUniverseView[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
-  const [config, setConfig] = useState<ConfigState>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<ConfigState>(() => createDefaultConfig(dateDefaults));
   const [assetFilter, setAssetFilter] = useState("");
 
   const [running, setRunning] = useState(false);
@@ -254,15 +240,15 @@ export function useStrategyLab(): UseStrategyLabResult {
     setConfig({
       selectedAssets: Array.isArray(p.assets) ? [...p.assets] : [],
       selectedStrategies: Array.isArray(p.strategies) && p.strategies.length > 0 ? [...p.strategies] : ["equalWeight"],
-      startDate: p.startDate || defaultStartDate(),
-      endDate: p.endDate || defaultEndDate(),
+      startDate: p.startDate || dateDefaults.rebalanceStartDate,
+      endDate: p.endDate || dateDefaults.rebalanceEndDate,
       rebalanceFrequency: p.rebalanceFrequency || "monthly",
       initialCapital: Number.isFinite(p.initialCapital) && p.initialCapital > 0 ? p.initialCapital : 100_000,
       baseCurrency: p.baseCurrency || "USD",
-      minOrderNotional: Math.max(0, Number(p.minOrderNotional) || DEFAULT_CONFIG.minOrderNotional),
+      minOrderNotional: Math.max(0, Number(p.minOrderNotional) || createDefaultConfig(dateDefaults).minOrderNotional),
     });
     toast.message("已载入历史参数，可直接重新运行");
-  }, []);
+  }, [dateDefaults]);
 
   const filteredAssets = useMemo(() => {
     if (!assetFilter.trim()) return assets;

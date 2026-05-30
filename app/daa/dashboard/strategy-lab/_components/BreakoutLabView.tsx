@@ -9,6 +9,7 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { useBreakoutLab, type BreakoutConfigState } from "./useBreakoutLab";
+import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
 
 function NumberField({
   label,
@@ -55,8 +56,8 @@ function r2(n: number | null | undefined): string {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}`;
 }
 
-export function BreakoutLabView() {
-  const lab = useBreakoutLab();
+export function BreakoutLabView({ dateDefaults }: { dateDefaults: StrategyLabDateDefaults }) {
+  const lab = useBreakoutLab(dateDefaults);
   const { config, setConfig, result, running, error } = lab;
   const set = <K extends keyof BreakoutConfigState>(k: K, v: BreakoutConfigState[K]) =>
     setConfig((prev) => ({ ...prev, [k]: v }));
