@@ -10,6 +10,7 @@ import type { DaaPolicyConfig, PolicyReviewFrequency } from "@/src/daa/modules/p
 type DaaFundKind = "equity" | "qdii" | "balanced";
 
 type DaaStrategyExecutionTiming = "t_plus_1_close";
+export type DaaStrategyStyle = "classic_rebalance" | "balanced_breakout" | "breakout_growth";
 
 type DaaStrategyExecutionConfig = {
   feeRateBps: number;
@@ -73,6 +74,17 @@ export function deriveCognitiveAgentScheduleTimesUtc(schedule: DaaCognitiveAgent
 
 export type DaaSystemConfig = {
   strategy: {
+    style: DaaStrategyStyle;
+    breakout: {
+      enabled: boolean;
+      breakoutLookback: number;
+      volMultiple: number;
+      maFast: number;
+      maSlow: number;
+      maxExtensionPct: number;
+      balancedBoostMultiplier: number;
+      balancedWeakMultiplier: number;
+    };
     account: {
       baseCurrency: CurrencyCode;
       cash: number;
@@ -238,6 +250,17 @@ const DEFAULT_POLICY_CONFIG_: DaaPolicyConfig = {
 
 export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
   strategy: {
+    style: "classic_rebalance",
+    breakout: {
+      enabled: true,
+      breakoutLookback: 20,
+      volMultiple: 1.5,
+      maFast: 20,
+      maSlow: 50,
+      maxExtensionPct: 0.2,
+      balancedBoostMultiplier: 1.15,
+      balancedWeakMultiplier: 0.6,
+    },
     account: {
       baseCurrency: "USD",
       cash: 0,
@@ -632,6 +655,12 @@ function normalizeStrategyExecutionTiming(value: unknown, fallback: DaaStrategyE
   return fallback;
 }
 
+function normalizeStrategyStyle(value: unknown, fallback: DaaStrategyStyle): DaaStrategyStyle {
+  const text = String(value || "").trim();
+  if (text === "classic_rebalance" || text === "balanced_breakout" || text === "breakout_growth") return text;
+  return fallback;
+}
+
 export function getStrategyExecutionConfig(config: Pick<DaaSystemConfig, "strategy">): DaaStrategyExecutionConfig & {
   maxOrderPctOfNav: number;
 } {
@@ -657,6 +686,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const source = isRecord(raw) ? raw : {};
 
   const strategy = isRecord(source.strategy) ? source.strategy : {};
+  const breakout = isRecord(strategy.breakout) ? strategy.breakout : {};
   const account = isRecord(strategy.account) ? strategy.account : {};
   const constraints = isRecord(strategy.constraints) ? strategy.constraints : {};
   const execution = isRecord(strategy.execution) ? strategy.execution : {};
@@ -677,6 +707,17 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
 
   const normalized: DaaSystemConfig = {
     strategy: {
+      style: normalizeStrategyStyle(strategy.style, fallback.strategy.style),
+      breakout: {
+        enabled: toBool(breakout.enabled, fallback.strategy.breakout.enabled),
+        breakoutLookback: clamp(Math.trunc(Number(breakout.breakoutLookback) || fallback.strategy.breakout.breakoutLookback), 5, 120),
+        volMultiple: clamp(Number(breakout.volMultiple) || fallback.strategy.breakout.volMultiple, 1, 5),
+        maFast: clamp(Math.trunc(Number(breakout.maFast) || fallback.strategy.breakout.maFast), 5, 120),
+        maSlow: clamp(Math.trunc(Number(breakout.maSlow) || fallback.strategy.breakout.maSlow), 10, 260),
+        maxExtensionPct: clamp(Number(breakout.maxExtensionPct) || fallback.strategy.breakout.maxExtensionPct, 0.01, 1),
+        balancedBoostMultiplier: clamp(Number(breakout.balancedBoostMultiplier) || fallback.strategy.breakout.balancedBoostMultiplier, 1, 2),
+        balancedWeakMultiplier: clamp(Number(breakout.balancedWeakMultiplier) || fallback.strategy.breakout.balancedWeakMultiplier, 0.1, 1),
+      },
       account: {
         baseCurrency: normalizeBaseCurrencyCode(account.baseCurrency, fallback.strategy.account.baseCurrency),
         cash: Math.max(0, Number(account.cash) || 0),

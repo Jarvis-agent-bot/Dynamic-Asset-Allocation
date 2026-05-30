@@ -50,6 +50,7 @@ export function StrategyLabResultsView({ state }: StrategyLabResultsViewProps) {
       {strategyResults.length > 1 ? <StrategyComparisonTable result={result} /> : null}
 
       <StrategyLabEquityChart
+        baseCurrency={result.baseCurrency}
         chartData={chartData}
         strategyResults={strategyResults}
         benchmarkResults={benchmarkResults}

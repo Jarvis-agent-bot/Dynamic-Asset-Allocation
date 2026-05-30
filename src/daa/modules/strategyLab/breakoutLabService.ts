@@ -20,6 +20,7 @@ import {
   type BreakoutTrade,
   type OhlcvBar,
 } from "@/src/core/backtestSingleNameBreakout";
+import { assertIsoDateString } from "@/src/core/isoDate";
 import type { PriceBar } from "@/src/core/domain";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
 import { normalizeMoneyCurrency } from "@/src/daa/modules/money/money";
@@ -99,6 +100,31 @@ export class BreakoutLabDomainError extends Error {
     this.code = code;
     this.status = options.status ?? 422;
     this.details = options.details ?? {};
+  }
+}
+
+function validateBreakoutParams(params: BreakoutLabRunParams) {
+  try {
+    assertIsoDateString(params.startDate, "startDate");
+  } catch {
+    throw new BreakoutLabDomainError("INVALID_PARAMS", "开始日期格式无效，应为 YYYY-MM-DD", { status: 400 });
+  }
+  try {
+    assertIsoDateString(params.endDate, "endDate");
+  } catch {
+    throw new BreakoutLabDomainError("INVALID_PARAMS", "结束日期格式无效，应为 YYYY-MM-DD", { status: 400 });
+  }
+  if (params.startDate > params.endDate) {
+    throw new BreakoutLabDomainError("INVALID_PARAMS", "开始日期不能晚于结束日期", { status: 400 });
+  }
+  if (!(Number.isFinite(params.initialCapital) && params.initialCapital > 0)) {
+    throw new BreakoutLabDomainError("INVALID_PARAMS", "初始资金必须大于 0", { status: 400 });
+  }
+  if (params.riskPct != null && !(Number.isFinite(params.riskPct) && params.riskPct > 0)) {
+    throw new BreakoutLabDomainError("INVALID_PARAMS", "每笔风险必须大于 0", { status: 400 });
+  }
+  if (params.maxSlots != null && !(Number.isFinite(params.maxSlots) && params.maxSlots >= 1)) {
+    throw new BreakoutLabDomainError("INVALID_PARAMS", "最多同时持仓必须至少为 1", { status: 400 });
   }
 }
 
@@ -508,6 +534,7 @@ function computeSelectedAssetsBuyHoldBenchmark(input: {
 }
 
 export async function runBreakoutLabBacktest(params: BreakoutLabRunParams): Promise<BreakoutLabRunResult> {
+  validateBreakoutParams(params);
   const runId = randomUUID();
   const createdAt = new Date().toISOString();
   const warnings: string[] = [];

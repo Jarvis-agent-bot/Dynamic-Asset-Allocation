@@ -57,4 +57,31 @@ describe("system-config-normalization", () => {
     expect("provider" in (normalized.dataSources.fxFeed as unknown as Record<string, unknown>)).toBe(false);
     expect("id" in (normalized.dataSources.marketIndicators as unknown as Record<string, unknown>)).toBe(false);
   });
+
+  it("会归一化策略风格和放量突破参数", () => {
+    const normalized = normalizeSystemConfig({
+      strategy: {
+        style: "breakout_growth",
+        breakout: {
+          enabled: true,
+          breakoutLookback: 3,
+          volMultiple: 9,
+          maFast: 4,
+          maSlow: 999,
+          maxExtensionPct: 2,
+          balancedBoostMultiplier: 3,
+          balancedWeakMultiplier: 0.01,
+        },
+      },
+    });
+
+    expect(normalized.strategy.style).toBe("breakout_growth");
+    expect(normalized.strategy.breakout.breakoutLookback).toBe(5);
+    expect(normalized.strategy.breakout.volMultiple).toBe(5);
+    expect(normalized.strategy.breakout.maFast).toBe(5);
+    expect(normalized.strategy.breakout.maSlow).toBe(260);
+    expect(normalized.strategy.breakout.maxExtensionPct).toBe(1);
+    expect(normalized.strategy.breakout.balancedBoostMultiplier).toBe(2);
+    expect(normalized.strategy.breakout.balancedWeakMultiplier).toBe(0.1);
+  });
 });

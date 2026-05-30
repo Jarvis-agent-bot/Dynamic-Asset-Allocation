@@ -26,6 +26,8 @@ export type StrategyLabRunParams = {
   feeRateBps?: number;
   /** 滑点 bps */
   slippageBps?: number;
+  /** 最小下单额（基准货币） */
+  minOrderNotional?: number;
 };
 
 // ---------------------------------------------------------------------------

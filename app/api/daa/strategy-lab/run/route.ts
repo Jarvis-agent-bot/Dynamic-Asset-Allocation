@@ -17,6 +17,7 @@ type Body = {
   benchmarkSymbol?: unknown;
   feeRateBps?: unknown;
   slippageBps?: unknown;
+  minOrderNotional?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
     const benchmarkSymbol = body.benchmarkSymbol ? String(body.benchmarkSymbol).trim() : undefined;
     const feeRateBps = Number.isFinite(Number(body.feeRateBps)) ? Number(body.feeRateBps) : undefined;
     const slippageBps = Number.isFinite(Number(body.slippageBps)) ? Number(body.slippageBps) : undefined;
+    const minOrderNotional = Number.isFinite(Number(body.minOrderNotional)) ? Number(body.minOrderNotional) : undefined;
 
     let result;
     try {
@@ -75,6 +77,7 @@ export async function POST(req: Request) {
         benchmarkSymbol,
         feeRateBps,
         slippageBps,
+        minOrderNotional,
       });
     } catch (error) {
       if (error instanceof StrategyLabDomainError) {

@@ -11,7 +11,7 @@ vi.mock("@/src/daa/pg/daaPg", () => ({
 }));
 
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
-import { runBreakoutLabBacktest } from "@/src/daa/modules/strategyLab/breakoutLabService";
+import { BreakoutLabDomainError, runBreakoutLabBacktest } from "@/src/daa/modules/strategyLab/breakoutLabService";
 
 function buildBreakoutBars() {
   return [
@@ -106,5 +106,50 @@ describe("breakoutLabService", () => {
     expect(result.benchmark).not.toBeNull();
     expect(result.benchmark?.symbol).not.toBe("QQQ");
     expect(result.benchmark?.buyHoldReturnPct).toBeCloseTo(20, 6);
+  });
+
+  it("在价格拉取前拒绝非法参数", async () => {
+    await expect(runBreakoutLabBacktest({
+      assets: ["US::AAA"],
+      startDate: "2026-02-31",
+      endDate: "2026-03-01",
+      initialCapital: 100_000,
+    })).rejects.toMatchObject({
+      code: "INVALID_PARAMS",
+      message: "开始日期格式无效，应为 YYYY-MM-DD",
+    });
+
+    await expect(runBreakoutLabBacktest({
+      assets: ["US::AAA"],
+      startDate: "2026-02-01",
+      endDate: "2026-01-01",
+      initialCapital: 100_000,
+    })).rejects.toMatchObject({
+      code: "INVALID_PARAMS",
+      message: "开始日期不能晚于结束日期",
+    });
+
+    await expect(runBreakoutLabBacktest({
+      assets: ["US::AAA"],
+      startDate: "2026-01-01",
+      endDate: "2026-02-01",
+      initialCapital: 0,
+    })).rejects.toMatchObject({
+      code: "INVALID_PARAMS",
+      message: "初始资金必须大于 0",
+    });
+
+    await expect(runBreakoutLabBacktest({
+      assets: ["US::AAA"],
+      startDate: "2026-01-01",
+      endDate: "2026-02-01",
+      initialCapital: 100_000,
+      riskPct: 0,
+    })).rejects.toMatchObject({
+      code: "INVALID_PARAMS",
+      message: "每笔风险必须大于 0",
+    });
+
+    expect(vi.mocked(fetchPriceSeriesWithCache)).not.toHaveBeenCalled();
   });
 });

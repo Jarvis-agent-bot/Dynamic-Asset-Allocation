@@ -47,6 +47,7 @@ import {
   filterAutoTradeStability,
   filterRecentAutoTradeReversals,
 } from "@/src/daa/automation/automationGuards";
+import { applyStrategyStyleOverlay } from "./strategyStyleOverlay";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
@@ -530,6 +531,13 @@ export async function generateWorkbenchRebalanceCycle(
     draft.proposals = relabelAgentEntryProposals({ proposals: draft.proposals, bootstrap });
   }
 
+  const styleOverlay = await applyStrategyStyleOverlay({
+    proposals: draft.proposals,
+    bootstrap,
+    systemConfig: systemRow.config,
+  });
+  draft.proposals = styleOverlay.proposals;
+
   // ── Step E.5: Tax-Loss Harvesting 扫描 ────────────────────────────
   let tlhProposals: RebalanceProposal[] = [];
   try {
@@ -550,6 +558,11 @@ export async function generateWorkbenchRebalanceCycle(
     proposals: [...draft.proposals, ...tlhProposals],
     minNotionalBase: systemRow.config.strategy.constraints.minNotional,
   });
+  if (mergedProposals.length === 0 && manual && styleOverlay.blocked.length > 0) {
+    return skipWithLatest(
+      `当前策略风格已暂缓全部买入建议：${styleOverlay.blocked.map((row) => row.reason).join("；").slice(0, 240)}`,
+    );
+  }
   const isAgentPureRiskReduction = triggerSource === "agent_trigger" && isPureRiskReductionAgentCycle({
     bootstrap,
     proposals: mergedProposals,
@@ -681,6 +694,9 @@ export async function generateWorkbenchRebalanceCycle(
     policyDecision.blockers.length > 0 ? `策略阻断: ${policyDecision.blockers.join("；").slice(0, 240)}` : null,
     policyDecision.reasons.length > 0 ? `策略理由: ${policyDecision.reasons.join("；").slice(0, 240)}` : null,
     `Agent(${agentResult.agentStatus}): ${agentResult.proposals.length} 个提案`,
+    styleOverlay.blocked.length > 0
+      ? `策略风格过滤: ${styleOverlay.blocked.length} 条建议被暂缓（${styleOverlay.blocked.map((row) => row.symbol).join(", ").slice(0, 120)}）`
+      : null,
     marketContext ? `市场环境: ${marketRegimeLabelZh(marketContext.regime)} / 风险分 ${marketContext.riskOffScorePct.toFixed(1)}` : null,
     macroShadowProposalCount > 0
       ? `宏观预算影子: ${macroShadowProposalCount} 条建议带预算系数，仅供审阅，不影响执行金额`

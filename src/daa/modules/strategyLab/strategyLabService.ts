@@ -5,6 +5,7 @@ import {
   backtestDriftRebalance,
   type DriftRebalanceBacktestRequest,
 } from "@/src/core/backtestDriftRebalance";
+import { assertIsoDateString } from "@/src/core/isoDate";
 import { computeBacktestAttribution } from "@/src/core/backtest/attribution";
 import {
   buildEqualWeightTargetWeights,
@@ -33,7 +34,8 @@ export type StrategyLabHistoryMode = "rebalance" | "breakout";
 type StrategyLabDomainErrorCode =
   | "NO_ASSETS"
   | "NO_PRICE_HISTORY"
-  | "INSUFFICIENT_ALIGNED_HISTORY";
+  | "INSUFFICIENT_ALIGNED_HISTORY"
+  | "INVALID_PARAMS";
 
 export class StrategyLabDomainError extends Error {
   readonly code: StrategyLabDomainErrorCode;
@@ -91,12 +93,13 @@ function resolveAsset(raw: string): ResolvedBacktestAsset | null {
   if (!symbol) return null;
   const assetKey = buildDaaAssetKey(symbol, market);
   if (!assetKey) return null;
+  const yfinanceSymbol = parsed ? toYfinanceSymbolByMarket(symbol, market) : symbol;
   return {
     assetKey,
     market,
     symbol,
     currency: inferInstrumentCurrency(market),
-    yfinanceSymbol: toYfinanceSymbolByMarket(symbol, market),
+    yfinanceSymbol,
   };
 }
 
@@ -136,6 +139,28 @@ function benchmarkLabel(symbol: string): string {
   return normalized;
 }
 
+function validateStrategyLabParams(params: StrategyLabRunParams) {
+  try {
+    assertIsoDateString(params.startDate, "startDate");
+  } catch {
+    throw new StrategyLabDomainError("INVALID_PARAMS", "开始日期格式无效，应为 YYYY-MM-DD", { status: 400 });
+  }
+  try {
+    assertIsoDateString(params.endDate, "endDate");
+  } catch {
+    throw new StrategyLabDomainError("INVALID_PARAMS", "结束日期格式无效，应为 YYYY-MM-DD", { status: 400 });
+  }
+  if (params.startDate > params.endDate) {
+    throw new StrategyLabDomainError("INVALID_PARAMS", "开始日期不能晚于结束日期", { status: 400 });
+  }
+  if (!(Number.isFinite(params.initialCapital) && params.initialCapital > 0)) {
+    throw new StrategyLabDomainError("INVALID_PARAMS", "初始资金必须大于 0", { status: 400 });
+  }
+  if (params.minOrderNotional != null && (!Number.isFinite(params.minOrderNotional) || params.minOrderNotional < 0)) {
+    throw new StrategyLabDomainError("INVALID_PARAMS", "最小下单额不能小于 0", { status: 400 });
+  }
+}
+
 function listBenchmarkSymbols(primarySymbol?: string): string[] {
   const out: string[] = [];
   const push = (raw: string | undefined) => {
@@ -147,6 +172,17 @@ function listBenchmarkSymbols(primarySymbol?: string): string[] {
   push(primarySymbol || DEFAULT_BENCHMARK_SYMBOL);
   for (const symbol of CHART_BENCHMARK_SYMBOLS) push(symbol);
   return out;
+}
+
+function denormalizeStrategyEquityCurve(
+  dates: string[],
+  normalizedEquity: number[],
+  initialCapital: number,
+): StrategyLabEquityPoint[] {
+  return dates.map((date, index) => ({
+    date,
+    equity: +((normalizedEquity[index] || 0) * initialCapital).toFixed(2),
+  }));
 }
 
 /** 根据策略名称和价格序列计算目标权重 */
@@ -823,8 +859,13 @@ function buildScheduledTargetWeightsTimeline(input: {
 export async function runStrategyLabBacktest(
   params: StrategyLabRunParams,
 ): Promise<StrategyLabRunResult> {
+  validateStrategyLabParams(params);
   const runId = randomUUID();
   const createdAt = new Date().toISOString();
+  const initialCapital = Number(params.initialCapital);
+  const minOrderNotional = params.minOrderNotional == null
+    ? 50
+    : Math.max(0, Number(params.minOrderNotional) || 0);
 
   // 1. 解析资产
   const assets = (params.assets || []).map(resolveAsset).filter((asset): asset is ResolvedBacktestAsset => Boolean(asset?.assetKey));
@@ -840,6 +881,7 @@ export async function runStrategyLabBacktest(
     assets: symbols,
     strategies,
     baseCurrency,
+    minOrderNotional,
   };
 
   // 2. 获取价格历史
@@ -949,13 +991,13 @@ export async function runStrategyLabBacktest(
       targetWeightsByDate,
       rebalanceDates,
       executableDatesBySymbol: calendarFrame.executableDatesBySymbol,
-      initialEquity: params.initialCapital || 10000,
+      initialEquity: initialCapital,
       constraints: {
         minNotional: 0,
       },
       trigger: {
         driftThresholdPct: 0,
-        minOrderNotional: 50,
+        minOrderNotional,
         minRebalanceIntervalSeconds: 0,
       },
       execution: {
@@ -981,10 +1023,11 @@ export async function runStrategyLabBacktest(
       benchmarkSeries,
     });
 
-    const equityCurve: StrategyLabEquityPoint[] = backtestResult.dates.map((date, i) => ({
-      date,
-      equity: backtestResult.equity[i],
-    }));
+    const equityCurve = denormalizeStrategyEquityCurve(
+      backtestResult.dates,
+      backtestResult.equity,
+      initialCapital,
+    );
 
     strategyResults.push({
       strategy,
@@ -1006,7 +1049,7 @@ export async function runStrategyLabBacktest(
     const curve = buildBenchmarkEquityCurve({
       benchmarkSeries: rawSeries,
       dates: primary.equityCurve.map((point) => point.date),
-      initialCapital: params.initialCapital || 10000,
+      initialCapital,
     });
     const benchmarkReturn = curve.length >= 2
       ? curve[curve.length - 1].equity / curve[0].equity - 1

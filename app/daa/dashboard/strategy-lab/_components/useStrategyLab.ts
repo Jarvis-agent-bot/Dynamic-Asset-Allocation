@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { toast } from "sonner";
 
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
+import { getSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
 import { applyWorkbenchTargetWeights } from "@/src/daa/modules/workbench/targetAllocationApply";
 import { runBacktest, getBacktestHistory } from "@/src/daa/modules/strategyLab/strategyLabApi";
 import type {
@@ -18,6 +19,7 @@ import {
   summarizeStrategyLabWarnings,
   type StrategyLabWarningPresentation,
 } from "./strategyLabWarningPresentation";
+import { resolveStrategyLabApplyMeta } from "./strategyLabApplyMeta";
 import { buildStrategyLabChartData } from "./strategyLabChartData";
 
 export const STRATEGY_OPTIONS = [
@@ -66,6 +68,7 @@ export type ConfigState = {
   rebalanceFrequency: string;
   initialCapital: number;
   baseCurrency: string;
+  minOrderNotional: number;
 };
 
 const DEFAULT_CONFIG: ConfigState = {
@@ -76,6 +79,7 @@ const DEFAULT_CONFIG: ConfigState = {
   rebalanceFrequency: "monthly",
   initialCapital: 100_000,
   baseCurrency: "USD",
+  minOrderNotional: 50,
 };
 
 export interface UseStrategyLabResult {
@@ -131,7 +135,10 @@ export function useStrategyLab(): UseStrategyLabResult {
     let cancelled = false;
     void (async () => {
       try {
-        const model = await getWorkbenchReadModel({ syncPrices: false });
+        const [model, system] = await Promise.all([
+          getWorkbenchReadModel({ syncPrices: false }),
+          getSystemConfig().catch(() => null),
+        ]);
         if (!cancelled) {
           setAssets(model.bootstrap.assetUniverse);
           const defaultSelection = model.bootstrap.assetUniverse
@@ -141,6 +148,7 @@ export function useStrategyLab(): UseStrategyLabResult {
             ...prev,
             selectedAssets: defaultSelection.length > 0 ? defaultSelection : prev.selectedAssets,
             baseCurrency: model.bootstrap.baseCurrency || prev.baseCurrency,
+            minOrderNotional: Math.max(0, Number(system?.config.strategy.constraints.minNotional) || prev.minOrderNotional),
           }));
         }
       } catch {
@@ -190,6 +198,7 @@ export function useStrategyLab(): UseStrategyLabResult {
         rebalanceFrequency: config.rebalanceFrequency,
         initialCapital: config.initialCapital,
         baseCurrency: config.baseCurrency,
+        minOrderNotional: config.minOrderNotional,
       };
       const res = await runBacktest(params);
       setResult(res);
@@ -202,7 +211,12 @@ export function useStrategyLab(): UseStrategyLabResult {
   }, [running, config, loadHistory]);
 
   const applyTargetWeightsFn = useCallback(async () => {
-    if (!result?.targetWeights || Object.keys(result.targetWeights).length === 0) return;
+    const applyMeta = resolveStrategyLabApplyMeta(result, false);
+    if (!result || !applyMeta.hasTargetWeights) return;
+    if (!applyMeta.isSingleStrategy) {
+      toast.error("多策略回测结果不能直接应用权重，请只保留一个策略后重新运行");
+      return;
+    }
     setApplying(true);
     try {
       await applyWorkbenchTargetWeights(result.targetWeights);
@@ -245,6 +259,7 @@ export function useStrategyLab(): UseStrategyLabResult {
       rebalanceFrequency: p.rebalanceFrequency || "monthly",
       initialCapital: Number.isFinite(p.initialCapital) && p.initialCapital > 0 ? p.initialCapital : 100_000,
       baseCurrency: p.baseCurrency || "USD",
+      minOrderNotional: Math.max(0, Number(p.minOrderNotional) || DEFAULT_CONFIG.minOrderNotional),
     });
     toast.message("已载入历史参数，可直接重新运行");
   }, []);
@@ -288,7 +303,7 @@ export function useStrategyLab(): UseStrategyLabResult {
   );
 
   const canRun = !running && config.selectedAssets.length > 0 && config.selectedStrategies.length > 0;
-  const canApply = Boolean(result?.targetWeights && Object.keys(result.targetWeights).length > 0) && !applying;
+  const canApply = useMemo(() => resolveStrategyLabApplyMeta(result, applying).canApply, [result, applying]);
 
   return {
     assets,

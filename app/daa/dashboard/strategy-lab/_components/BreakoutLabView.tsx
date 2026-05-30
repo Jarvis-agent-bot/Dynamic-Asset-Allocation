@@ -44,6 +44,12 @@ function pct(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
 }
+
+function pctAbs(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${Math.abs(n).toFixed(1)}%`;
+}
+
 function r2(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}`;
@@ -177,7 +183,7 @@ export function BreakoutLabView() {
                   <span className="text-[var(--muted)]">买入持有 {result.benchmark.symbol}：<b className="text-[var(--text)]">{pct(result.benchmark.buyHoldReturnPct)}</b></span>
                   {beatBenchmark != null ? (
                     <span className={beatBenchmark >= 0 ? "text-[var(--success)]" : "text-rose-400"}>
-                      {beatBenchmark >= 0 ? "跑赢" : "跑输"} {pct(Math.abs(beatBenchmark))}
+                      {beatBenchmark >= 0 ? "跑赢" : "跑输"} {pctAbs(beatBenchmark)}
                     </span>
                   ) : null}
                 </div>

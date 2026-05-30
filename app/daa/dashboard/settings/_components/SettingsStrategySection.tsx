@@ -21,12 +21,242 @@ export function SettingsStrategySection(props: {
   setConfig: SettingsConfigSetter;
 }) {
   const { config, setConfig } = props;
+  const breakout = config.strategy.breakout;
   const policy = config.policy;
   const reviewFrequency = policy.review.frequency;
   const usesReviewDueDay = reviewFrequency !== "every_3_days" && reviewFrequency !== "weekly";
 
   return (
     <>
+      <SectionCard title="策略风格">
+        <div style={settingsGridCols2Style}>
+          <div>
+            <FieldLabel>组合风格</FieldLabel>
+            <FormSelect
+              value={config.strategy.style}
+              onChange={(e) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          style: e.target.value as DaaSystemConfig["strategy"]["style"],
+                        },
+                      }
+                    : prev,
+                )
+              }
+            >
+              <option value="classic_rebalance">经典再平衡</option>
+              <option value="balanced_breakout">均衡突破增强</option>
+              <option value="breakout_growth">突破成长</option>
+            </FormSelect>
+          </div>
+
+          <CheckboxRow
+            checked={breakout.enabled}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      strategy: {
+                        ...prev.strategy,
+                        breakout: { ...prev.strategy.breakout, enabled: value },
+                      },
+                    }
+                  : prev,
+              )
+            }
+          >
+            启用放量突破过滤
+          </CheckboxRow>
+
+          <div>
+            <FieldLabel>突破回看天数</FieldLabel>
+            <NumberInput
+              value={breakout.breakoutLookback}
+              min={5}
+              max={120}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          breakout: {
+                            ...prev.strategy.breakout,
+                            breakoutLookback: Math.max(5, Math.min(120, Math.trunc(value || 20))),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>放量倍数</FieldLabel>
+            <NumberInput
+              value={breakout.volMultiple}
+              min={1}
+              max={5}
+              step={0.1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          breakout: {
+                            ...prev.strategy.breakout,
+                            volMultiple: Math.max(1, Math.min(5, value || 1.5)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>快线 MA</FieldLabel>
+            <NumberInput
+              value={breakout.maFast}
+              min={5}
+              max={120}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          breakout: {
+                            ...prev.strategy.breakout,
+                            maFast: Math.max(5, Math.min(120, Math.trunc(value || 20))),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>慢线 MA</FieldLabel>
+            <NumberInput
+              value={breakout.maSlow}
+              min={10}
+              max={260}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          breakout: {
+                            ...prev.strategy.breakout,
+                            maSlow: Math.max(10, Math.min(260, Math.trunc(value || 50))),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>最大乖离 (%)</FieldLabel>
+            <NumberInput
+              value={breakout.maxExtensionPct * 100}
+              min={1}
+              max={100}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          breakout: {
+                            ...prev.strategy.breakout,
+                            maxExtensionPct: Math.max(0.01, Math.min(1, value / 100)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>突破增强倍数</FieldLabel>
+            <NumberInput
+              value={breakout.balancedBoostMultiplier}
+              min={1}
+              max={2}
+              step={0.05}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          breakout: {
+                            ...prev.strategy.breakout,
+                            balancedBoostMultiplier: Math.max(1, Math.min(2, value || 1.15)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>弱趋势缩放倍数</FieldLabel>
+            <NumberInput
+              value={breakout.balancedWeakMultiplier}
+              min={0.1}
+              max={1}
+              step={0.05}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        strategy: {
+                          ...prev.strategy,
+                          breakout: {
+                            ...prev.strategy.breakout,
+                            balancedWeakMultiplier: Math.max(0.1, Math.min(1, value || 0.6)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Policy Engine">
         <div style={settingsGridCols2Style}>
           <CheckboxRow

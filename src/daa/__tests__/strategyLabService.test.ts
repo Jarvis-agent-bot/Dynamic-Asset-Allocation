@@ -64,6 +64,106 @@ describe("strategyLabService", () => {
     expect(result.benchmarkResults.every((item) => item.equityCurve.length >= 2)).toBe(true);
   });
 
+  it("纯 symbol 输入按 US 处理，不会把 4 位代码误映射成港股别名", async () => {
+    const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildSeries>> = {
+      "7203": buildSeries([100, 101, 102, 103, 104]),
+      SPY: buildSeries([100, 101, 102, 103, 104]),
+    };
+
+    vi.mocked(fetchPriceSeriesWithCache).mockImplementation(async (symbol: string) => ({
+      symbol,
+      data: seriesByYfinanceSymbol[symbol] || [],
+      source: "db",
+    }));
+
+    await runStrategyLabBacktest({
+      assets: ["7203"],
+      strategies: ["equalWeight"],
+      startDate: "2026-01-01",
+      endDate: "2026-01-05",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+    });
+
+    expect(vi.mocked(fetchPriceSeriesWithCache)).toHaveBeenCalledWith("7203", "2026-01-01", expect.any(Object));
+    expect(vi.mocked(fetchPriceSeriesWithCache)).not.toHaveBeenCalledWith("7203.HK", expect.any(String), expect.any(Object));
+  });
+
+  it("在价格拉取前拒绝非法日期和非正初始资金", async () => {
+    await expect(runStrategyLabBacktest({
+      assets: ["US::SPY"],
+      strategies: ["equalWeight"],
+      startDate: "2026-02-31",
+      endDate: "2026-03-01",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+    })).rejects.toMatchObject({
+      name: "StrategyLabDomainError",
+      code: "INVALID_PARAMS",
+      message: "开始日期格式无效，应为 YYYY-MM-DD",
+    });
+
+    await expect(runStrategyLabBacktest({
+      assets: ["US::SPY"],
+      strategies: ["equalWeight"],
+      startDate: "2026-02-01",
+      endDate: "2026-01-01",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+    })).rejects.toMatchObject({
+      name: "StrategyLabDomainError",
+      code: "INVALID_PARAMS",
+      message: "开始日期不能晚于结束日期",
+    });
+
+    await expect(runStrategyLabBacktest({
+      assets: ["US::SPY"],
+      strategies: ["equalWeight"],
+      startDate: "2026-01-01",
+      endDate: "2026-02-01",
+      rebalanceFrequency: "monthly",
+      initialCapital: 0,
+      benchmarkSymbol: "SPY",
+    })).rejects.toMatchObject({
+      name: "StrategyLabDomainError",
+      code: "INVALID_PARAMS",
+      message: "初始资金必须大于 0",
+    });
+
+    expect(vi.mocked(fetchPriceSeriesWithCache)).not.toHaveBeenCalled();
+  });
+
+  it("返回给前端的策略权益曲线使用绝对资金口径，而不是 1.x 归一化净值", async () => {
+    const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildSeries>> = {
+      SPY: buildSeries([100, 101, 102]),
+    };
+
+    vi.mocked(fetchPriceSeriesWithCache).mockImplementation(async (symbol: string) => ({
+      symbol,
+      data: seriesByYfinanceSymbol[symbol] || [],
+      source: "db",
+    }));
+
+    const result = await runStrategyLabBacktest({
+      assets: ["US::SPY"],
+      strategies: ["equalWeight"],
+      startDate: "2026-01-01",
+      endDate: "2026-01-03",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+      feeRateBps: 0,
+      slippageBps: 0,
+    });
+
+    expect(result.equityCurve[0]?.equity).toBeCloseTo(101000, 6);
+    expect(result.strategyResults[0]?.equityCurve[0]?.equity).toBeCloseTo(101000, 6);
+    expect(result.benchmarkResults[0]?.equityCurve[0]?.equity).toBeGreaterThan(50_000);
+  });
+
   it("按交易日并集估值，避免跨市场假期把有效历史裁短", async () => {
     const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildDatedSeries>> = {
       SPY: buildDatedSeries([
@@ -134,6 +234,38 @@ describe("strategyLabService", () => {
     const warnings = result.warnings.join("\n");
     expect(warnings).not.toMatch(/minOrderNotional=0\.00/);
     expect(warnings).not.toMatch(/skipped 0\.00/);
+  });
+
+  it("支持自定义最小下单额，避免实验室被硬编码 50 阻断", async () => {
+    const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildSeries>> = {
+      AAA: buildSeries([100, 100, 100]),
+      BBB: buildSeries([100, 100, 100]),
+      SPY: buildSeries([100, 100, 100]),
+      QQQ: buildSeries([100, 100, 100]),
+    };
+
+    vi.mocked(fetchPriceSeriesWithCache).mockImplementation(async (symbol: string) => ({
+      symbol,
+      data: seriesByYfinanceSymbol[symbol] || [],
+      source: "db",
+    }));
+
+    const result = await runStrategyLabBacktest({
+      assets: ["US::AAA", "US::BBB"],
+      strategies: ["equalWeight"],
+      startDate: "2026-01-01",
+      endDate: "2026-01-03",
+      rebalanceFrequency: "monthly",
+      initialCapital: 90,
+      benchmarkSymbol: "SPY",
+      minOrderNotional: 0,
+      feeRateBps: 0,
+      slippageBps: 0,
+    } as never);
+
+    const warnings = result.warnings.join("\n");
+    expect(warnings).not.toMatch(/minOrderNotional=50\.00/);
+    expect(warnings).not.toMatch(/50\.00 阻止/);
   });
 
   it("将非基准货币资产按历史 FX 序列转换为基准货币估值", async () => {

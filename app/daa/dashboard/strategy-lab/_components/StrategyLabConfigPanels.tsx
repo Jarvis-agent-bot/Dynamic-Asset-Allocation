@@ -157,6 +157,17 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
               className={daaSurfaceFieldClassName}
             />
           </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">最小下单额 ({config.baseCurrency})</label>
+            <input
+              type="number"
+              min={0}
+              step={10}
+              value={config.minOrderNotional}
+              onChange={(e) => setConfig((prev) => ({ ...prev, minOrderNotional: Math.max(0, Number(e.target.value) || 0) }))}
+              className={daaSurfaceFieldClassName}
+            />
+          </div>
         </div>
       </DaaSurfacePanel>
     </div>
