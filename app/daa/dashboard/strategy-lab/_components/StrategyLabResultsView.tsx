@@ -19,7 +19,7 @@ interface StrategyLabResultsViewProps {
 }
 
 export function StrategyLabResultsView({ state }: StrategyLabResultsViewProps) {
-  const { result, strategyResults, chartData, warningSummary } = state;
+  const { result, strategyResults, benchmarkResults, chartData, warningSummary } = state;
   if (!result) return null;
 
   return (
@@ -49,7 +49,11 @@ export function StrategyLabResultsView({ state }: StrategyLabResultsViewProps) {
 
       {strategyResults.length > 1 ? <StrategyComparisonTable result={result} /> : null}
 
-      <StrategyLabEquityChart chartData={chartData} strategyResults={strategyResults} />
+      <StrategyLabEquityChart
+        chartData={chartData}
+        strategyResults={strategyResults}
+        benchmarkResults={benchmarkResults}
+      />
 
       {result.attribution.perAsset.length > 0 ? <AttributionPanel result={result} /> : null}
 

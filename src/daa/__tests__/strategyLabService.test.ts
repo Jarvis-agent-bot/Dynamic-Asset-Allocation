@@ -32,6 +32,7 @@ describe("strategyLabService", () => {
   it("通过共享行情缓存执行多策略回测，并保留 MARKET::SYMBOL 资产键", async () => {
     const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildSeries>> = {
       SPY: buildSeries([100, 101, 102, 103, 104]),
+      QQQ: buildSeries([200, 202, 205, 207, 210]),
       "0700.HK": buildSeries([300, 303, 306, 309, 312]),
       "USDHKD=X": buildSeries([7.8, 7.8, 7.8, 7.8, 7.8]),
     };
@@ -59,6 +60,8 @@ describe("strategyLabService", () => {
     expect(Object.keys(result.targetWeights).sort()).toEqual(["HK::0700", "US::SPY"]);
     expect(Object.keys(result.strategyResults[1].targetWeights)).toContain("HK::0700");
     expect(result.attribution.benchmark.coverage).toBe("full");
+    expect(result.benchmarkResults.map((item) => item.symbol)).toEqual(["SPY", "QQQ"]);
+    expect(result.benchmarkResults.every((item) => item.equityCurve.length >= 2)).toBe(true);
   });
 
   it("按交易日并集估值，避免跨市场假期把有效历史裁短", async () => {

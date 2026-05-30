@@ -13,7 +13,11 @@ import {
 
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { DaaSurfacePanel } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import type { StrategyLabStrategyResult } from "@/src/daa/modules/strategyLab/strategyLabTypes";
+import type {
+  StrategyLabBenchmarkResult,
+  StrategyLabStrategyResult,
+} from "@/src/daa/modules/strategyLab/strategyLabTypes";
+import { strategyLabBenchmarkDataKey } from "./strategyLabChartData";
 import { strategyLabel } from "./useStrategyLab";
 
 const CHART_COLORS = {
@@ -31,14 +35,24 @@ const STRATEGY_LINE_COLORS: Record<string, string> = {
   baseline: "hsl(215 16% 57%)",
 };
 
+const BENCHMARK_LINE_COLORS: Record<string, string> = {
+  SPY: "hsl(160 60% 55%)",
+  QQQ: "hsl(334 74% 62%)",
+};
+
 interface StrategyLabEquityChartProps {
   chartData: Array<Record<string, string | number>>;
   strategyResults: StrategyLabStrategyResult[];
+  benchmarkResults: StrategyLabBenchmarkResult[];
 }
 
-export function StrategyLabEquityChart({ chartData, strategyResults }: StrategyLabEquityChartProps) {
+export function StrategyLabEquityChart({
+  chartData,
+  strategyResults,
+  benchmarkResults,
+}: StrategyLabEquityChartProps) {
   return (
-    <DaaSurfacePanel accent="cyan" title="权益曲线" subtitle="回测期间的资产净值走势。">
+    <DaaSurfacePanel accent="cyan" title="权益曲线" subtitle="回测期间的组合净值走势，含基准对比。">
       {chartData.length >= 2 ? (
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -49,14 +63,15 @@ export function StrategyLabEquityChart({ chartData, strategyResults }: StrategyL
                 tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
+                tickFormatter={(value: string) => String(value).slice(5, 10)}
               />
               <YAxis
                 tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
                 width={60}
-                domain={["auto", "auto"]}
-                tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+                domain={[(min: number) => Math.floor(min * 0.995), (max: number) => Math.ceil(max * 1.005)]}
+                tickFormatter={(v: number) => `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
               />
               <Tooltip
                 contentStyle={{
@@ -64,11 +79,12 @@ export function StrategyLabEquityChart({ chartData, strategyResults }: StrategyL
                   border: `1px solid ${CHART_COLORS.tooltipBorder}`,
                   borderRadius: 14,
                 }}
-                formatter={(value: number | undefined) => [
+                cursor={{ stroke: "hsla(199,89%,60%,0.28)", strokeDasharray: "4 4" }}
+                formatter={(value: number | undefined, name?: string) => [
                   `$${(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                  "净值",
+                  name ?? "净值",
                 ]}
-                labelFormatter={(label: unknown) => `${String(label)}`}
+                labelFormatter={(label: unknown) => `日期: ${String(label)}`}
               />
               <Legend verticalAlign="bottom" height={28} iconType="line" wrapperStyle={{ fontSize: 11 }} />
               {strategyResults.map((item) => (
@@ -81,6 +97,20 @@ export function StrategyLabEquityChart({ chartData, strategyResults }: StrategyL
                   strokeWidth={2.2}
                   dot={false}
                   activeDot={{ r: 4 }}
+                />
+              ))}
+              {benchmarkResults.map((item) => (
+                <Line
+                  key={item.symbol}
+                  type="monotone"
+                  dataKey={strategyLabBenchmarkDataKey(item.symbol)}
+                  name={item.label}
+                  stroke={BENCHMARK_LINE_COLORS[item.symbol] || CHART_COLORS.muted}
+                  strokeWidth={1.7}
+                  strokeDasharray="5 3"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  connectNulls
                 />
               ))}
             </LineChart>

@@ -37,6 +37,14 @@ export type StrategyLabEquityPoint = {
   equity: number;
 };
 
+export type StrategyLabBenchmarkResult = {
+  symbol: string;
+  label: string;
+  equityCurve: StrategyLabEquityPoint[];
+  coverage: "full" | "partial" | "missing";
+  return: number | null;
+};
+
 export type StrategyLabStrategyResult = {
   strategy: string;
   equityCurve: StrategyLabEquityPoint[];
@@ -52,6 +60,7 @@ export type StrategyLabRunResult = {
   baseCurrency: string;
   params: StrategyLabRunParams;
   strategyResults: StrategyLabStrategyResult[];
+  benchmarkResults: StrategyLabBenchmarkResult[];
   primaryStrategy: string;
   equityCurve: StrategyLabEquityPoint[];
   metrics: BacktestMetrics;

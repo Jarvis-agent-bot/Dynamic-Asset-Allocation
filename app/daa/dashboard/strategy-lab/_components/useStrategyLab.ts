@@ -8,6 +8,7 @@ import { applyWorkbenchTargetWeights } from "@/src/daa/modules/workbench/targetA
 import { runBacktest, getBacktestHistory } from "@/src/daa/modules/strategyLab/strategyLabApi";
 import type {
   StrategyLabRunParams,
+  StrategyLabBenchmarkResult,
   StrategyLabRunResult,
   StrategyLabStrategyResult,
   StrategyLabHistoryItem,
@@ -17,6 +18,7 @@ import {
   summarizeStrategyLabWarnings,
   type StrategyLabWarningPresentation,
 } from "./strategyLabWarningPresentation";
+import { buildStrategyLabChartData } from "./strategyLabChartData";
 
 export const STRATEGY_OPTIONS = [
   { key: "equalWeight", label: "等权重", desc: "按相同比例配置所有资产" },
@@ -102,6 +104,7 @@ export interface UseStrategyLabResult {
   loadHistory: () => Promise<void>;
 
   strategyResults: StrategyLabStrategyResult[];
+  benchmarkResults: StrategyLabBenchmarkResult[];
   chartData: Array<Record<string, string | number>>;
   warningSummary: StrategyLabWarningPresentation;
 
@@ -270,26 +273,14 @@ export function useStrategyLab(): UseStrategyLabResult {
     }];
   }, [result]);
 
+  const benchmarkResults = useMemo<StrategyLabBenchmarkResult[]>(
+    () => result?.benchmarkResults ?? [],
+    [result?.benchmarkResults],
+  );
+
   const chartData = useMemo(() => {
-    if (!strategyResults.length || !result) return [];
-    const initialCapital = Number.isFinite(result.params.initialCapital) && result.params.initialCapital > 0
-      ? result.params.initialCapital
-      : 1;
-    const rows = new Map<string, Record<string, string | number>>();
-    for (const strategyResult of strategyResults) {
-      for (const point of strategyResult.equityCurve || []) {
-        const row = rows.get(point.date) || {
-          date: point.date.slice(5, 10),
-          fullDate: point.date,
-        };
-        row[strategyResult.strategy] = +(point.equity * initialCapital).toFixed(2);
-        rows.set(point.date, row);
-      }
-    }
-    return [...rows.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([, row]) => row);
-  }, [result, strategyResults]);
+    return buildStrategyLabChartData({ result, strategyResults, benchmarkResults });
+  }, [result, strategyResults, benchmarkResults]);
 
   const warningSummary = useMemo(
     () => summarizeStrategyLabWarnings(result?.warnings ?? []),
@@ -320,6 +311,7 @@ export function useStrategyLab(): UseStrategyLabResult {
     historyLoading,
     loadHistory,
     strategyResults,
+    benchmarkResults,
     chartData,
     warningSummary,
     canRun,

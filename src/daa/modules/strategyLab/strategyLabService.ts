@@ -24,6 +24,7 @@ import type {
   StrategyLabRunResult,
   StrategyLabHistoryItem,
   StrategyLabEquityPoint,
+  StrategyLabBenchmarkResult,
   StrategyLabStrategyResult,
 } from "./strategyLabTypes";
 
@@ -62,6 +63,8 @@ type ResolvedBacktestAsset = {
 
 const SUPPORTED_STRATEGIES = new Set(["equalWeight", "momentum", "riskParity", "minVariance", "baseline"]);
 const ROLLING_LOOKBACK_BARS = 63;
+const DEFAULT_BENCHMARK_SYMBOL = "SPY";
+const CHART_BENCHMARK_SYMBOLS = ["SPY", "QQQ"] as const;
 
 // ---------------------------------------------------------------------------
 // 内部工具
@@ -124,6 +127,26 @@ function minIsoDate(values: string[]): string {
 
 function fxYahooSymbol(baseCurrency: string, quoteCurrency: string): string {
   return `${normalizeMoneyCurrency(baseCurrency)}${normalizeMoneyCurrency(quoteCurrency)}=X`;
+}
+
+function benchmarkLabel(symbol: string): string {
+  const normalized = String(symbol || "").trim().toUpperCase();
+  if (normalized === "SPY") return "标普500";
+  if (normalized === "QQQ") return "纳斯达克100";
+  return normalized;
+}
+
+function listBenchmarkSymbols(primarySymbol?: string): string[] {
+  const out: string[] = [];
+  const push = (raw: string | undefined) => {
+    const value = String(raw || "").trim().toUpperCase();
+    if (!value || out.includes(value)) return;
+    out.push(value);
+  };
+
+  push(primarySymbol || DEFAULT_BENCHMARK_SYMBOL);
+  for (const symbol of CHART_BENCHMARK_SYMBOLS) push(symbol);
+  return out;
 }
 
 /** 根据策略名称和价格序列计算目标权重 */
@@ -434,6 +457,66 @@ async function fetchBenchmarkHistory(
     warnings.push(`获取基准 ${benchmarkSymbol || "SPY"} 失败: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
+}
+
+function computeBenchmarkCoverage(
+  series: Array<{ date: string; close: number }>,
+  startDate: string,
+  endDate: string,
+): "full" | "partial" | "missing" {
+  const normalized = normalizePriceBars(series);
+  if (normalized.length < 2) return "missing";
+  const firstDate = normalized[0]?.date || "";
+  const lastDate = normalized[normalized.length - 1]?.date || "";
+  let startClose = 0;
+  let endClose = 0;
+  for (const bar of normalized) {
+    if (bar.date <= startDate) startClose = bar.close;
+    if (bar.date <= endDate) {
+      endClose = bar.close;
+    } else {
+      break;
+    }
+  }
+  return firstDate <= startDate && lastDate >= endDate && startClose > 0 && endClose > 0 ? "full" : "partial";
+}
+
+function buildBenchmarkEquityCurve(input: {
+  benchmarkSeries: Array<{ date: string; close: number }>;
+  dates: string[];
+  initialCapital: number;
+}): StrategyLabEquityPoint[] {
+  const normalized = normalizePriceBars(input.benchmarkSeries);
+  if (normalized.length < 2 || input.dates.length < 2 || !(input.initialCapital > 0)) return [];
+
+  let baseClose = 0;
+  for (const bar of normalized) {
+    if (bar.date <= input.dates[0]) {
+      baseClose = bar.close;
+    } else {
+      break;
+    }
+  }
+  if (!(baseClose > 0)) {
+    baseClose = normalized[0]?.close || 0;
+  }
+  if (!(baseClose > 0)) return [];
+
+  const curve: StrategyLabEquityPoint[] = [];
+  let cursor = 0;
+  let lastClose = 0;
+  for (const date of input.dates) {
+    while (cursor < normalized.length && normalized[cursor].date <= date) {
+      lastClose = normalized[cursor].close;
+      cursor += 1;
+    }
+    if (!(lastClose > 0)) continue;
+    curve.push({
+      date,
+      equity: +((lastClose / baseClose) * input.initialCapital).toFixed(2),
+    });
+  }
+  return curve;
 }
 
 // ---------------------------------------------------------------------------
@@ -786,14 +869,23 @@ export async function runStrategyLabBacktest(
     params.endDate,
     commonWarnings,
   );
-  const benchmarkSeries = await fetchBenchmarkHistory(
-    params.benchmarkSymbol || "SPY",
-    params.startDate,
-    params.endDate,
-    baseCurrency,
-    fxSeriesByCurrency,
-    commonWarnings,
-  );
+  const benchmarkSymbols = listBenchmarkSymbols(params.benchmarkSymbol);
+  const benchmarkSeriesBySymbol = Object.fromEntries(
+    await Promise.all(
+      benchmarkSymbols.map(async (symbol) => [
+        symbol,
+        await fetchBenchmarkHistory(
+          symbol,
+          params.startDate,
+          params.endDate,
+          baseCurrency,
+          fxSeriesByCurrency,
+          commonWarnings,
+        ),
+      ] as const),
+    ),
+  ) as Record<string, Array<{ date: string; close: number }>>;
+  const benchmarkSeries = benchmarkSeriesBySymbol[(params.benchmarkSymbol || DEFAULT_BENCHMARK_SYMBOL).trim().toUpperCase()] || [];
 
   // 3. 构造统一估值日历：用交易日并集估值，用真实交易日限制下单。
   const filteredSeries: Record<string, PriceBar[]> = {};
@@ -909,6 +1001,28 @@ export async function runStrategyLabBacktest(
     throw new StrategyLabDomainError("NO_PRICE_HISTORY", "没有可用的策略回测结果", { status: 422 });
   }
 
+  const benchmarkResults: StrategyLabBenchmarkResult[] = benchmarkSymbols.map((symbol) => {
+    const rawSeries = benchmarkSeriesBySymbol[symbol] || [];
+    const curve = buildBenchmarkEquityCurve({
+      benchmarkSeries: rawSeries,
+      dates: primary.equityCurve.map((point) => point.date),
+      initialCapital: params.initialCapital || 10000,
+    });
+    const benchmarkReturn = curve.length >= 2
+      ? curve[curve.length - 1].equity / curve[0].equity - 1
+      : null;
+
+    return {
+      symbol,
+      label: benchmarkLabel(symbol),
+      equityCurve: curve,
+      coverage: primary.equityCurve.length > 0
+        ? computeBenchmarkCoverage(rawSeries, primary.equityCurve[0].date, primary.equityCurve[primary.equityCurve.length - 1].date)
+        : "missing",
+      return: benchmarkReturn != null && Number.isFinite(benchmarkReturn) ? benchmarkReturn : null,
+    };
+  }).filter((item) => item.equityCurve.length >= 2);
+
   // 5. 持久化到数据库
   try {
     await withDaaPgClient(async ({ query }) => {
@@ -947,6 +1061,7 @@ export async function runStrategyLabBacktest(
     baseCurrency,
     params: normalizedParams,
     strategyResults,
+    benchmarkResults,
     primaryStrategy: primary.strategy,
     equityCurve: primary.equityCurve,
     metrics: primary.metrics,
