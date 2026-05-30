@@ -52,7 +52,7 @@ export function PortfolioStatus(props: PortfolioStatusProps) {
   }
 
   return (
-    <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
+    <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-[var(--text)]">权益走势</div>

@@ -42,7 +42,7 @@ export function DriftBarChart(props: DriftBarChartProps) {
   if (chartData.length === 0) return null;
 
   return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] p-4">
+    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
         持仓偏移分布
       </div>
@@ -73,7 +73,7 @@ export function DriftBarChart(props: DriftBarChartProps) {
             }}
             itemStyle={{ color: "#e2e8f0" }}
             labelStyle={{ color: "#94a3b8" }}
-            cursor={{ fill: "rgba(255,255,255,0.04)" }}
+            cursor={{ fill: "var(--elevated)" }}
             formatter={(value: number | undefined) => [`${(value ?? 0) > 0 ? "+" : ""}${(value ?? 0).toFixed(2)}%`, "偏移"]}
           />
           <ReferenceLine x={driftThresholdPct} stroke="hsla(45,93%,55%,0.4)" strokeDasharray="4 4" label={{ value: `+${driftThresholdPct}%`, fill: "hsl(45 93% 55%)", fontSize: 10, position: "top" }} />

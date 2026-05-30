@@ -94,7 +94,7 @@ export function InvestmentClockWidget({ phase, growthProxy, inflationProxy, conf
                   q.position,
                   isActive
                     ? cn(q.activeBg, q.activeText, "shadow-lg")
-                    : "bg-[rgba(8,12,20,0.72)] text-[var(--muted)]",
+                    : "bg-[var(--surface)] text-[var(--muted)]",
                 )}
               >
                 <div className={cn("text-sm font-bold", isActive ? q.activeText : "text-[var(--text)]")}>

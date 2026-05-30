@@ -26,8 +26,8 @@ function NumberField({
   suffix?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-zinc-400">
-      <span>{label}{suffix ? <span className="text-zinc-500">（{suffix}）</span> : null}</span>
+    <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
+      <span>{label}{suffix ? <span className="text-[var(--muted)]">（{suffix}）</span> : null}</span>
       <input
         type="number"
         value={value}
@@ -75,13 +75,13 @@ export function BreakoutLabView() {
               className={daaSurfaceFieldClassName}
               placeholder="NVDA, AAPL, MSFT"
             />
-            <div className="text-xs text-zinc-500">已解析 {lab.parsedAssets.length} 个标的</div>
+            <div className="text-xs text-[var(--muted)]">已解析 {lab.parsedAssets.length} 个标的</div>
             <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+              <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
                 <span>开始日期</span>
                 <input type="date" value={config.startDate} onChange={(e) => set("startDate", e.target.value)} className={daaSurfaceFieldClassName} />
               </label>
-              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+              <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
                 <span>结束日期</span>
                 <input type="date" value={config.endDate} onChange={(e) => set("endDate", e.target.value)} className={daaSurfaceFieldClassName} />
               </label>
@@ -108,7 +108,7 @@ export function BreakoutLabView() {
             <NumberField label="盈亏比" suffix="R" value={config.rewardMultiple} onChange={(v) => set("rewardMultiple", v)} step={0.5} min={0.5} />
           </div>
           <div className="mt-3 space-y-2">
-            <div className="text-xs text-zinc-400">出场模式</div>
+            <div className="text-xs text-[var(--muted)]">出场模式</div>
             <div className="grid grid-cols-3 gap-2">
               {([
                 ["ma", "MA离场", "最敏感·控回撤"],
@@ -121,12 +121,12 @@ export function BreakoutLabView() {
                   onClick={() => set("exitMode", mode)}
                   className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
                     config.exitMode === mode
-                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
-                      : "border-zinc-800 bg-zinc-900/40 text-zinc-300 hover:border-zinc-700"
+                      ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]"
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--border-strong)]"
                   }`}
                 >
                   <div className="font-medium">{label}</div>
-                  <div className="mt-0.5 text-[10px] text-zinc-500">{hint}</div>
+                  <div className="mt-0.5 text-[10px] text-[var(--muted)]">{hint}</div>
                 </button>
               ))}
             </div>
@@ -165,10 +165,10 @@ export function BreakoutLabView() {
             {result.benchmark ? (
               <DaaSurfacePanel title="基准对比">
                 <div className="flex flex-wrap items-center gap-4 text-sm">
-                  <span className="text-zinc-400">本策略组合：<b className="text-zinc-100">{pct(port?.totalReturnPct)}</b></span>
-                  <span className="text-zinc-400">买入持有 {result.benchmark.symbol}：<b className="text-zinc-100">{pct(result.benchmark.buyHoldReturnPct)}</b></span>
+                  <span className="text-[var(--muted)]">本策略组合：<b className="text-[var(--text)]">{pct(port?.totalReturnPct)}</b></span>
+                  <span className="text-[var(--muted)]">买入持有 {result.benchmark.symbol}：<b className="text-[var(--text)]">{pct(result.benchmark.buyHoldReturnPct)}</b></span>
                   {beatBenchmark != null ? (
-                    <span className={beatBenchmark >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                    <span className={beatBenchmark >= 0 ? "text-[var(--success)]" : "text-rose-400"}>
                       {beatBenchmark >= 0 ? "跑赢" : "跑输"} {pct(Math.abs(beatBenchmark))}
                     </span>
                   ) : null}
@@ -180,7 +180,7 @@ export function BreakoutLabView() {
               <DaaSurfacePanel title="出场原因分布" subtitle="MA离场占比过高 = 突破后回踩被震出，利润被切碎">
                 <div className="flex flex-wrap gap-3 text-xs">
                   {Object.entries(agg.exitReasonCounts).map(([k, v]) => (
-                    <span key={k} className="rounded bg-zinc-800 px-2 py-1 text-zinc-300">{k}: {v}</span>
+                    <span key={k} className="rounded bg-[var(--elevated)] px-2 py-1 text-[var(--text)]">{k}: {v}</span>
                   ))}
                 </div>
               </DaaSurfacePanel>
@@ -189,7 +189,7 @@ export function BreakoutLabView() {
             <DaaSurfacePanel title="分标的表现">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="text-zinc-500">
+                  <thead className="text-[var(--muted)]">
                     <tr className="text-left">
                       <th className="py-1 pr-3">标的</th>
                       <th className="py-1 pr-3">笔数</th>
@@ -199,15 +199,15 @@ export function BreakoutLabView() {
                       <th className="py-1 pr-3">累计R</th>
                     </tr>
                   </thead>
-                  <tbody className="text-zinc-300">
+                  <tbody className="text-[var(--text)]">
                     {result.perSymbol.map((s) => (
-                      <tr key={s.assetKey} className="border-t border-zinc-800">
+                      <tr key={s.assetKey} className="border-t border-[var(--border)]">
                         <td className="py-1 pr-3 font-mono">{s.assetKey}</td>
                         <td className="py-1 pr-3">{s.trades}</td>
                         <td className="py-1 pr-3">{s.winRate.toFixed(0)}%</td>
                         <td className="py-1 pr-3">{r2(s.expectancy)}</td>
                         <td className="py-1 pr-3">{Number.isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : "∞"}</td>
-                        <td className={`py-1 pr-3 ${s.totalR >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{r2(s.totalR)}</td>
+                        <td className={`py-1 pr-3 ${s.totalR >= 0 ? "text-[var(--success)]" : "text-rose-400"}`}>{r2(s.totalR)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -217,13 +217,13 @@ export function BreakoutLabView() {
 
             {result.warnings.length ? (
               <DaaSurfacePanel title={`提示 (${result.warnings.length})`}>
-                <ul className="list-disc space-y-1 pl-5 text-xs text-zinc-400">
+                <ul className="list-disc space-y-1 pl-5 text-xs text-[var(--muted)]">
                   {result.warnings.slice(0, 12).map((w, i) => <li key={i}>{w}</li>)}
                 </ul>
               </DaaSurfacePanel>
             ) : null}
 
-            <p className="text-xs text-zinc-600">回测是历史统计，不代表未来；非投资建议。</p>
+            <p className="text-xs text-[var(--muted)]">回测是历史统计，不代表未来；非投资建议。</p>
           </>
         ) : null}
 

@@ -111,8 +111,8 @@ export function PortfolioTemplateDialog(props: {
               onClick={() => setSelected(tpl.id)}
               className={`w-full rounded-[12px] border px-4 py-3 text-left transition-colors ${
                 selected === tpl.id
-                  ? "border-[var(--primary)]/40 bg-[rgba(56,189,248,0.08)]"
-                  : "border-[var(--border)] hover:border-[var(--primary)]/20 hover:bg-[rgba(8,12,20,0.6)]"
+                  ? "border-[var(--primary)]/40 bg-[var(--primary-bg)]"
+                  : "border-[var(--border)] hover:border-[var(--primary)]/20 hover:bg-[var(--surface)]"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -123,7 +123,7 @@ export function PortfolioTemplateDialog(props: {
                     {Object.entries(tpl.weights).map(([key, pct]) => (
                       <span
                         key={key}
-                        className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)]"
+                        className="rounded-full bg-[var(--elevated)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)]"
                       >
                         {key.replace(/^US:/, "")} {pct}%
                       </span>

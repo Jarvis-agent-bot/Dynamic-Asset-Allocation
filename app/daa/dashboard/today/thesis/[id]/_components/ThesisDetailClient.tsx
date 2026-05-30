@@ -99,9 +99,9 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
 
   const { thread, evidence, reviews } = data;
   const convictionColor =
-    thread.conviction === "high" ? "text-emerald-400 bg-emerald-500/10" :
+    thread.conviction === "high" ? "text-[var(--success)] bg-[var(--success-bg)]" :
     thread.conviction === "medium" ? "text-amber-400 bg-amber-500/10" :
-    thread.conviction === "low" ? "text-red-400 bg-red-500/10" : "text-[var(--faint)] bg-[rgba(255,255,255,0.06)]";
+    thread.conviction === "low" ? "text-red-400 bg-red-500/10" : "text-[var(--faint)] bg-[var(--elevated)]";
 
   return (
     <div className="space-y-6">
@@ -137,28 +137,28 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
             证据时间线 ({evidence.length})
           </h2>
           {evidence.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[rgba(255,255,255,0.1)] p-6 text-center text-xs text-[var(--faint)]">
+            <div className="rounded-xl border border-dashed border-[var(--hover)] p-6 text-center text-xs text-[var(--faint)]">
               暂无证据记录
             </div>
           ) : (
-            <div className="relative space-y-0 border-l border-[rgba(255,255,255,0.08)] pl-4">
+            <div className="relative space-y-0 border-l border-[var(--hover)] pl-4">
               {evidence.map((e) => {
                 const Icon = e.evidenceType === "supporting" ? CheckCircle :
                   e.evidenceType === "contradicting" ? XCircle : MinusCircle;
-                const iconColor = e.evidenceType === "supporting" ? "text-emerald-400" :
+                const iconColor = e.evidenceType === "supporting" ? "text-[var(--success)]" :
                   e.evidenceType === "contradicting" ? "text-red-400" : "text-[var(--faint)]";
-                const typeBg = e.evidenceType === "supporting" ? "bg-emerald-500/10 text-emerald-400" :
-                  e.evidenceType === "contradicting" ? "bg-red-500/10 text-red-400" : "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
+                const typeBg = e.evidenceType === "supporting" ? "bg-[var(--success-bg)] text-[var(--success)]" :
+                  e.evidenceType === "contradicting" ? "bg-red-500/10 text-red-400" : "bg-[var(--elevated)] text-[var(--faint)]";
                 const quality = deriveEvidenceQuality(e);
                 const qualityBg = quality.level === "high"
-                  ? "bg-emerald-500/10 text-emerald-300"
+                  ? "bg-[var(--success-bg)] text-[var(--success)]"
                   : quality.level === "medium"
-                    ? "bg-sky-500/10 text-sky-300"
+                    ? "bg-[var(--primary-bg)] text-[var(--primary)]"
                     : "bg-amber-500/10 text-amber-300";
                 return (
                   <div key={e.id} className="relative pb-4">
-                    <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg)] bg-[rgba(255,255,255,0.15)]" />
-                    <div className="rounded-lg border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-3">
+                    <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg)] bg-[var(--hover)]" />
+                    <div className="rounded-lg border border-[var(--elevated)] bg-[var(--surface)] p-3">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
@@ -182,7 +182,7 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
         {/* 右列：论点信息 + 复盘 */}
         <div className="space-y-4">
           {/* 论点信息卡 */}
-          <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-4">
+          <div className="rounded-xl border border-[var(--elevated)] bg-[var(--surface)] p-4">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
               <Shield className="h-3.5 w-3.5" /> 论点
             </h3>
@@ -202,14 +202,14 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
             {thread.tags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {thread.tags.map(tag => (
-                  <span key={tag} className="rounded bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-[10px] text-[var(--faint)]">{tag}</span>
+                  <span key={tag} className="rounded bg-[var(--elevated)] px-1.5 py-0.5 text-[10px] text-[var(--faint)]">{tag}</span>
                 ))}
               </div>
             )}
           </div>
 
           {/* 复盘历史 */}
-          <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-4">
+          <div className="rounded-xl border border-[var(--elevated)] bg-[var(--surface)] p-4">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
               <Clock className="h-3.5 w-3.5" /> 复盘历史 ({reviews.length})
             </h3>
@@ -218,7 +218,7 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
             ) : (
               <div className="space-y-3">
                 {reviews.map(r => (
-                  <div key={r.id} className="border-b border-[rgba(255,255,255,0.04)] pb-3 last:border-0 last:pb-0">
+                  <div key={r.id} className="border-b border-[var(--elevated)] pb-3 last:border-0 last:pb-0">
                     <div className="flex items-center justify-between text-[10px]">
                       <span className="text-[var(--faint)]">{new Date(r.createdAt).toLocaleDateString("zh-CN")}</span>
                       {r.accuracyScore != null && (
@@ -226,7 +226,7 @@ export default function ThesisDetailClient({ thesisId }: { thesisId: string }) {
                       )}
                     </div>
                     {r.accuracyScore != null && (
-                      <div className="mt-1 h-1.5 rounded-full bg-[rgba(255,255,255,0.06)]">
+                      <div className="mt-1 h-1.5 rounded-full bg-[var(--elevated)]">
                         <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${r.accuracyScore * 100}%` }} />
                       </div>
                     )}

@@ -87,17 +87,17 @@ function ModelEditor({ model, onChange, onDelete, idx }: ModelEditorProps) {
   const providerLabel = LLM_PROVIDERS.find((item) => item.value === effectiveProvider)?.label || model.provider;
 
   return (
-    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[rgba(8,12,20,0.3)] p-4 md:p-5">
-      <div className="flex flex-col gap-3 border-b border-[rgba(255,255,255,0.06)] pb-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:p-5">
+      <div className="flex flex-col gap-3 border-b border-[var(--elevated)] pb-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full border border-[rgba(125,211,252,0.28)] bg-[rgba(56,189,248,0.12)] px-2.5 py-1 text-[var(--primary)]">
+            <span className="rounded-full border border-[var(--primary)] bg-[var(--primary-bg)] px-2.5 py-1 text-[var(--primary)]">
               {TASK_TYPE_LABELS[model.taskType]}
             </span>
-            <span className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-2.5 py-1 text-[var(--muted)]">
+            <span className="rounded-full border border-[var(--hover)] bg-[var(--elevated)] px-2.5 py-1 text-[var(--muted)]">
               {providerLabel}
             </span>
-            <span className={`rounded-full border px-2.5 py-1 ${model.enabled ? "border-[rgba(74,222,128,0.28)] bg-[rgba(74,222,128,0.12)] text-[var(--success)]" : "border-[rgba(148,163,184,0.18)] bg-[rgba(148,163,184,0.08)] text-[var(--faint)]"}`}>
+            <span className={`rounded-full border px-2.5 py-1 ${model.enabled ? "border-[var(--success)] bg-[var(--success)] text-[var(--success)]" : "border-[rgba(148,163,184,0.18)] bg-[rgba(148,163,184,0.08)] text-[var(--faint)]"}`}>
               {model.enabled ? "已启用" : "已停用"}
             </span>
           </div>
@@ -194,7 +194,7 @@ function ModelEditor({ model, onChange, onDelete, idx }: ModelEditorProps) {
         />
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-[rgba(255,255,255,0.06)] pt-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 border-t border-[var(--elevated)] pt-3 lg:flex-row lg:items-center lg:justify-between">
         <CheckboxRow
           checked={model.enabled}
           onChange={(value) => onChange({ ...model, enabled: value }, idx)}
@@ -229,7 +229,7 @@ export function SettingsAiAnalysisBlock(props: {
 
   return (
     <SubsectionCard title="AI 解读">
-      <div className="mb-4 rounded-xl border border-[rgba(125,211,252,0.18)] bg-[rgba(56,189,248,0.08)] p-4">
+      <div className="mb-4 rounded-xl border border-[var(--primary)] bg-[var(--primary-bg)] p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-sm font-semibold text-[var(--text)]">多模型路由</div>
@@ -241,7 +241,7 @@ export function SettingsAiAnalysisBlock(props: {
             {TASK_TYPES.map((item) => (
               <span
                 key={item.value}
-                className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-2.5 py-1 text-[var(--muted)]"
+                className="rounded-full border border-[var(--hover)] bg-[var(--elevated)] px-2.5 py-1 text-[var(--muted)]"
               >
                 {item.label}
               </span>
@@ -252,7 +252,7 @@ export function SettingsAiAnalysisBlock(props: {
 
       <div className="space-y-4">
         {models.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-5 text-sm text-[var(--muted)]">
+          <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-sm text-[var(--muted)]">
             暂未配置模型，请添加。
           </div>
         ) : (

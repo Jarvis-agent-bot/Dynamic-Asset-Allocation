@@ -31,11 +31,11 @@ function assetDisplayName(row: AssetUniverseView): string {
 }
 
 function badgeClass(tone: ValuationTone): string {
-  if (tone === "cheap") return "bg-emerald-500/12 text-emerald-300";
-  if (tone === "fair") return "bg-sky-500/12 text-sky-300";
+  if (tone === "cheap") return "bg-[var(--success-bg)] text-[var(--success)]";
+  if (tone === "fair") return "bg-[var(--primary-bg)] text-[var(--primary)]";
   if (tone === "expensive") return "bg-amber-500/12 text-amber-300";
   if (tone === "danger") return "bg-red-500/12 text-red-300";
-  return "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
+  return "bg-[var(--elevated)] text-[var(--faint)]";
 }
 
 function isStock(row: AssetUniverseView): boolean {
@@ -111,7 +111,7 @@ function HoldingRow(props: {
       tabIndex={0}
       onClick={props.onClick}
       onKeyDown={(e) => { if (e.key === "Enter") props.onClick(); }}
-      className="group flex cursor-pointer items-center gap-3 rounded-[12px] border border-transparent px-4 py-3 transition-colors hover:border-[var(--border)] hover:bg-[rgba(56,189,248,0.04)]"
+      className="group flex cursor-pointer items-center gap-3 rounded-[12px] border border-transparent px-4 py-3 transition-colors hover:border-[var(--border)] hover:bg-[var(--primary-bg)]"
     >
       {/* 标的信息 */}
       <div className="min-w-0 flex-1">
@@ -138,7 +138,7 @@ function HoldingRow(props: {
         {priceChangePercent != null ? (
           <div className={cn(
             "font-[var(--font-mono)] text-xs",
-            priceChangePercent >= 0 ? "text-emerald-400" : "text-red-400",
+            priceChangePercent >= 0 ? "text-[var(--success)]" : "text-red-400",
           )}>
             {priceChangePercent >= 0 ? "+" : ""}{priceChangePercent.toFixed(2)}%
           </div>
@@ -212,7 +212,7 @@ function HoldingRow(props: {
         {pnl != null ? (
           <div className={cn(
             "font-[var(--font-mono)] text-xs",
-            pnl >= 0 ? "text-emerald-400" : "text-red-400",
+            pnl >= 0 ? "text-[var(--success)]" : "text-red-400",
           )}>
             {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}%
           </div>
@@ -315,8 +315,8 @@ export function PortfolioHoldingsList(props: {
               className={cn(
                 "rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors",
                 activeCategory === cat.key
-                  ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-                  : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)]",
+                  ? "bg-[var(--primary-bg)] text-[var(--text)]"
+                  : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--elevated)]",
               )}
             >
               {cat.label}
@@ -333,7 +333,7 @@ export function PortfolioHoldingsList(props: {
       ) : null}
 
       {/* 列表 */}
-      <div className="divide-y divide-[rgba(255,255,255,0.04)]">
+      <div className="divide-y divide-[var(--elevated)]">
         {filteredRows.map((row) => (
           <HoldingRow
             key={row.assetKey}

@@ -43,7 +43,7 @@ const LazyDriftBarChart = dynamic<DriftBarChartProps>(
   () => import("@/app/daa/dashboard/_shared/rebalance/DriftBarChart").then((mod) => mod.DriftBarChart),
   {
     ssr: false,
-    loading: () => <div className="h-32 rounded-[14px] bg-[rgba(255,255,255,0.03)]" />,
+    loading: () => <div className="h-32 rounded-[14px] bg-[var(--surface)]" />,
   },
 );
 
@@ -92,7 +92,7 @@ function RebalanceDecisionSummary(props: {
   });
 
   return (
-    <section className="rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,24,39,0.9),rgba(8,12,20,0.94))] p-4 shadow-[0_18px_38px_rgba(0,0,0,0.22)]">
+    <section className="rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface))] p-4 shadow-[0_18px_38px_rgba(0,0,0,0.22)]">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.94fr)] xl:items-center">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -112,7 +112,7 @@ function RebalanceDecisionSummary(props: {
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">{decision.description}</p>
           </div>
-          <div className="rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.64)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+          <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm font-medium text-[var(--text)]">
             {decision.nextStep}
           </div>
         </div>

@@ -82,7 +82,7 @@ function trendArrow(pct: number | null | undefined, label: string) {
   if (pct === null || pct === undefined) return null;
   const up = pct > 0;
   return (
-    <span className={cn("text-[11px] font-medium", up ? "text-emerald-400" : "text-red-400")}>
+    <span className={cn("text-[11px] font-medium", up ? "text-[var(--success)]" : "text-red-400")}>
       {label} {up ? "↑" : "↓"} {Math.abs(pct).toFixed(1)}%
     </span>
   );
@@ -238,7 +238,7 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
               {macroPolicy.dimensions.map((dimension) => (
                 <div
                   key={dimension.key}
-                  className="rounded-[10px] border border-[rgba(255,255,255,0.06)] bg-[rgba(8,12,20,0.42)] px-3 py-2.5"
+                  className="rounded-[10px] border border-[var(--elevated)] bg-[var(--surface)] px-3 py-2.5"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-[var(--text)]">{dimension.label}</span>
@@ -315,7 +315,7 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                   {/* 顶部: label + scope */}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-[var(--text)]">{ind.label}</span>
-                    <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] text-[var(--faint)]">
+                    <span className="rounded-full bg-[var(--elevated)] px-2 py-0.5 text-[10px] text-[var(--faint)]">
                       {scopeLabelZh(ind.scope)}
                     </span>
                   </div>
@@ -349,7 +349,7 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                         <span>252 日分位</span>
                         <span>{ind.percentile252.toFixed(0)}%</span>
                       </div>
-                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--elevated)]">
                         <div
                           className={cn("h-full rounded-full transition-all", percentileBarColor(ind.percentile252))}
                           style={{ width: `${Math.min(100, Math.max(0, ind.percentile252))}%` }}

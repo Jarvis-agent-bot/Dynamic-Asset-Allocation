@@ -193,7 +193,7 @@ export function SettingsDataInitSection() {
           </div>
 
           {/* --- 预估信息 --- */}
-          <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(8,12,20,0.5)] px-4 py-3">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
             <div className="text-sm text-[var(--muted)]">
               预计: <span className="font-semibold text-[var(--text)]">{TOTAL_ASSETS}</span> 资产
               {" \u00d7 "}
@@ -235,7 +235,7 @@ export function SettingsDataInitSection() {
           {running || result ? (
             <div className="space-y-2">
               {/* 进度条 */}
-              <div className="h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+              <div className="h-2 overflow-hidden rounded-full bg-[var(--elevated)]">
                 <div
                   className={`h-full rounded-full bg-[var(--primary)] transition-all duration-300${running ? " animate-pulse" : ""}`}
                   style={{ width: `${running ? "100" : (result ? 100 : 0)}%`, opacity: running ? 0.6 : 1 }}

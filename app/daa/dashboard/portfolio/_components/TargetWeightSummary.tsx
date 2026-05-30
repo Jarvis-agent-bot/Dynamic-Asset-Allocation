@@ -140,7 +140,7 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
                 {formatPercent(totalWeight)}
               </span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--elevated)]">
               <div
                 className="h-full rounded-full transition-all duration-300"
                 style={{

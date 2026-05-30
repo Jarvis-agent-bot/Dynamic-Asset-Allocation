@@ -24,7 +24,7 @@ const LazyTargetWeightSummary = dynamic<TargetWeightSummaryProps>(
     ssr: false,
     loading: () => (
       <DaaSurfacePanel accent="cyan" title="目标配置概览" subtitle="正在加载配置图表">
-        <div className="h-20 rounded-[12px] bg-[rgba(255,255,255,0.03)]" />
+        <div className="h-20 rounded-[12px] bg-[var(--surface)]" />
       </DaaSurfacePanel>
     ),
   },
@@ -41,7 +41,7 @@ export function ActiveTabPanel(props: {
   return (
     <div className="space-y-4">
       {/* Tab 切换 */}
-      <div className="inline-flex rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-1.5" role="tablist">
+      <div className="inline-flex rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-1.5" role="tablist">
         {([
           { key: "positions", label: `持仓 ${visibleHoldingCount}` },
           { key: "watchlist", label: `观察列表 ${model.summary.watchlistAssets}` },
@@ -57,7 +57,7 @@ export function ActiveTabPanel(props: {
             className={cn(
               "rounded-[12px] px-3 py-2 text-sm transition-colors",
               model.activeTab === item.key
-                ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
+                ? "bg-[var(--primary-bg)] text-[var(--text)]"
                 : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >

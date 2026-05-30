@@ -40,7 +40,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             onChange={(e) => setAssetFilter(e.target.value)}
             className={daaSurfaceFieldClassName}
           />
-          <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-2">
+          <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-2">
             {assetsLoading ? (
               <div className="px-3 py-4 text-center text-xs text-[var(--faint)]">加载资产池中…</div>
             ) : filteredAssets.length === 0 ? (
@@ -53,7 +53,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
                 return (
                   <label
                     key={asset.assetKey}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[rgba(255,255,255,0.04)]"
+                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--elevated)]"
                   >
                     <input
                       type="checkbox"
@@ -84,7 +84,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             return (
               <label
                 key={s.key}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-[rgba(255,255,255,0.04)]"
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-[var(--elevated)]"
               >
                 <input
                   type="checkbox"

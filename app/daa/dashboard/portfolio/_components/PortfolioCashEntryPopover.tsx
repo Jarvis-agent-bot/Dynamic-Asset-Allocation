@@ -97,7 +97,7 @@ export function PortfolioCashEntryPopover({ side, baseCurrency, onSuccess, class
       </DaaSurfaceActionButton>
 
       {open ? (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(13,19,32,0.98)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+        <div className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-xl">
           <div className="border-b border-[var(--border)] px-3.5 py-2.5">
             <div className="text-sm font-semibold text-[var(--text)]">{label}</div>
             <div className="mt-0.5 text-[11px] text-[var(--faint)]">{side === "deposit" ? "记录一笔入金到账户" : "记录一笔出金从账户"}</div>

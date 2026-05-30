@@ -166,9 +166,9 @@ function riskAction(r: ThesisFailureImpact): { label: string; tone: ActionTone }
 function toneClasses(tone: ActionTone): string {
   if (tone === "red") return "border-red-400/22 bg-red-500/10 text-red-200";
   if (tone === "amber") return "border-amber-400/22 bg-amber-500/10 text-amber-200";
-  if (tone === "blue") return "border-sky-400/22 bg-sky-500/10 text-sky-200";
+  if (tone === "blue") return "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
   if (tone === "orange") return "border-orange-400/22 bg-orange-500/10 text-orange-200";
-  return "border-[var(--border)] bg-[rgba(255,255,255,0.04)] text-[var(--muted)]";
+  return "border-[var(--border)] bg-[var(--elevated)] text-[var(--muted)]";
 }
 
 function ActionBadge({ tone, children }: { tone: ActionTone; children: string }) {
@@ -400,7 +400,7 @@ function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
       </KanbanColumn>
 
       <KanbanColumn
-        icon={<Search className="h-4 w-4 text-sky-300" />}
+        icon={<Search className="h-4 w-4 text-[var(--primary)]" />}
         title="仓位缺口"
         subtitle="重要持仓但近期没有调查"
         count={buckets.gaps.length}
@@ -446,13 +446,13 @@ function KanbanColumn({
 }) {
   const hasChildren = Array.isArray(children) ? children.flat().some(Boolean) : Boolean(children);
   return (
-    <section className="flex min-w-0 flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(8,12,20,0.4)]">
+    <section className="flex min-w-0 flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
       <header className="flex items-start justify-between gap-2 border-b border-[var(--border)] px-3.5 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text)]">
             {icon}
             {title}
-            <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 font-[var(--font-mono)] text-[11px] text-[var(--muted)]">{count}</span>
+            <span className="rounded-full bg-[var(--elevated)] px-1.5 py-0.5 font-[var(--font-mono)] text-[11px] text-[var(--muted)]">{count}</span>
           </div>
           <div className="mt-1 text-[11px] leading-4 text-[var(--faint)]">{subtitle}</div>
         </div>
@@ -495,7 +495,7 @@ function CardShell({
   );
 
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(13,19,32,0.65)] px-3 py-2.5">
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <ActionBadge tone={action.tone}>{action.label}</ActionBadge>
         {meta ? <span className="truncate text-[11px] text-[var(--faint)]">{meta}</span> : null}

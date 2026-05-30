@@ -97,7 +97,7 @@ function SecretRow({
   const isDeliverable = DELIVERABLE_KEYS.has(secret.key);
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 py-2.5">
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
       {/* Label + source */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -116,8 +116,8 @@ function SecretRow({
             secret.source === "env"
               ? "bg-blue-500/10 text-blue-400"
               : secret.source === "db"
-                ? "bg-emerald-500/10 text-emerald-400"
-                : "bg-zinc-500/10 text-zinc-500"
+                ? "bg-[var(--success-bg)] text-[var(--success)]"
+                : "bg-[var(--muted-bg)] text-[var(--muted)]"
           }`}>
             {secret.source === "env" && <Lock className="h-2.5 w-2.5" />}
             {sourceLabel}
@@ -170,11 +170,11 @@ function SecretRow({
           </div>
         ) : (
           <div className="mt-1 flex items-center gap-2">
-            <code className={`text-[12px] ${secret.masked ? "text-[var(--muted)]" : "text-zinc-600 italic"}`}>
+            <code className={`text-[12px] ${secret.masked ? "text-[var(--muted)]" : "text-[var(--muted)] italic"}`}>
               {secret.masked || "—"}
             </code>
             {testResult && (
-              <span className={`text-[11px] ${testResult.success ? "text-emerald-400" : "text-red-400"}`}>
+              <span className={`text-[11px] ${testResult.success ? "text-[var(--success)]" : "text-red-400"}`}>
                 {testResult.success ? "✓" : "✗"} {testResult.message} ({testResult.latencyMs}ms)
               </span>
             )}
@@ -202,7 +202,7 @@ function SecretRow({
               onClick={() => onTest(secret.key, "deliver")}
               disabled={testing}
               title="发送测试消息"
-              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-emerald-400 disabled:opacity-40"
+              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--success)] disabled:opacity-40"
             >
               <Send className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
             </button>
@@ -311,7 +311,7 @@ export function SettingsSecretsSection() {
                 { label: "数据库", value: `${secretSummary.dbCount}` },
                 { label: "未配置", value: `${secretSummary.missingCount}` },
               ].map((item) => (
-                <div key={item.label} className="rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 py-2.5">
+                <div key={item.label} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--faint)]">{item.label}</div>
                   <div className="mt-2 text-sm font-semibold text-[var(--text)]">{item.value}</div>
                 </div>
@@ -319,7 +319,7 @@ export function SettingsSecretsSection() {
             </div>
 
             {sortedGroups.map(([group, items]) => (
-              <div key={group} className="rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] p-3">
+              <div key={group} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-3.5 w-3.5 text-[var(--faint)]" />

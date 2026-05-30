@@ -202,7 +202,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
         <button
           type="button"
           onClick={() => void loadDetail(true)}
-          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--elevated)]"
         >
           重新加载
         </button>
@@ -220,7 +220,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
         <button
           type="button"
           onClick={() => router.push("/daa/dashboard/portfolio")}
-          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--elevated)]"
         >
           返回持仓列表
         </button>

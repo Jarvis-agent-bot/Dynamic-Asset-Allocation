@@ -44,22 +44,22 @@ interface Response {
 
 function convictionBadge(conviction: ConvictionLevel): { label: string; color: string } {
   switch (conviction) {
-    case "high":     return { label: "高信心", color: "bg-emerald-500/15 text-emerald-300" };
+    case "high":     return { label: "高信心", color: "bg-[var(--success-bg)] text-[var(--success)]" };
     case "medium":   return { label: "中信心", color: "bg-indigo-500/15 text-indigo-300" };
     case "low":      return { label: "低信心", color: "bg-amber-500/15 text-amber-300" };
-    default:         return { label: "证据不足", color: "bg-[rgba(255,255,255,0.06)] text-[var(--muted)]" };
+    default:         return { label: "证据不足", color: "bg-[var(--elevated)] text-[var(--muted)]" };
   }
 }
 
 function evidenceTone(type: EvidenceType): string {
-  if (type === "supporting") return "text-emerald-300";
+  if (type === "supporting") return "text-[var(--success)]";
   if (type === "contradicting") return "text-red-300";
   return "text-[var(--muted)]";
 }
 
 function evidenceQualityClass(level: EvidenceQualityLevel): string {
-  if (level === "high") return "bg-emerald-500/10 text-emerald-300";
-  if (level === "medium") return "bg-sky-500/10 text-sky-300";
+  if (level === "high") return "bg-[var(--success-bg)] text-[var(--success)]";
+  if (level === "medium") return "bg-[var(--primary-bg)] text-[var(--primary)]";
   return "bg-amber-500/10 text-amber-300";
 }
 

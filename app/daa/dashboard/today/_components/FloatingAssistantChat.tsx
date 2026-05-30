@@ -31,15 +31,15 @@ function MessageBubble({ message }: { message: DaaChatMessage }) {
       ) : null}
       <div className={cn("max-w-[82%] rounded-[14px] px-3.5 py-2.5 text-sm leading-6", isUser
         ? "bg-[var(--primary)] text-[var(--bg)]"
-        : "border border-[var(--border)] bg-[rgba(8,12,20,0.78)] text-[var(--text)]",
+        : "border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]",
       )}>
         <div className="whitespace-pre-wrap break-words">{message.body}</div>
-        <div className={cn("mt-1 text-[10px]", isUser ? "text-[rgba(8,12,20,0.68)]" : "text-[var(--faint)]")}>
+        <div className={cn("mt-1 text-[10px]", isUser ? "text-[var(--surface)]" : "text-[var(--faint)]")}>
           {formatMessageTime(message.createdAt)}
         </div>
       </div>
       {isUser ? (
-        <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-500/10 text-cyan-300">
+        <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]">
           <User className="h-3.5 w-3.5" />
         </div>
       ) : null}
@@ -92,7 +92,7 @@ export default function FloatingAssistantChat() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed bottom-6 right-6 z-40 inline-flex h-12 items-center gap-2 rounded-full border border-indigo-400/30 bg-[rgba(13,19,32,0.95)] px-4 text-sm font-medium text-[var(--text)] shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur transition-all hover:border-indigo-300/55 hover:text-[var(--text)]",
+          "fixed bottom-6 right-6 z-40 inline-flex h-12 items-center gap-2 rounded-full border border-indigo-400/30 bg-[var(--surface)] px-4 text-sm font-medium text-[var(--text)] shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur transition-all hover:border-indigo-300/55 hover:text-[var(--text)]",
           open && "opacity-0 pointer-events-none",
         )}
         aria-label="打开 Agent 对话"
@@ -114,7 +114,7 @@ export default function FloatingAssistantChat() {
           <aside
             role="dialog"
             aria-label="Agent 对话"
-            className="fixed bottom-6 right-6 z-50 flex w-[min(420px,calc(100vw-3rem))] max-h-[min(720px,calc(100vh-3rem))] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.98),rgba(13,19,32,0.99))] shadow-[0_30px_70px_rgba(0,0,0,0.5)]"
+            className="fixed bottom-6 right-6 z-50 flex w-[min(420px,calc(100vw-3rem))] max-h-[min(720px,calc(100vh-3rem))] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] shadow-[0_30px_70px_rgba(0,0,0,0.5)]"
           >
             <div className="absolute inset-x-0 top-0 h-1 bg-indigo-400/70" />
             <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
@@ -152,7 +152,7 @@ export default function FloatingAssistantChat() {
             {assistant.threads.length > 1 ? (
               <div className="border-b border-[var(--border)] px-4 py-2">
                 <select
-                  className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[rgba(8,12,20,0.78)] px-2 text-xs text-[var(--muted)] outline-none"
+                  className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--muted)] outline-none"
                   value={assistant.selectedSessionId || ""}
                   onChange={(event) => void assistant.selectThread(event.target.value)}
                   disabled={assistant.sending}
@@ -205,7 +205,7 @@ export default function FloatingAssistantChat() {
                   <button
                     key={prompt}
                     type="button"
-                    className="rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-2.5 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-indigo-300/30 hover:text-[var(--text)] disabled:opacity-50"
+                    className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-indigo-300/30 hover:text-[var(--text)] disabled:opacity-50"
                     onClick={() => setDraft(prompt)}
                     disabled={assistant.sending}
                   >

@@ -376,7 +376,7 @@ export function SettingsStrategySection(props: {
                 border: "1px solid var(--border)",
                 borderRadius: 12,
                 padding: "12px 16px",
-                background: "rgba(8,12,20,0.3)",
+                background: "var(--surface)",
               }}>
                 <CheckboxRow
                   checked={policy.execution.autoExecuteEnabled}

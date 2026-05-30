@@ -89,7 +89,7 @@ export function FormInput(props: InputHTMLAttributes<HTMLInputElement>) {
       style={inputStyle}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = "var(--primary)";
-        e.currentTarget.style.boxShadow = "0 0 0 3px rgba(56,189,248,0.12)";
+        e.currentTarget.style.boxShadow = "0 0 0 3px var(--primary-bg)";
         props.onFocus?.(e);
       }}
       onBlur={(e) => {
@@ -114,7 +114,7 @@ export function FormSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
       style={selectStyle}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = "var(--primary)";
-        e.currentTarget.style.boxShadow = "0 0 0 3px rgba(56,189,248,0.12)";
+        e.currentTarget.style.boxShadow = "0 0 0 3px var(--primary-bg)";
         props.onFocus?.(e);
       }}
       onBlur={(e) => {
@@ -222,7 +222,7 @@ export function SectionCard({
       style={{
         borderRadius: 18,
         border: "1px solid var(--border)",
-        background: "linear-gradient(180deg, rgba(17,23,38,0.94), rgba(9,13,24,0.98))",
+        background: "linear-gradient(180deg, rgba(17,23,38,0.94), var(--surface))",
         overflow: "hidden",
         boxShadow: "0 24px 60px rgba(0,0,0,0.22)",
       }}
@@ -231,7 +231,7 @@ export function SectionCard({
         style={{
           padding: "16px 18px",
           borderBottom: "1px solid var(--border)",
-          background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0))",
+          background: "linear-gradient(180deg, var(--elevated), rgba(255,255,255,0))",
         }}
       >
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", letterSpacing: "0.01em" }}>{title}</div>
@@ -261,7 +261,7 @@ export function SubsectionCard({
       style={{
         borderRadius: 16,
         border: "1px solid var(--border)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015))",
+        background: "linear-gradient(180deg, var(--surface), var(--surface))",
         padding: 16,
       }}
     >
@@ -282,7 +282,7 @@ export const settingsPresetButtonStyle: CSSProperties = {
   fontSize: 12,
   cursor: "pointer",
   border: "1px solid var(--border-strong)",
-  background: "rgba(255,255,255,0.03)",
+  background: "var(--surface)",
   color: "var(--muted)",
   fontFamily: "var(--font-body)",
   transition: "all 0.15s",

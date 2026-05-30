@@ -33,7 +33,7 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
       <aside
         role="dialog"
         aria-label="回测历史"
-        className="fixed inset-y-0 right-0 z-50 flex w-[min(440px,100vw)] flex-col overflow-hidden border-l border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.98),rgba(13,19,32,0.99))] shadow-[0_30px_70px_rgba(0,0,0,0.55)]"
+        className="fixed inset-y-0 right-0 z-50 flex w-[min(440px,100vw)] flex-col overflow-hidden border-l border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] shadow-[0_30px_70px_rgba(0,0,0,0.55)]"
       >
         <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
           <div className="min-w-0">
@@ -81,7 +81,7 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
                 return (
                   <div
                     key={item.runId}
-                    className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(13,19,32,0.7)] px-3 py-2.5"
+                    className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs text-[var(--muted)]">{formatDateTime(item.createdAt)}</div>

@@ -128,7 +128,7 @@ export function DashboardNotificationBar(props: {
               · 失败 {props.executionReceipt.failed} 笔
             </div>
             {props.executionReceipt.reason ? (
-              <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[rgba(8,12,20,0.28)] px-3 py-2 text-xs text-[var(--faint)]">
+              <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--faint)]">
                 详情：{props.executionReceipt.reason}
               </div>
             ) : null}

@@ -284,14 +284,14 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
         </div>
         <div className="flex items-center gap-3">
           {mode === "equity" && equityChange ? (
-            <span className={`text-xs font-medium ${equityChange.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+            <span className={`text-xs font-medium ${equityChange.change >= 0 ? "text-[var(--success)]" : "text-red-400"}`}>
               ${equityChange.last.toLocaleString(undefined, { maximumFractionDigits: 0 })} ({equityChange.pct >= 0 ? "+" : ""}{equityChange.pct.toFixed(2)}%)
             </span>
           ) : null}
           {mode === "twr" && returnPct !== null && (
             <span
               className={`text-xs font-medium ${
-                returnPct >= 0 ? "text-emerald-400" : "text-red-400"
+                returnPct >= 0 ? "text-[var(--success)]" : "text-red-400"
               }`}
             >
               我的组合 {returnPct >= 0 ? "+" : ""}{returnPct}%
@@ -300,7 +300,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
           {benchmarkReturnPct !== null && (
             <span
               className={`text-xs font-medium ${
-                benchmarkReturnPct >= 0 ? "text-emerald-400/70" : "text-red-400/70"
+                benchmarkReturnPct >= 0 ? "text-[var(--success)]" : "text-red-400/70"
               }`}
             >
               {benchmarkLabel} {benchmarkReturnPct >= 0 ? "+" : ""}{benchmarkReturnPct}%

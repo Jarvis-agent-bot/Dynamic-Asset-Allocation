@@ -30,7 +30,7 @@ import {
 const statusTileStyle: CSSProperties = {
   borderRadius: 12,
   border: "1px solid var(--border)",
-  background: "rgba(255,255,255,0.02)",
+  background: "var(--surface)",
   padding: 14,
 };
 

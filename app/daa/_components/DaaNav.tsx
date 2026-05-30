@@ -53,7 +53,7 @@ export function DaaBrandMark(props: { className?: string }) {
       src={DAA_BRAND_ICON_PATH}
       alt=""
       aria-hidden="true"
-      className={cn("rounded-lg object-cover shadow-[0_0_18px_rgba(56,189,248,0.18)]", props.className)}
+      className={cn("rounded-lg object-cover shadow-[0_0_18px_var(--primary-bg)]", props.className)}
     />
   );
 }
@@ -76,8 +76,8 @@ function SidebarLink(props: {
         "group relative flex items-center rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         collapsed ? "mx-auto h-10 w-10 justify-center" : "w-full gap-3 px-3 py-2.5",
         isActive
-          ? "bg-[rgba(255,255,255,0.08)] text-[var(--text)]"
-          : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]",
+          ? "bg-[var(--hover)] text-[var(--text)]"
+          : "text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]",
       )}
     >
       {/* 左侧活跃指示条 */}
@@ -103,7 +103,7 @@ function SidebarLink(props: {
   return (
     <Tooltip>
       <TooltipTrigger asChild>{content}</TooltipTrigger>
-      <TooltipContent side="right" className="border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[13px] text-[var(--text)]">
+      <TooltipContent side="right" className="border-[var(--border)] bg-[var(--surface)] text-[13px] text-[var(--text)]">
         {item.label}
       </TooltipContent>
     </Tooltip>
@@ -143,7 +143,7 @@ export function DaaMobileNav() {
           variant="ghost"
           size="icon"
           aria-label="打开导航菜单"
-          className="h-8 w-8 shrink-0 text-[var(--muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]"
+          className="h-8 w-8 shrink-0 text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]"
         >
           <Menu className="h-4 w-4" aria-hidden="true" />
         </Button>
@@ -151,7 +151,7 @@ export function DaaMobileNav() {
       <SheetContent
         side="left"
         className="w-[260px] border-r-0 px-0"
-        style={{ background: "rgba(10,14,22,0.98)", borderColor: "transparent" }}
+        style={{ background: "var(--surface)", borderColor: "transparent" }}
       >
         <SheetHeader className="px-4 pb-4 pt-5">
           <SheetTitle className="flex items-center gap-2.5 text-left text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
@@ -171,8 +171,8 @@ export function DaaMobileNav() {
                 className={cn(
                   "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   isActive
-                    ? "bg-[rgba(255,255,255,0.08)] text-[var(--text)]"
-                    : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]",
+                    ? "bg-[var(--hover)] text-[var(--text)]"
+                    : "text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]",
                 )}
               >
                 {isActive ? <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--primary)]" /> : null}

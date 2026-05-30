@@ -33,12 +33,12 @@ function ModeTab({
       onClick={onClick}
       className={`flex-1 rounded-lg border px-4 py-3 text-left transition ${
         active
-          ? "border-emerald-500/60 bg-emerald-500/10"
-          : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
+          ? "border-[var(--success-border)] bg-[var(--success-bg)]"
+          : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]"
       }`}
     >
-      <div className={`text-sm font-medium ${active ? "text-emerald-300" : "text-zinc-200"}`}>{title}</div>
-      <div className="mt-0.5 text-xs text-zinc-500">{subtitle}</div>
+      <div className={`text-sm font-medium ${active ? "text-[var(--success)]" : "text-[var(--text)]"}`}>{title}</div>
+      <div className="mt-0.5 text-xs text-[var(--muted)]">{subtitle}</div>
     </button>
   );
 }

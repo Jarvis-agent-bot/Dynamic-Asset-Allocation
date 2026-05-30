@@ -77,7 +77,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
   return (
     <div className="space-y-3">
       {/* 概览指标行 */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-3">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] px-5 py-3">
         <Metric label="再平衡" value={`${model.cycles.length}`} sub={`完成 ${model.completedCycleCount}`} />
         <Separator />
         <Metric label="订单" value={`${model.orders.length}`} sub={`成交 ${model.executedOrderCount}`} />
@@ -100,7 +100,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
               "flex items-center gap-1 rounded-[8px] px-2 py-1 text-xs transition-colors",
-              showFilters || hasActiveFilter ? "bg-[rgba(56,189,248,0.12)] text-[var(--primary)]" : "text-[var(--muted)] hover:text-[var(--text)]",
+              showFilters || hasActiveFilter ? "bg-[var(--primary-bg)] text-[var(--primary)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
             <Filter className="h-3.5 w-3.5" />
@@ -111,7 +111,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
 
       {/* 可折叠筛选区 */}
       {showFilters ? (
-        <div className="flex flex-wrap items-end gap-3 rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.3)] px-4 py-3">
+        <div className="flex flex-wrap items-end gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
           <label className="space-y-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">开始</span>
             <input type="date" value={model.filters.startDate ?? ""} onChange={(e) => updateFilter({ startDate: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[130px]")} />
@@ -159,7 +159,7 @@ function Metric(props: { label: string; value: string; sub?: string; tone?: "gre
           </span>
         ) : null}
       </div>
-      <div className={cn("font-[var(--font-mono)] text-sm font-semibold", props.tone === "green" ? "text-emerald-400" : props.tone === "red" ? "text-red-400" : "text-[var(--text)]")}>
+      <div className={cn("font-[var(--font-mono)] text-sm font-semibold", props.tone === "green" ? "text-[var(--success)]" : props.tone === "red" ? "text-red-400" : "text-[var(--text)]")}>
         {props.value}
       </div>
       {props.sub ? <div className="text-[10px] text-[var(--faint)]">{props.sub}</div> : null}
@@ -192,7 +192,7 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
   const safeTab: TradeTab = model.activeTab === "cycles" || model.activeTab === "orders" ? model.activeTab : "cycles";
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-[12px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-1" role="tablist">
+      <div className="inline-flex rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-1" role="tablist">
         {(Object.keys(TAB_META) as TradeTab[]).map((tab) => (
           <button
             key={tab}
@@ -202,7 +202,7 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
             onClick={() => model.setActiveTab(tab)}
             className={cn(
               "rounded-[10px] px-3 py-2 text-sm transition-colors",
-              tab === safeTab ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
+              tab === safeTab ? "bg-[var(--primary-bg)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
             {TAB_META[tab]}
@@ -250,7 +250,7 @@ function CyclesTimeline({ model }: { model: TradesModel }) {
         const canExpand = report != null;
 
         return (
-          <div key={c.cycleId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.34)]">
+          <div key={c.cycleId} className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
                 <Link
@@ -332,7 +332,7 @@ function OrdersPanel({ model }: { model: TradesModel }) {
 
   return (
     <div className="overflow-hidden rounded-[14px] border border-[var(--border)]">
-      <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
+      <table className="w-full border-collapse bg-[var(--surface)]">
         <thead>
           <tr>
             <TH>标的</TH><TH>方向</TH><TH>状态</TH><TH align="right">数量</TH><TH align="right">价格</TH><TH align="right">时间</TH>
@@ -340,10 +340,10 @@ function OrdersPanel({ model }: { model: TradesModel }) {
         </thead>
         <tbody>
           {model.orders.slice(0, visibleCount).map((o) => (
-            <tr key={o.ticketId} className="transition-colors hover:bg-[rgba(255,255,255,0.02)]">
+            <tr key={o.ticketId} className="transition-colors hover:bg-[var(--surface)]">
               <TD mono>{o.symbol}</TD>
               <TD>
-                <span className={o.side === "BUY" ? "text-emerald-400" : "text-red-400"}>
+                <span className={o.side === "BUY" ? "text-[var(--success)]" : "text-red-400"}>
                   {o.side === "BUY" ? "买入" : "卖出"}
                 </span>
               </TD>
@@ -368,7 +368,7 @@ function OrdersPanel({ model }: { model: TradesModel }) {
 
 function MetricBlock(props: { title: string; items: string[] }) {
   return (
-    <div className="rounded-[10px] border border-[var(--border)] bg-[rgba(24,34,54,0.6)] px-3 py-2.5">
+    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--elevated)] px-3 py-2.5">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{props.title}</div>
       <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
         {props.items.map((item, i) => <div key={i}>{item}</div>)}

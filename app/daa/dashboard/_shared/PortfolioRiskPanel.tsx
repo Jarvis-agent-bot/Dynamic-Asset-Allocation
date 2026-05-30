@@ -158,10 +158,10 @@ function WeightBar({
       <div className="text-[var(--faint)] w-16 shrink-0 text-right">
         目标 {formatPercent(targetPct)}
       </div>
-      <div className="relative flex-1 h-3 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+      <div className="relative flex-1 h-3 rounded-full bg-[var(--elevated)] overflow-hidden">
         <div
           className="absolute inset-y-0 left-0 rounded-full"
-          style={{ width: `${targetWidth}%`, background: "rgba(56,189,248,0.35)" }}
+          style={{ width: `${targetWidth}%`, background: "var(--primary-bg)" }}
         />
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-[var(--primary)]"

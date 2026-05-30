@@ -24,7 +24,7 @@ export function SettingsMarketContextBlock(props: {
           padding: 16,
           borderRadius: 10,
           border: "1px solid var(--border)",
-          background: "linear-gradient(180deg, rgba(12,18,30,0.84), rgba(8,12,20,0.76))",
+          background: "linear-gradient(180deg, var(--surface), var(--surface))",
         }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
@@ -83,7 +83,7 @@ export function SettingsMarketContextBlock(props: {
             </div>
           </div>
 
-          <div style={{ gridColumn: "1 / -1", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", padding: "10px 12px" }}>
+          <div style={{ gridColumn: "1 / -1", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", padding: "10px 12px" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>市场划分说明</div>
             <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
               美股使用恐慌指数、成长/大盘比与市场广度；港股 / 中概使用港中概波动率与中概互联/大盘比；加密使用比特币/以太坊比与比特币波动率；宏观层使用金银比、收益率曲线、美元、信用、通胀代理、PPI、政策利率与美联储资产负债表。
@@ -115,7 +115,7 @@ export function SettingsMarketContextBlock(props: {
                 style={{
                   borderRadius: 10,
                   border: "1px solid var(--border)",
-                  background: "rgba(255,255,255,0.02)",
+                  background: "var(--surface)",
                   padding: 12,
                 }}
               >

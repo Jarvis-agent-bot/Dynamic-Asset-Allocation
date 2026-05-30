@@ -240,7 +240,7 @@ export default function MarketOrderDialog(props: {
         {error ? <DaaSurfaceNoticeBox tone="red" title="预览失败" description={error} /> : null}
 
         {preview ? (
-          <div className="space-y-3 rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.94),rgba(8,12,20,0.96))] p-4 sm:p-5">
+          <div className="space-y-3 rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] p-4 sm:p-5">
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.95fr)] xl:items-start">
               <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-3 px-4 py-4")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -327,8 +327,8 @@ export default function MarketOrderDialog(props: {
                         className={cn(
                           "flex gap-2 rounded-[12px] border px-3 py-2",
                           blockedRiskMessage
-                            ? "border-rose-300/12 bg-[rgba(255,255,255,0.02)] text-rose-100"
-                            : "border-amber-300/12 bg-[rgba(255,255,255,0.02)] text-amber-100",
+                            ? "border-rose-300/12 bg-[var(--surface)] text-rose-100"
+                            : "border-amber-300/12 bg-[var(--surface)] text-amber-100",
                         )}
                       >
                         <span className={cn("mt-[6px] h-1.5 w-1.5 rounded-full", blockedRiskMessage ? "bg-rose-300" : "bg-amber-300")} />

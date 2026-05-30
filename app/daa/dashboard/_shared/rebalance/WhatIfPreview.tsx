@@ -144,7 +144,7 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
               <span>{w.name}</span>
               <span className="font-[var(--font-mono)]">
                 {formatPercent(w.beforePct)} → {formatPercent(w.afterPct)}
-                <span className={w.changePct >= 0 ? "ml-1 text-emerald-400" : "ml-1 text-red-400"}>
+                <span className={w.changePct >= 0 ? "ml-1 text-[var(--success)]" : "ml-1 text-red-400"}>
                   ({w.changePct >= 0 ? "+" : ""}{w.changePct.toFixed(1)}%)
                 </span>
               </span>

@@ -88,8 +88,8 @@ export function SettingsBrainSection(props: {
                 onClick={() => updateBrain(buildBrainConfigForMode(item.value, brain))}
                 className={`rounded-2xl border p-4 text-left transition-colors ${
                   active
-                    ? "border-[rgba(56,189,248,0.45)] bg-[rgba(56,189,248,0.10)]"
-                    : "border-[var(--border)] bg-[rgba(255,255,255,0.02)] hover:border-[var(--border-strong)]"
+                    ? "border-[var(--primary-bg)] bg-[var(--primary-bg)]"
+                    : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]"
                 }`}
               >
                 <div className="text-sm font-semibold text-[var(--text)]">{item.title}</div>
@@ -99,7 +99,7 @@ export function SettingsBrainSection(props: {
           })}
         </div>
 
-        <div className="rounded-xl border border-[rgba(125,211,252,0.18)] bg-[rgba(56,189,248,0.08)] p-4 text-xs leading-6 text-[var(--muted)]">
+        <div className="rounded-xl border border-[var(--primary)] bg-[var(--primary-bg)] p-4 text-xs leading-6 text-[var(--muted)]">
           当前执行边界仍然是本地模拟账本，不会触达真实券商；自动驾驶只能通过目标权重计划触发调仓，不会自动修改系统配置或风险护栏。
         </div>
       </div>

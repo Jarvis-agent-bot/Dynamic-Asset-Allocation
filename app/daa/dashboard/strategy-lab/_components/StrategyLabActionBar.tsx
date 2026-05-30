@@ -19,9 +19,9 @@ export function StrategyLabActionBar({ state, historyOpen, onToggleHistory }: St
   const rangeLabel = `${config.startDate} → ${config.endDate}`;
 
   return (
-    <div className="sticky top-[64px] z-20 -mx-1 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.25)] backdrop-blur sm:px-4">
+    <div className="sticky top-[64px] z-20 -mx-1 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.25)] backdrop-blur sm:px-4">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
-        <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-2 py-0.5 font-[var(--font-mono)] text-[11px]">
+        <span className="rounded-full bg-[var(--elevated)] px-2 py-0.5 font-[var(--font-mono)] text-[11px]">
           {assetCount} 资产 · {strategyCount} 策略
         </span>
         <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">{rangeLabel}</span>

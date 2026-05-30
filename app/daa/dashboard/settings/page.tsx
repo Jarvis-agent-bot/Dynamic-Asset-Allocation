@@ -282,7 +282,7 @@ export default function SettingsPage() {
       <DashboardErrorNotice title="设置操作失败" description={error} />
       <DashboardSuccessNotice title="设置已更新" description={hint} />
 
-      <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,23,38,0.92),rgba(9,13,24,0.98))] px-5 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+      <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,23,38,0.92),var(--surface))] px-5 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
             {SETTINGS_NAV_ITEMS_.map((item) => (
@@ -292,8 +292,8 @@ export default function SettingsPage() {
                 onClick={() => handleSectionChange(item.id)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${
                   activeSection === item.id
-                    ? "border-[var(--primary)] bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-                    : "border-[var(--border)] bg-[rgba(255,255,255,0.03)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                    ? "border-[var(--primary)] bg-[var(--primary-bg)] text-[var(--text)]"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                 }`}
               >
                 <span>{item.label}</span>
@@ -301,7 +301,7 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-sm text-[var(--muted)]">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted)]">
             <BellRing className="h-4 w-4 text-[var(--faint)]" />
             {dataHealthSummary.label}
           </div>

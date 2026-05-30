@@ -169,7 +169,7 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
         {marketHealth.map((m) => (
           <div
             key={m.market}
-            className="rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-3 py-2.5"
+            className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-[var(--text)]">{m.market}</span>
@@ -177,7 +177,7 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
             </div>
             <div className="mt-2 space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1 text-emerald-400">
+                <span className="flex items-center gap-1 text-[var(--success)]">
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   新鲜
                 </span>
@@ -204,7 +204,7 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
             </div>
             {/* 健康度进度条 */}
             <div className="mt-2">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--elevated)]">
                 <div
                   className="h-full rounded-full transition-all"
                   style={{
@@ -271,19 +271,19 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
             <div className="text-xs text-[var(--muted)]">成功 / 总请求</div>
             <div className="mt-1 text-lg font-semibold text-[var(--text)]">{externalTotals.success}/{externalTotals.total}</div>
           </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
             <div className="text-xs text-[var(--muted)]">错误请求</div>
             <div className="mt-1 text-lg font-semibold text-[var(--text)]">{externalTotals.errors}</div>
           </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
             <div className="text-xs text-[var(--muted)]">429 限速</div>
             <div className="mt-1 text-lg font-semibold text-amber-300">{externalTotals.rateLimited}</div>
           </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
             <div className="text-xs text-[var(--muted)]">401/403/crumb</div>
             <div className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-[var(--text)]">
               <ShieldAlert className="h-4 w-4 text-[var(--faint)]" />
@@ -294,7 +294,7 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
 
         {externalSummary.length > 0 ? (
           <div className="mt-3 overflow-hidden rounded-[8px] border border-[var(--border)]">
-            <div className="grid grid-cols-[1.4fr_0.9fr_0.8fr_0.8fr] gap-2 border-b border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--faint)]">
+            <div className="grid grid-cols-[1.4fr_0.9fr_0.8fr_0.8fr] gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--faint)]">
               <span>数据源 / 资源</span>
               <span>Host</span>
               <span>成功率</span>
@@ -309,7 +309,7 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
                 >
                   <span className="min-w-0 truncate font-medium text-[var(--text)]">{item.provider} · {item.resource}</span>
                   <span className="min-w-0 truncate text-[var(--muted)]">{item.endpointHost || "-"}</span>
-                  <span className={rate >= 90 ? "text-emerald-300" : "text-amber-300"}>
+                  <span className={rate >= 90 ? "text-[var(--success)]" : "text-amber-300"}>
                     {formatPct(rate)} ({item.successCount}/{item.totalCount})
                   </span>
                   <span className="min-w-0 truncate text-[var(--muted)]">

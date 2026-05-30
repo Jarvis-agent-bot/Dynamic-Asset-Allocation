@@ -87,7 +87,7 @@ export default function DashboardShell({ children }: Props) {
         <aside
           className={cn(
             "daa-scrollbar hidden h-screen shrink-0 transition-[width] duration-300 ease-out lg:sticky lg:top-0 lg:flex lg:flex-col",
-            "bg-[rgba(6,10,18,0.6)]",
+            "bg-[var(--surface)]",
             sidebarCollapsed ? "w-[60px]" : "w-[220px]",
           )}
         >
@@ -113,7 +113,7 @@ export default function DashboardShell({ children }: Props) {
                 onClick={toggleSidebar}
                 aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
                 title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--faint)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--faint)] transition-all hover:bg-[var(--elevated)] hover:text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {sidebarCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
               </button>
@@ -128,8 +128,8 @@ export default function DashboardShell({ children }: Props) {
           {/* 底部：用户头像（展开时显示） */}
           {!sidebarCollapsed ? (
             <div className="flex-shrink-0 px-3.5 py-3">
-              <div className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-[var(--muted)] transition-colors hover:bg-[rgba(255,255,255,0.04)]">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(255,255,255,0.08)] text-[11px] font-semibold text-[var(--text)]">
+              <div className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-[var(--muted)] transition-colors hover:bg-[var(--elevated)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--hover)] text-[11px] font-semibold text-[var(--text)]">
                   U
                 </div>
                 <div className="min-w-0 flex-1">
@@ -142,7 +142,7 @@ export default function DashboardShell({ children }: Props) {
 
         <main className="min-w-0 flex-1 overflow-x-clip">
           {/* ─── 顶部栏（桌面）─── */}
-          <header className="sticky top-0 z-30 hidden border-b border-[rgba(255,255,255,0.06)] bg-[rgba(8,12,20,0.86)] backdrop-blur-xl lg:block">
+          <header className="sticky top-0 z-30 hidden border-b border-[var(--elevated)] bg-[var(--surface)] backdrop-blur-xl lg:block">
             <div className="flex h-12 items-center gap-4 px-6">
               <div className="min-w-0 flex-1">
                 <span className="text-sm font-medium text-[var(--text)]">{currentSection.label}</span>
@@ -154,7 +154,7 @@ export default function DashboardShell({ children }: Props) {
           </header>
 
           {/* ─── 顶部栏（移动） ─── */}
-          <header className="sticky top-0 z-30 border-b border-[rgba(255,255,255,0.06)] bg-[rgba(8,12,20,0.92)] backdrop-blur-xl lg:hidden">
+          <header className="sticky top-0 z-30 border-b border-[var(--elevated)] bg-[var(--surface)] backdrop-blur-xl lg:hidden">
             <div className="flex h-12 items-center justify-between gap-3 px-4">
               <div className="flex min-w-0 items-center gap-2.5">
                 <Suspense fallback={<div className="h-7 w-7 rounded bg-[var(--elevated)]" />}>

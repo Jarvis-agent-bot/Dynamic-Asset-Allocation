@@ -148,8 +148,8 @@ export function PortfolioHomeOverview(props: {
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(13,19,32,0.98),rgba(9,14,24,0.94)_58%,rgba(18,26,42,0.98))] shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
-      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(56,189,248,0.8),rgba(246,173,85,0.55),transparent)]" />
+    <section className="relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--surface),var(--surface)_58%,var(--elevated))] shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--primary),var(--amber),transparent)]" />
       <div className="grid gap-0 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <div className="border-b border-[var(--border)] p-5 sm:p-6 xl:border-b-0 xl:border-r">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -182,7 +182,7 @@ export function PortfolioHomeOverview(props: {
             {portfolioMetrics.map((item) => (
               <div
                 key={item.label}
-                className="flex min-h-[86px] items-center justify-between rounded-[14px] border border-[var(--border)] bg-[rgba(255,255,255,0.025)] px-4 py-3 text-left"
+                className="flex min-h-[86px] items-center justify-between rounded-[14px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left"
               >
                 <div>
                   <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
@@ -238,7 +238,7 @@ export function PortfolioHomeOverview(props: {
       </div>
 
       <div className="grid gap-px border-t border-[var(--border)] bg-[var(--border)] lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)_minmax(300px,0.58fr)]">
-        <div className="bg-[rgba(8,12,20,0.82)] p-5 sm:p-6">
+        <div className="bg-[var(--surface)] p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
               <PieChart className="h-4 w-4 text-[var(--primary)]" />
@@ -255,7 +255,7 @@ export function PortfolioHomeOverview(props: {
                     <div className="truncate text-sm font-semibold text-[var(--text)]">{row.symbol}</div>
                     <div className="truncate text-[11px] text-[var(--faint)]">{row.assetClass || row.market}</div>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.05)]">
+                  <div className="h-2 overflow-hidden rounded-full bg-[var(--elevated)]">
                     <div
                       className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary),var(--success))]"
                       style={{ width: `${widthPct}%` }}
@@ -274,7 +274,7 @@ export function PortfolioHomeOverview(props: {
           </div>
         </div>
 
-        <div className="bg-[rgba(8,12,20,0.82)] p-5 sm:p-6">
+        <div className="bg-[var(--surface)] p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
               <Gauge className="h-4 w-4 text-[var(--amber)]" />
@@ -283,7 +283,7 @@ export function PortfolioHomeOverview(props: {
             <DaaSurfaceStatusPill tone={cycleStatusTone(props.latestCycle)}>{latestCycleStatus}</DaaSurfaceStatusPill>
           </div>
           <div className="mt-5 space-y-3">
-            <div className="rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-3">
+            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">最大偏离</div>
               <div className="mt-2 flex items-end justify-between gap-3">
                 <div className="min-w-0">
@@ -303,7 +303,7 @@ export function PortfolioHomeOverview(props: {
             <button
               type="button"
               onClick={props.onOpenRebalance}
-              className="group flex w-full items-center justify-between rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[rgba(255,255,255,0.04)]"
+              className="group flex w-full items-center justify-between rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]"
             >
               <div className="flex items-center gap-3">
                 <div className={cn("flex h-9 w-9 items-center justify-center rounded-[10px] border", toneClass(primaryAction.tone))}>
@@ -321,7 +321,7 @@ export function PortfolioHomeOverview(props: {
           </div>
         </div>
 
-        <div className="bg-[rgba(8,12,20,0.82)] p-5 sm:p-6">
+        <div className="bg-[var(--surface)] p-5 sm:p-6">
           <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
             {priceIssueCount > 0 ? (
               <AlertTriangle className="h-4 w-4 text-[var(--amber)]" />

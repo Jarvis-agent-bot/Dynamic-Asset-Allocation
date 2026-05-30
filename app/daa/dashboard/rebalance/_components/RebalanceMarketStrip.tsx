@@ -65,7 +65,7 @@ export function RebalanceMarketStrip({ marketContext }: { marketContext: DaaMark
           return (
             <div
               key={key}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[rgba(8,12,20,0.6)] px-2.5 py-1 text-[11px]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px]"
               title={ind.reason || ind.label}
             >
               <span className="text-[var(--faint)]">{ind.label}</span>

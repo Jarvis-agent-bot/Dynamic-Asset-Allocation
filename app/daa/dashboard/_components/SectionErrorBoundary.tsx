@@ -42,7 +42,7 @@ export class SectionErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-6">
+        <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6">
           <div className="flex flex-col items-center gap-3 text-center">
             <AlertCircle className="h-6 w-6 text-[var(--muted)]" />
             <div className="space-y-1">
@@ -55,7 +55,7 @@ export class SectionErrorBoundary extends Component<
             </div>
             <button
               type="button"
-              className="mt-1 inline-flex items-center gap-1.5 rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.04)] px-4 py-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[rgba(255,255,255,0.08)] hover:text-[var(--text)]"
+              className="mt-1 inline-flex items-center gap-1.5 rounded-[12px] border border-[var(--border)] bg-[var(--elevated)] px-4 py-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
               onClick={() => this.setState({ hasError: false, error: null })}
             >
               <RotateCcw className="h-3 w-3" />

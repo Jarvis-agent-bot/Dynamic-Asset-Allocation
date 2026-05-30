@@ -91,7 +91,7 @@ export function WatchlistSearchBar(props: {
     <div className="space-y-3">
       {/* 搜索栏 */}
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+        <div className="flex flex-1 items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[var(--elevated)] px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-[var(--faint)]" />
           <input
             value={q}
@@ -143,7 +143,7 @@ export function WatchlistSearchBar(props: {
               return (
                 <div
                   key={`${item.market}::${item.symbol}`}
-                  className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-[rgba(255,255,255,0.04)]"
+                  className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-[var(--elevated)]"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
@@ -335,7 +335,7 @@ function FeaturedAssetsDialog(props: {
                 return (
                   <div
                     key={`${item.market}::${item.symbol}`}
-                    className="flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.6)] px-3 py-2.5"
+                    className="flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">

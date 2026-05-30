@@ -75,7 +75,7 @@ export function QuickConfigPopover(props: {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[rgba(8,12,20,0.6)] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
         title="快速调参"
       >
         <Settings2 className="h-4 w-4" />
@@ -87,7 +87,7 @@ export function QuickConfigPopover(props: {
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
           {/* Popover */}
-          <div className="absolute right-0 top-full z-50 mt-2 w-[320px] rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.98)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+          <div className="absolute right-0 top-full z-50 mt-2 w-[320px] rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-xl">
             <div className="border-b border-[var(--border)] px-4 py-3">
               <div className="text-sm font-semibold text-[var(--text)]">快速调参</div>
               <div className="mt-0.5 text-xs text-[var(--faint)]">调整关键策略参数，无需前往设置页</div>

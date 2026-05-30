@@ -31,11 +31,11 @@ function assetDisplayName(row: AssetUniverseView): string {
 }
 
 function badgeClass(tone: ValuationTone): string {
-  if (tone === "cheap") return "bg-emerald-500/12 text-emerald-300";
-  if (tone === "fair") return "bg-sky-500/12 text-sky-300";
+  if (tone === "cheap") return "bg-[var(--success-bg)] text-[var(--success)]";
+  if (tone === "fair") return "bg-[var(--primary-bg)] text-[var(--primary)]";
   if (tone === "expensive") return "bg-amber-500/12 text-amber-300";
   if (tone === "danger") return "bg-red-500/12 text-red-300";
-  return "bg-[rgba(255,255,255,0.06)] text-[var(--faint)]";
+  return "bg-[var(--elevated)] text-[var(--faint)]";
 }
 
 function momentumLabel(value: DaaTechnicalSignal["momentumRegime"]): string {
@@ -45,9 +45,9 @@ function momentumLabel(value: DaaTechnicalSignal["momentumRegime"]): string {
 }
 
 function technicalBadgeClass(signal: DaaTechnicalSignal): string {
-  if (signal.momentumRegime === "strong" || signal.scorePct >= 68) return "bg-emerald-500/12 text-emerald-300";
+  if (signal.momentumRegime === "strong" || signal.scorePct >= 68) return "bg-[var(--success-bg)] text-[var(--success)]";
   if (signal.momentumRegime === "weak" || signal.scorePct <= 42) return "bg-red-500/12 text-red-300";
-  return "bg-sky-500/12 text-sky-300";
+  return "bg-[var(--primary-bg)] text-[var(--primary)]";
 }
 
 function isStock(row: AssetUniverseView): boolean {
@@ -128,7 +128,7 @@ function WatchlistRow(props: {
       tabIndex={0}
       onClick={props.onClick}
       onKeyDown={(e) => { if (e.key === "Enter") props.onClick(); }}
-      className="group flex cursor-pointer items-center gap-3 rounded-[12px] border border-transparent px-4 py-3 transition-colors hover:border-[var(--border)] hover:bg-[rgba(56,189,248,0.04)]"
+      className="group flex cursor-pointer items-center gap-3 rounded-[12px] border border-transparent px-4 py-3 transition-colors hover:border-[var(--border)] hover:bg-[var(--primary-bg)]"
     >
       {/* 标的 */}
       <div className="min-w-0 flex-1">
@@ -165,7 +165,7 @@ function WatchlistRow(props: {
           ) : null}
         </div>
         {row.holdingQty > 0 ? (
-          <div className="mt-0.5 flex items-center gap-1 text-[10px] text-emerald-400/70">
+          <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--success)]">
             <Eye className="h-3 w-3" />
             已持仓
           </div>
@@ -180,7 +180,7 @@ function WatchlistRow(props: {
         {changePct != null ? (
           <div className={cn(
             "font-[var(--font-mono)] text-xs",
-            changePct >= 0 ? "text-emerald-400" : "text-red-400",
+            changePct >= 0 ? "text-[var(--success)]" : "text-red-400",
           )}>
             {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
           </div>
@@ -338,8 +338,8 @@ export function WatchlistItemList(props: {
                 className={cn(
                   "rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors",
                   activeCategory === cat.key
-                    ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-                    : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)]",
+                    ? "bg-[var(--primary-bg)] text-[var(--text)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--elevated)]",
                 )}
               >
                 {cat.label}
@@ -353,7 +353,7 @@ export function WatchlistItemList(props: {
           <select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
-            className="h-7 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[rgba(8,12,20,0.78)] px-2 text-[11px] text-[var(--muted)] outline-none"
+            className="h-7 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--muted)] outline-none"
             aria-label="排序方式"
           >
             <option value="default">默认</option>
@@ -365,7 +365,7 @@ export function WatchlistItemList(props: {
         </div>
       </div>
 
-      <div className="divide-y divide-[rgba(255,255,255,0.04)]">
+      <div className="divide-y divide-[var(--elevated)]">
         {filteredRows.map((row) => (
           <WatchlistRow
             key={row.assetKey}

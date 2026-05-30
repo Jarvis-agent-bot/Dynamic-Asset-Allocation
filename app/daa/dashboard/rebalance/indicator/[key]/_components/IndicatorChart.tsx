@@ -78,7 +78,7 @@ export function IndicatorChart(props: {
           ))}
         </div>
         {changePct != null ? (
-          <span className={cn("text-xs font-medium", changePct >= 0 ? "text-emerald-400" : "text-red-400")}>
+          <span className={cn("text-xs font-medium", changePct >= 0 ? "text-[var(--success)]" : "text-red-400")}>
             {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
           </span>
         ) : null}

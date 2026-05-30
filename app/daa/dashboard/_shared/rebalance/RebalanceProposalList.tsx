@@ -123,7 +123,7 @@ export function RebalanceProposalList(props: {
               </div>
             ) : null}
             {visibleRiskItems.length > 0 ? (
-              <div className="space-y-1 border-t border-[rgba(255,255,255,0.06)] pt-2 text-xs">
+              <div className="space-y-1 border-t border-[var(--elevated)] pt-2 text-xs">
                 {visibleRiskItems.slice(0, 3).map((item) => (
                   <div key={`${item.rule}-${item.message}`} className={item.status === "block" ? "text-red-300" : "text-amber-300"}>
                     {item.status === "block" ? "阻断" : "警告"}：{item.message}
@@ -188,8 +188,8 @@ export function RebalanceProposalList(props: {
                       className={cn(
                         "rounded-[14px] border px-4 py-3 transition-colors",
                         row.selected
-                          ? "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.08)]"
-                          : "border-[var(--border)] bg-[rgba(8,12,20,0.48)]",
+                          ? "border-[var(--primary-bg)] bg-[var(--primary-bg)]"
+                          : "border-[var(--border)] bg-[var(--surface)]",
                       )}
                     >
                       <div className="flex items-start gap-3">
@@ -249,7 +249,7 @@ export function RebalanceProposalList(props: {
                                 <div className="text-xs text-[var(--muted)]">人因贡献：{row.hfContribution}</div>
                               ) : null}
                               {row.decisionContext ? (
-                                <div className="mt-3 space-y-1.5 border-t border-[rgba(255,255,255,0.06)] pt-3 font-[var(--font-mono)] text-xs text-[var(--faint)]">
+                                <div className="mt-3 space-y-1.5 border-t border-[var(--elevated)] pt-3 font-[var(--font-mono)] text-xs text-[var(--faint)]">
                                   <div>资产信号立场：{signalActionLabel(row.decisionContext.signalAction)} · 评分 {row.decisionContext.signalScore ?? "—"}</div>
                                   <div>AI：{llmAdjustmentLabel(row.decisionContext.llmAdjustment)} · 置信度 {row.decisionContext.llmConfidence ?? "—"}%</div>
                                   {row.decisionContext.llmRationale ? (
@@ -262,7 +262,7 @@ export function RebalanceProposalList(props: {
                                     ) : null}
                                   </div>
                                   {hasAssetBudgetContext ? (
-                                    <div className="space-y-1.5 rounded-[10px] border border-[rgba(56,189,248,0.18)] bg-[rgba(56,189,248,0.06)] px-3 py-2 font-sans text-[11px] leading-5 text-[var(--muted)]">
+                                    <div className="space-y-1.5 rounded-[10px] border border-[var(--primary-bg)] bg-[var(--primary-bg)] px-3 py-2 font-sans text-[11px] leading-5 text-[var(--muted)]">
                                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                         <span className="font-semibold text-[var(--text)]">资产预算：{row.decisionContext.assetBudgetLabel || row.decisionContext.assetBudgetKey}</span>
                                         <span>{assetBudgetStanceLabel(row.decisionContext.assetBudgetStance)} · 影子系数 {formatBudgetScale(row.decisionContext.assetBudgetScale)}</span>
@@ -330,7 +330,7 @@ export function RebalanceProposalList(props: {
         </div>
 
         {props.afterContent ? (
-          <div className="border-t border-[rgba(255,255,255,0.06)] pt-4">
+          <div className="border-t border-[var(--elevated)] pt-4">
             {props.afterContent}
           </div>
         ) : null}

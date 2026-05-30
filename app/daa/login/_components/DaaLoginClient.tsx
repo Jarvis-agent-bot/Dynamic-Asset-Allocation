@@ -221,21 +221,21 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           className="pointer-events-none absolute"
           style={{
             top: "-200px", left: "-200px", width: "600px", height: "600px",
-            background: "radial-gradient(circle, rgba(56,189,248,0.10) 0%, transparent 70%)",
+            background: "radial-gradient(circle, var(--primary-bg) 0%, transparent 70%)",
           }}
         />
         <div
           className="pointer-events-none absolute"
           style={{
             bottom: "-100px", right: "-100px", width: "400px", height: "400px",
-            background: "radial-gradient(circle, rgba(246,173,85,0.07) 0%, transparent 70%)",
+            background: "radial-gradient(circle, var(--amber) 0%, transparent 70%)",
           }}
         />
         {/* Dot grid */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            backgroundImage: "radial-gradient(circle, rgba(56,189,248,0.06) 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(circle, var(--primary-bg) 1px, transparent 1px)",
             backgroundSize: "28px 28px",
           }}
         />
@@ -246,7 +246,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             src={DAA_BRAND_ICON_PATH}
             alt=""
             aria-hidden="true"
-            className="h-8 w-8 rounded-lg object-cover shadow-[0_0_18px_rgba(56,189,248,0.18)]"
+            className="h-8 w-8 rounded-lg object-cover shadow-[0_0_18px_var(--primary-bg)]"
           />
           <span
             className="text-lg font-semibold tracking-tight"
@@ -315,7 +315,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            backgroundImage: "radial-gradient(circle, rgba(56,189,248,0.04) 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(circle, var(--primary-bg) 1px, transparent 1px)",
             backgroundSize: "24px 24px",
           }}
         />
@@ -328,7 +328,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               src={DAA_BRAND_ICON_PATH}
               alt=""
               aria-hidden="true"
-              className="h-7 w-7 rounded-lg object-cover shadow-[0_0_18px_rgba(56,189,248,0.18)]"
+              className="h-7 w-7 rounded-lg object-cover shadow-[0_0_18px_var(--primary-bg)]"
             />
             <span className="text-base font-semibold" style={{ fontFamily: "var(--font-display)" }}>
               {DAA_BRAND_NAME}
@@ -391,7 +391,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   borderColor: "var(--border-strong)",
                   color: "var(--text)",
                 }}
-                onFocus={(e) => { e.target.style.borderColor = "var(--primary)"; e.target.style.boxShadow = "0 0 0 3px rgba(56,189,248,0.12)"; }}
+                onFocus={(e) => { e.target.style.borderColor = "var(--primary)"; e.target.style.boxShadow = "0 0 0 3px var(--primary-bg)"; }}
                 onBlur={(e) => { e.target.style.borderColor = "var(--border-strong)"; e.target.style.boxShadow = "none"; }}
               />
             </div>
@@ -421,7 +421,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   fontFamily: "var(--font-mono)",
                   letterSpacing: "0.06em",
                 }}
-                onFocus={(e) => { e.target.style.borderColor = "var(--primary)"; e.target.style.boxShadow = "0 0 0 3px rgba(56,189,248,0.12)"; }}
+                onFocus={(e) => { e.target.style.borderColor = "var(--primary)"; e.target.style.boxShadow = "0 0 0 3px var(--primary-bg)"; }}
                 onBlur={(e) => { e.target.style.borderColor = "var(--border-strong)"; e.target.style.boxShadow = "none"; }}
               />
             </div>

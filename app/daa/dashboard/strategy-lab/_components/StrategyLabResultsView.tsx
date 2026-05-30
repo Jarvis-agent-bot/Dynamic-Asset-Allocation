@@ -123,7 +123,7 @@ function StrategyComparisonTable({ result }: { result: StrategyLabRunResult }) {
   return (
     <DaaSurfacePanel accent="slate" title="策略对比" subtitle="同一资产池、同一区间下的多策略回测结果。">
       <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)]">
-        <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
+        <table className="w-full border-collapse bg-[var(--surface)]">
           <thead>
             <tr>
               <th className={daaSurfaceTableHeadClassName}>策略</th>
@@ -165,7 +165,7 @@ function AttributionPanel({ result }: { result: StrategyLabRunResult }) {
   return (
     <DaaSurfacePanel accent="indigo" title="资产归因" subtitle="各资产对组合收益的贡献明细。">
       <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)]">
-        <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
+        <table className="w-full border-collapse bg-[var(--surface)]">
           <thead>
             <tr>
               <th className={daaSurfaceTableHeadClassName}>资产</th>
@@ -192,7 +192,7 @@ function AttributionPanel({ result }: { result: StrategyLabRunResult }) {
       </div>
 
       {result.attribution.benchmark.return != null ? (
-        <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
+        <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="text-[var(--faint)]">基准 ({result.attribution.benchmark.symbol})</span>
             <span className="font-[var(--font-mono)] text-[var(--text)]">
@@ -220,7 +220,7 @@ function RebalanceEventsPanel({ result }: { result: StrategyLabRunResult }) {
   return (
     <DaaSurfacePanel accent="amber" title="再平衡事件" subtitle="回测期间触发的再平衡记录。">
       <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)]">
-        <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
+        <table className="w-full border-collapse bg-[var(--surface)]">
           <thead>
             <tr>
               <th className={daaSurfaceTableHeadClassName}>日期</th>

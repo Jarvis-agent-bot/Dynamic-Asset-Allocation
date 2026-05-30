@@ -101,7 +101,7 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
       <div className="space-y-4 py-12 text-center">
         <div className="text-sm text-[var(--muted)]">{error || "未找到指标数据"}</div>
         <button type="button" onClick={() => router.push("/daa/dashboard/rebalance")}
-          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[rgba(255,255,255,0.06)]">
+          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--elevated)]">
           返回调仓
         </button>
       </div>
@@ -113,7 +113,7 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
       {/* 顶部信息栏 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-2">
         <button type="button" onClick={() => router.push("/daa/dashboard/rebalance")}
-          className="flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--text)]">
+          className="flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]">
           <ArrowLeft className="h-4 w-4" />调仓
         </button>
         <span className="text-lg font-bold text-[var(--text)]">{data.label}</span>
@@ -144,7 +144,7 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* 左侧：走势图 */}
         <SectionErrorBoundary sectionName="走势图">
-          <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+          <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
             <IndicatorChart series={data.series} label={data.label} unit={data.unit} />
           </div>
         </SectionErrorBoundary>
@@ -152,7 +152,7 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
         {/* 右侧：指标档案 + 百分位分布 */}
         <div className="space-y-4">
           {/* 指标档案 */}
-          <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4 space-y-3">
+          <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">指标档案</div>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -177,7 +177,7 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
               {snapshot?.trend7dPct != null ? (
                 <div>
                   <div className="text-[var(--faint)]">7 天趋势</div>
-                  <div className={cn("font-[var(--font-mono)]", snapshot.trend7dPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                  <div className={cn("font-[var(--font-mono)]", snapshot.trend7dPct >= 0 ? "text-[var(--success)]" : "text-red-400")}>
                     {snapshot.trend7dPct >= 0 ? "+" : ""}{snapshot.trend7dPct.toFixed(2)}%
                   </div>
                 </div>
@@ -185,7 +185,7 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
               {snapshot?.trend30dPct != null ? (
                 <div>
                   <div className="text-[var(--faint)]">30 天趋势</div>
-                  <div className={cn("font-[var(--font-mono)]", snapshot.trend30dPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                  <div className={cn("font-[var(--font-mono)]", snapshot.trend30dPct >= 0 ? "text-[var(--success)]" : "text-red-400")}>
                     {snapshot.trend30dPct >= 0 ? "+" : ""}{snapshot.trend30dPct.toFixed(2)}%
                   </div>
                 </div>
@@ -236,14 +236,14 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
               <div className="text-[10px] text-[var(--faint)] mb-1">{data.isRatio ? "组成符号" : "数据来源"}</div>
               <div className="flex flex-wrap gap-2">
                 {data.symbols.map((s) => (
-                  <span key={s} className="rounded-[6px] border border-[var(--border)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 font-[var(--font-mono)] text-xs text-[var(--muted)]">{s}</span>
+                  <span key={s} className="rounded-[6px] border border-[var(--border)] bg-[var(--elevated)] px-2 py-0.5 font-[var(--font-mono)] text-xs text-[var(--muted)]">{s}</span>
                 ))}
               </div>
             </div>
           </div>
 
           {/* 百分位分布 */}
-          <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+          <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
             <PercentileDistribution
               bins={data.distribution.bins}
               currentBin={data.distribution.currentBin}

@@ -41,7 +41,7 @@ export function ExecutionPanel(props: {
   const hasSelected = props.selectedProposalCount > 0;
 
   return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
         <div className="space-y-3">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">执行面板</div>
@@ -61,20 +61,20 @@ export function ExecutionPanel(props: {
           {/* 选中统计 */}
           {hasCycle && hasProposals ? (
             <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-[10px] border border-[var(--border)] bg-[rgba(8,12,20,0.48)] px-3 py-2 text-xs">
+              <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
                 <div className="text-[var(--muted)]">选中</div>
                 <div className="mt-1 font-[var(--font-mono)] text-[var(--text)]">
                   {props.selectedProposalCount} / {cycle?.proposals?.length ?? 0}
                 </div>
               </div>
-              <div className="rounded-[10px] border border-[var(--border)] bg-[rgba(8,12,20,0.48)] px-3 py-2 text-xs">
+              <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
                 <div className="text-[var(--muted)]">金额</div>
                 <div className="mt-1 font-[var(--font-mono)] text-[var(--text)]">
                   {hasSelected ? formatCurrency(props.selectedProposalNotional, props.baseCurrency) : "未选择"}
                 </div>
               </div>
               {riskCheck ? (
-                <div className="rounded-[10px] border border-[var(--border)] bg-[rgba(8,12,20,0.48)] px-3 py-2 text-xs">
+                <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
                   <div className="mb-1 text-[var(--muted)]">风控</div>
                   <DaaSurfaceStatusPill tone={riskOverallTone(riskCheck.overallStatus)}>
                     {riskStatusLabel(riskCheck.overallStatus)}
