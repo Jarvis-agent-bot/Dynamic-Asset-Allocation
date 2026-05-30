@@ -1,12 +1,78 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
+import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
 type EquityPoint = { label: string; date: string; equity: number };
-type TwrPoint = { label: string; date: string; portfolio: number };
+/** TWR 点：portfolio + 动态附加的基准归一化值（如 benchmarkSpy） */
+type TwrPoint = { label: string; date: string; portfolio: number; [benchmarkKey: string]: string | number };
 type CashFlowEvent = { ts: string; side: "deposit" | "withdraw"; amount: number };
+
+type BenchmarkMeta = { key: string; label: string; changePct: number | null };
+
+/** 收益率模式下叠加的对比基准（Yahoo symbol → series key + 展示名） */
+const BENCHMARK_DEFS: ReadonlyArray<{ symbol: string; key: string; label: string }> = [
+  { symbol: "SPY", key: "benchmarkSpy", label: "标普500" },
+  { symbol: "QQQ", key: "benchmarkQqq", label: "纳斯达克100" },
+];
+
+/**
+ * 把基准收盘价序列归一化（起点=100）后就地叠加到 TWR series 上。
+ *
+ * - 与组合曲线同起点对齐：基准点取组合首日当天或之前最近的交易日收盘价。
+ * - 前向填充：组合的每个日期匹配 ≤ 该日期的最近基准收盘价，
+ *   周末/节假日无报价时沿用上一交易日，保证两条线日期一一对应。
+ */
+function overlayBenchmarks(
+  series: TwrPoint[],
+  benches: Array<{ key: string; label: string; points: { date: string; close: number }[] }>,
+): BenchmarkMeta[] {
+  const metas: BenchmarkMeta[] = [];
+  if (series.length === 0) return metas;
+  const baseDate = series[0].date;
+
+  for (const bench of benches) {
+    const sorted = [...bench.points]
+      .filter((p) => p.close > 0)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    if (sorted.length === 0) continue;
+
+    // 基准收盘价：起点当天或之前最近一个交易日
+    let baseClose = 0;
+    for (const p of sorted) {
+      if (p.date <= baseDate) baseClose = p.close;
+      else break;
+    }
+    if (baseClose <= 0) baseClose = sorted[0].close; // 起点早于最早报价时退用最早一条
+    if (baseClose <= 0) continue;
+
+    let idx = 0;
+    let lastClose = 0;
+    let lastNorm: number | null = null;
+
+    for (const point of series) {
+      while (idx < sorted.length && sorted[idx].date <= point.date) {
+        lastClose = sorted[idx].close;
+        idx += 1;
+      }
+      if (lastClose > 0) {
+        lastNorm = +((lastClose / baseClose) * 100).toFixed(2);
+        point[bench.key] = lastNorm;
+      }
+    }
+
+    metas.push({
+      key: bench.key,
+      label: bench.label,
+      changePct: lastNorm != null ? +(lastNorm - 100).toFixed(2) : null,
+    });
+  }
+
+  return metas;
+}
 
 /**
  * GET /api/daa/read/performance-chart?mode=equity&days=0
@@ -89,6 +155,29 @@ export async function GET(req: Request) {
     });
 
     const changePct = series.length > 0 ? +(series[series.length - 1].portfolio - 100).toFixed(2) : 0;
-    return ok({ mode, days, series, changePct });
+
+    // 叠加对比基准：标普500 / 纳斯达克100（同图归一化曲线）
+    let benchmarks: BenchmarkMeta[] = [];
+    if (series.length >= 2) {
+      try {
+        const startDate = series[0].date;
+        const priceResults = await fetchMultiplePriceSeriesWithCache(
+          BENCHMARK_DEFS.map((b) => b.symbol),
+          startDate,
+          { market: "US", currency: "USD", minDbDays: 2, maxStaleDays: 3, timeoutMs: 8000 },
+        );
+        const bySymbol = new Map(priceResults.map((r) => [r.symbol.toUpperCase(), r]));
+        const benches = BENCHMARK_DEFS.map((def) => ({
+          key: def.key,
+          label: def.label,
+          points: (bySymbol.get(def.symbol.toUpperCase())?.data ?? []).map((p) => ({ date: p.date.slice(0, 10), close: p.close })),
+        })).filter((b) => b.points.length > 0);
+        benchmarks = overlayBenchmarks(series, benches);
+      } catch (error) {
+        logSwallowed("performanceChart.benchmarks", error);
+      }
+    }
+
+    return ok({ mode, days, series, changePct, benchmarks });
   });
 }

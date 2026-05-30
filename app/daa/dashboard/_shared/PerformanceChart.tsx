@@ -55,9 +55,17 @@ const CHART_COLORS = {
   primary: "hsl(199 89% 60%)",
   /** var(--primary) 背景 */
   primaryBgAlpha: "hsla(199,89%,60%,0.16)",
-  /** 基准线（SPY） */
+  /** 基准线（标普500） */
   benchmark: "hsl(160 60% 55%)",
+  /** 基准线（纳斯达克100） */
+  benchmark2: "hsl(280 55% 62%)",
 } as const;
+
+/** 基准 series key → 线条颜色（与后端 BENCHMARK_DEFS 的 key 对应） */
+const BENCHMARK_LINE_COLORS: Record<string, string> = {
+  benchmarkSpy: CHART_COLORS.benchmark,
+  benchmarkQqq: CHART_COLORS.benchmark2,
+};
 
 const TIME_RANGES = [
   { key: "1M", label: "1M", days: 30 },
@@ -207,12 +215,15 @@ export type PerformanceChartProps = {
 };
 
 export const PerformanceChart = React.memo(function PerformanceChart(props: PerformanceChartProps) {
-  const { snapshots, benchmarkLabel = "SPY", className, mode = "equity" } = props;
+  const { snapshots, className } = props;
+  // mode 可在图内切换：equity=实际金额，twr=收益率（叠加标普500/纳斯达克100 对比）
+  const [mode, setMode] = useState<"equity" | "twr">(props.mode ?? "equity");
   const [range, setRange] = useState<RangeKey>("ALL");
   const [serverData, setServerData] = useState<{
     series: Array<Record<string, unknown>>;
     changePct: number | null;
     lastEquity?: number;
+    benchmarks?: Array<{ key: string; label: string; changePct: number | null }>;
   } | null>(null);
 
   const selectedDays = useMemo(
@@ -239,7 +250,11 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
     return normalizeSnapshots(snapshots, selectedDays, undefined, props.cashFlowEvents);
   }, [serverData, mode, snapshots, selectedDays, props.cashFlowEvents]);
 
-  const hasBenchmark = false; // 后端暂不返回 benchmark
+  // 收益率模式下后端返回的对比基准（标普500 / 纳斯达克100）
+  const benchmarks = useMemo(
+    () => (mode === "twr" ? serverData?.benchmarks ?? [] : []),
+    [mode, serverData],
+  );
   const returnPct = useMemo(() => serverData?.changePct ?? null, [serverData]);
 
   const equityChange = useMemo(() => {
@@ -249,8 +264,6 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
     }
     return null;
   }, [mode, serverData]);
-
-  const benchmarkReturnPct: number | null = null;
 
   if (snapshots.length < 2) {
     return (
@@ -266,7 +279,28 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
     <div className={className}>
       {/* 时间范围选择器 + 收益率 */}
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex gap-1">
+        <div className="flex items-center gap-3">
+          {/* 金额 / 收益率 模式切换 — 收益率模式下叠加标普500/纳斯达克100 对比 */}
+          <div className="flex gap-1 rounded-md bg-[var(--surface)] p-0.5">
+            {([
+              { key: "equity", label: "金额" },
+              { key: "twr", label: "收益率" },
+            ] as const).map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setMode(m.key)}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                  mode === m.key
+                    ? "bg-[hsla(199,89%,60%,0.16)] text-[hsl(199,89%,60%)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1">
           {TIME_RANGES.map((r) => (
             <button
               key={r.key}
@@ -281,6 +315,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
               {r.label}
             </button>
           ))}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {mode === "equity" && equityChange ? (
@@ -297,14 +332,19 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
               我的组合 {returnPct >= 0 ? "+" : ""}{returnPct}%
             </span>
           )}
-          {benchmarkReturnPct !== null && (
-            <span
-              className={`text-xs font-medium ${
-                benchmarkReturnPct >= 0 ? "text-[var(--success)]" : "text-red-400/70"
-              }`}
-            >
-              {benchmarkLabel} {benchmarkReturnPct >= 0 ? "+" : ""}{benchmarkReturnPct}%
-            </span>
+          {benchmarks.map((b) =>
+            b.changePct !== null ? (
+              <span
+                key={b.key}
+                className="flex items-center gap-1 text-xs font-medium text-[var(--muted)]"
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ background: BENCHMARK_LINE_COLORS[b.key] ?? CHART_COLORS.benchmark }}
+                />
+                {b.label} {b.changePct >= 0 ? "+" : ""}{b.changePct}%
+              </span>
+            ) : null,
           )}
         </div>
       </div>
@@ -363,18 +403,19 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
               dot={false}
               activeDot={{ r: 4, fill: CHART_COLORS.primary }}
             />
-            {hasBenchmark && (
+            {benchmarks.map((b) => (
               <Line
+                key={b.key}
                 type="monotone"
-                dataKey="benchmark"
-                name={benchmarkLabel}
-                stroke={CHART_COLORS.benchmark}
+                dataKey={b.key}
+                name={b.label}
+                stroke={BENCHMARK_LINE_COLORS[b.key] ?? CHART_COLORS.benchmark}
                 strokeWidth={1.6}
                 dot={false}
                 strokeDasharray="4 2"
                 connectNulls
               />
-            )}
+            ))}
           </LineChart>
         </ResponsiveContainer>
       </div>
