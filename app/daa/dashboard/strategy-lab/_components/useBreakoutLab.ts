@@ -26,6 +26,7 @@ export type BreakoutConfigState = {
   startDate: string;
   endDate: string;
   initialCapital: number;
+  baseCurrency: string;
   riskPct: number;
   maxSlots: number;
   // 策略参数
@@ -46,6 +47,7 @@ export const DEFAULT_BREAKOUT_CONFIG: BreakoutConfigState = {
   startDate: defaultStartDate(5),
   endDate: toLocalDateInputValue(new Date()),
   initialCapital: 100_000,
+  baseCurrency: "USD",
   riskPct: 1, // 百分比形式，提交时 /100
   maxSlots: 3,
   breakoutLookback: 20,
@@ -103,6 +105,7 @@ export function useBreakoutLab(): UseBreakoutLabResult {
         startDate: config.startDate,
         endDate: config.endDate,
         initialCapital: config.initialCapital,
+        baseCurrency: config.baseCurrency,
         riskPct: config.riskPct / 100,
         maxSlots: config.maxSlots,
         strategy: {

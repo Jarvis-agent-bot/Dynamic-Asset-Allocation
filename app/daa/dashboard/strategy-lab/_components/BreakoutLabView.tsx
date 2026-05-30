@@ -92,6 +92,14 @@ export function BreakoutLabView() {
         <DaaSurfacePanel title="资金与风控">
           <div className="grid grid-cols-2 gap-3">
             <NumberField label="初始资金" value={config.initialCapital} onChange={(v) => set("initialCapital", v)} step={1000} min={1} />
+            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
+              <span>基准货币</span>
+              <select value={config.baseCurrency} onChange={(e) => set("baseCurrency", e.target.value)} className={daaSurfaceFieldClassName}>
+                <option value="USD">USD</option>
+                <option value="HKD">HKD</option>
+                <option value="CNY">CNY</option>
+              </select>
+            </label>
             <NumberField label="每笔风险" suffix="%" value={config.riskPct} onChange={(v) => set("riskPct", v)} step={0.5} min={0.1} />
             <NumberField label="最多同时持仓" value={config.maxSlots} onChange={(v) => set("maxSlots", v)} min={1} />
             <NumberField label="止损" suffix="%" value={config.stopPct} onChange={(v) => set("stopPct", v)} step={1} min={1} />

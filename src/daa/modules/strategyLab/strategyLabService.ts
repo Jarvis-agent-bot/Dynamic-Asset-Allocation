@@ -27,6 +27,8 @@ import type {
   StrategyLabStrategyResult,
 } from "./strategyLabTypes";
 
+export type StrategyLabHistoryMode = "rebalance" | "breakout";
+
 type StrategyLabDomainErrorCode =
   | "NO_ASSETS"
   | "NO_PRICE_HISTORY"
@@ -184,39 +186,42 @@ function computeTargetWeights(
     }
 
     case "minVariance": {
-      const bars: Record<string, number[]> = {};
+      const returnsBySymbol: Record<string, Array<{ date: string; ret: number }>> = {};
       for (const sym of symbols) {
         const series = seriesBySymbol[sym] || [];
-        const rets: number[] = [];
+        const rets: Array<{ date: string; ret: number }> = [];
         for (let i = 1; i < series.length; i++) {
           const prev = series[i - 1].close;
           const curr = series[i].close;
-          if (prev > 0 && curr > 0) rets.push(curr / prev - 1);
+          if (prev > 0 && curr > 0) rets.push({ date: series[i].date, ret: curr / prev - 1 });
         }
-        if (rets.length >= 10) bars[sym] = rets;
+        if (rets.length >= 10) returnsBySymbol[sym] = rets;
       }
-      const symsWithData = Object.keys(bars);
+      const symsWithData = Object.keys(returnsBySymbol);
       if (symsWithData.length < 2) {
         return {
           weights: buildEqualWeightTargetWeights(symbols),
           warnings: ["策略 minVariance 在当前窗口可用资产不足 2 个，已回退为等权配置"],
         };
       }
-      // 计算协方差矩阵
-      const minLen = Math.min(...symsWithData.map((s) => bars[s].length));
       const covMatrix: Record<string, Record<string, number>> = {};
       for (const a of symsWithData) {
         covMatrix[a] = {};
         for (const b of symsWithData) {
-          const rA = bars[a].slice(0, minLen);
-          const rB = bars[b].slice(0, minLen);
-          const meanA = rA.reduce((s, x) => s + x, 0) / rA.length;
-          const meanB = rB.reduce((s, x) => s + x, 0) / rB.length;
-          let cov = 0;
-          for (let i = 0; i < minLen; i++) {
-            cov += (rA[i] - meanA) * (rB[i] - meanB);
+          const mapB = new Map(returnsBySymbol[b].map((item) => [item.date, item.ret]));
+          const alignedA = returnsBySymbol[a].filter((item) => mapB.has(item.date));
+          const alignedB = alignedA.map((item) => mapB.get(item.date) ?? 0);
+          if (alignedA.length < 2) {
+            covMatrix[a][b] = 0;
+            continue;
           }
-          covMatrix[a][b] = cov / (minLen - 1);
+          const meanA = alignedA.reduce((s, x) => s + x.ret, 0) / alignedA.length;
+          const meanB = alignedB.reduce((s, x) => s + x, 0) / alignedB.length;
+          let cov = 0;
+          for (let i = 0; i < alignedA.length; i++) {
+            cov += (alignedA[i].ret - meanA) * (alignedB[i] - meanB);
+          }
+          covMatrix[a][b] = cov / (alignedA.length - 1);
         }
       }
       const weights = buildMinVarianceTargetWeights(covMatrix);
@@ -268,6 +273,12 @@ async function fetchPriceHistory(
         if (bars.length < 2) {
           warnings.push(`资产 ${asset.assetKey} 在 ${startDate} ~ ${endDate} 的价格数据不足`);
           return;
+        }
+        if (result.source !== "db") {
+          warnings.push(`资产 ${asset.assetKey} 的历史价格来自 ${result.source} 数据源，请留意数据源稳定性`);
+        }
+        if (bars.length < 20) {
+          warnings.push(`资产 ${asset.assetKey} 的有效价格样本仅 ${bars.length} 根，统计型策略的参考性有限`);
         }
         if (result.error) {
           warnings.push(`资产 ${asset.assetKey} 行情源降级: ${result.error}`);
@@ -630,6 +641,68 @@ function sliceSeriesThroughIndex(
   );
 }
 
+function sliceSeriesThroughDate(
+  seriesBySymbol: Record<string, PriceBar[]>,
+  endDate: string,
+  lookbackBars = ROLLING_LOOKBACK_BARS,
+): Record<string, PriceBar[]> {
+  return Object.fromEntries(
+    Object.entries(seriesBySymbol).map(([symbol, series]) => {
+      const truncated = (series || []).filter((bar) => bar.date <= endDate);
+      const startIndex = Math.max(0, truncated.length - lookbackBars);
+      return [symbol, truncated.slice(startIndex)];
+    }),
+  );
+}
+
+function buildStrategySeriesFrame(input: {
+  seriesBySymbol: Record<string, PriceBar[]>;
+  assetCurrenciesBySymbol: Record<string, string>;
+  baseCurrency: string;
+  fxSeriesByCurrency: Record<string, PriceBar[]>;
+}): {
+  seriesBySymbol: Record<string, PriceBar[]>;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  const baseCurrency = normalizeMoneyCurrency(input.baseCurrency, "USD");
+  const out: Record<string, PriceBar[]> = {};
+
+  for (const [symbol, rawSeries] of Object.entries(input.seriesBySymbol)) {
+    const series = normalizePriceBars(rawSeries);
+    const currency = normalizeMoneyCurrency(input.assetCurrenciesBySymbol[symbol], baseCurrency);
+    if (currency === baseCurrency) {
+      out[symbol] = series;
+      continue;
+    }
+
+    const fxSeries = normalizePriceBars(input.fxSeriesByCurrency[currency] || []);
+    if (fxSeries.length < 2) {
+      warnings.push(`资产 ${symbol} 缺少 ${currency}/${baseCurrency} 的真实 FX 样本，无法用于统计型权重计算`);
+      continue;
+    }
+
+    const converted: PriceBar[] = [];
+    let fxCursor = 0;
+    let lastFx: number | null = null;
+    for (const bar of series) {
+      while (fxCursor < fxSeries.length && fxSeries[fxCursor].date <= bar.date) {
+        lastFx = fxSeries[fxCursor].close;
+        fxCursor += 1;
+      }
+      if (!(lastFx && lastFx > 0)) continue;
+      converted.push({ date: bar.date, close: bar.close * lastFx });
+    }
+    if (converted.length < 2) {
+      warnings.push(`资产 ${symbol} 转换为 ${baseCurrency} 后的真实样本不足，已跳过统计型权重计算`);
+      continue;
+    }
+    out[symbol] = converted;
+  }
+
+  return { seriesBySymbol: out, warnings };
+}
+
 function buildScheduledTargetWeightsTimeline(input: {
   strategy: string;
   symbols: string[];
@@ -649,7 +722,7 @@ function buildScheduledTargetWeightsTimeline(input: {
   for (let i = 0; i < input.dates.length; i += 1) {
     const date = input.dates[i];
     if (!Object.keys(currentWeights).length || rebalanceDateSet.has(date)) {
-      const rollingSeries = sliceSeriesThroughIndex(input.seriesBySymbol, i);
+      const rollingSeries = sliceSeriesThroughDate(input.seriesBySymbol, date);
       const computed = computeTargetWeights(input.strategy, input.symbols, rollingSeries);
       currentWeights = computed.weights;
       appendUnique(warnings, computed.warnings);
@@ -756,6 +829,13 @@ export async function runStrategyLabBacktest(
       [sym, bars.map((bar) => ({ date: bar.date, close: bar.close }))],
     ),
   );
+  const strategyFrame = buildStrategySeriesFrame({
+    seriesBySymbol: filteredSeries,
+    assetCurrenciesBySymbol,
+    baseCurrency,
+    fxSeriesByCurrency,
+  });
+  appendUnique(commonWarnings, strategyFrame.warnings);
 
   // 4. 对每个策略分别滚动计算权重并回测，避免用未来全周期数据做 day-0 权重。
   const strategyResults: StrategyLabStrategyResult[] = [];
@@ -767,7 +847,7 @@ export async function runStrategyLabBacktest(
       strategy,
       symbols: alignedSymbols,
       dates,
-      seriesBySymbol,
+      seriesBySymbol: strategyFrame.seriesBySymbol,
       rebalanceDates,
     });
     appendUnique(allWarnings, strategyWarnings);
@@ -882,14 +962,16 @@ export async function runStrategyLabBacktest(
 
 export async function listStrategyLabHistory(
   limit = 20,
+  mode: StrategyLabHistoryMode = "rebalance",
 ): Promise<StrategyLabHistoryItem[]> {
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT run_id, created_at, base_currency, start_date, end_date, request_json, summary_json
        FROM daa_strategy_lab_run_snapshots
+       WHERE COALESCE(request_json->>'mode', 'rebalance') = $2
        ORDER BY created_at DESC
        LIMIT $1`,
-      [Math.max(1, Math.min(100, Math.trunc(limit)))],
+      [Math.max(1, Math.min(100, Math.trunc(limit))), mode],
     );
 
     return (result.rows || []).map((row: Record<string, unknown>) => {
@@ -899,6 +981,8 @@ export async function listStrategyLabHistory(
       const summaryJson = typeof row.summary_json === "string"
         ? JSON.parse(row.summary_json)
         : (row.summary_json || {});
+      const rowMode = String((requestJson as Record<string, unknown>).mode || "rebalance");
+      if (rowMode !== mode) return null;
 
       return {
         runId: String(row.run_id || ""),
@@ -909,6 +993,6 @@ export async function listStrategyLabHistory(
         params: requestJson as StrategyLabRunParams,
         metrics: (summaryJson as Record<string, unknown>).metrics as StrategyLabHistoryItem["metrics"],
       };
-    });
+    }).filter((item): item is StrategyLabHistoryItem => Boolean(item));
   });
 }

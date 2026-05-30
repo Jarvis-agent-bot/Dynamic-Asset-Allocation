@@ -14,6 +14,7 @@ type Body = {
   startDate?: unknown;
   endDate?: unknown;
   initialCapital?: unknown;
+  baseCurrency?: unknown;
   riskPct?: unknown;
   maxSlots?: unknown;
   maxPositionUsd?: unknown;
@@ -83,6 +84,7 @@ export async function POST(req: Request) {
       startDate,
       endDate,
       initialCapital,
+      baseCurrency: body.baseCurrency ? String(body.baseCurrency).trim().toUpperCase() : undefined,
       riskPct: num(body.riskPct),
       maxSlots: num(body.maxSlots) !== undefined ? Math.max(1, Math.trunc(num(body.maxSlots)!)) : undefined,
       maxPositionUsd: num(body.maxPositionUsd),

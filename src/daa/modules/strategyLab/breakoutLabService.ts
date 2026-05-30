@@ -20,7 +20,9 @@ import {
   type BreakoutTrade,
   type OhlcvBar,
 } from "@/src/core/backtestSingleNameBreakout";
+import type { PriceBar } from "@/src/core/domain";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { normalizeMoneyCurrency } from "@/src/daa/modules/money/money";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { buildDaaAssetKey, parseDaaAssetKey } from "@/src/daa/assetKey";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
@@ -35,6 +37,8 @@ export type BreakoutLabRunParams = {
   endDate: string;
   /** 初始资金 */
   initialCapital: number;
+  /** 基准货币；默认推断为首个资产币种 */
+  baseCurrency?: string;
   /** 每笔风险占账户比例（默认 0.01 = 1%） */
   riskPct?: number;
   /** 最多同时持仓数（默认 3） */
@@ -58,12 +62,14 @@ export type BreakoutLabPerSymbol = {
 export type BreakoutLabEquityPoint = { date: string; equity: number };
 
 export type BreakoutLabPortfolio = {
+  baseCurrency: string;
   initialCapital: number;
   finalEquity: number;
   totalReturnPct: number;
   maxDrawdownPct: number;
   tradesTaken: number;
   tradesSkippedSlotsFull: number;
+  tradesSkippedCapitalLimited: number;
   equityCurve: BreakoutLabEquityPoint[];
 };
 
@@ -71,6 +77,7 @@ export type BreakoutLabRunResult = {
   runId: string;
   createdAt: string;
   mode: "breakout";
+  baseCurrency: string;
   params: BreakoutLabRunParams;
   resolvedParams: BreakoutParams;
   /** 全部成交合并后的单笔统计 */
@@ -97,6 +104,12 @@ export class BreakoutLabDomainError extends Error {
 
 type ResolvedAsset = { assetKey: string; market: string; symbol: string; currency: string; yfinanceSymbol: string };
 
+type BreakoutPosition = {
+  symbol: string;
+  trade: BreakoutTrade;
+  shares: number;
+};
+
 function inferCurrency(market: string): string {
   const m = market.toUpperCase();
   return { HK: "HKD", CN: "CNY", KR: "KRW", TW: "TWD", JP: "JPY", SG: "SGD", UK: "GBP", EU: "EUR" }[m] || "USD";
@@ -110,6 +123,134 @@ function resolveAsset(raw: string): ResolvedAsset | null {
   const assetKey = buildDaaAssetKey(symbol, market);
   if (!assetKey) return null;
   return { assetKey, market, symbol, currency: inferCurrency(market), yfinanceSymbol: toYfinanceSymbolByMarket(symbol, market) };
+}
+
+function normalizePriceBars(series: PriceBar[]): PriceBar[] {
+  const byDate = new Map<string, PriceBar>();
+  for (const bar of series || []) {
+    const date = String(bar?.date || "").trim();
+    const close = Number(bar?.close);
+    if (!date || !(Number.isFinite(close) && close > 0)) continue;
+    byDate.set(date, { date, close });
+  }
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function fxYahooSymbol(baseCurrency: string, quoteCurrency: string): string {
+  return `${normalizeMoneyCurrency(baseCurrency)}${normalizeMoneyCurrency(quoteCurrency)}=X`;
+}
+
+function latestCloseOnOrBefore(series: PriceBar[], date: string): number | null {
+  let latest: number | null = null;
+  for (const bar of series) {
+    if (bar.date > date) break;
+    latest = bar.close;
+  }
+  return latest && latest > 0 ? latest : null;
+}
+
+async function fetchFxRateHistoryToBase(
+  localCurrencyRaw: string,
+  baseCurrencyRaw: string,
+  startDate: string,
+  warnings: string[],
+): Promise<PriceBar[]> {
+  const localCurrency = normalizeMoneyCurrency(localCurrencyRaw, "USD");
+  const baseCurrency = normalizeMoneyCurrency(baseCurrencyRaw, "USD");
+  if (localCurrency === baseCurrency) return [];
+
+  const baseToLocalSymbol = fxYahooSymbol(baseCurrency, localCurrency);
+  try {
+    const result = await fetchPriceSeriesWithCache(baseToLocalSymbol, startDate, {
+      market: "FX",
+      currency: localCurrency,
+      minDbDays: 2,
+      timeoutMs: 8000,
+    });
+    const bars = normalizePriceBars(
+      (result.data || []).map((point) => ({
+        date: point.date,
+        close: Number(point.close) > 0 ? 1 / Number(point.close) : Number.NaN,
+      })),
+    );
+    if (bars.length >= 2) return bars;
+  } catch (err) {
+    logSwallowed(`breakoutLab.fetchFxRateHistory(${baseToLocalSymbol})`, err);
+  }
+
+  const localToBaseSymbol = fxYahooSymbol(localCurrency, baseCurrency);
+  try {
+    const result = await fetchPriceSeriesWithCache(localToBaseSymbol, startDate, {
+      market: "FX",
+      currency: baseCurrency,
+      minDbDays: 2,
+      timeoutMs: 8000,
+    });
+    const bars = normalizePriceBars(
+      (result.data || []).map((point) => ({
+        date: point.date,
+        close: Number(point.close),
+      })),
+    );
+    if (bars.length >= 2) return bars;
+  } catch (err) {
+    logSwallowed(`breakoutLab.fetchFxRateHistory(${localToBaseSymbol})`, err);
+  }
+
+  warnings.push(`缺少 ${localCurrency}/${baseCurrency} 历史 FX 序列，涉及该币种的 breakout 组合估值将被跳过`);
+  return [];
+}
+
+async function fetchFxHistoriesForAssets(
+  assets: ResolvedAsset[],
+  baseCurrency: string,
+  startDate: string,
+  warnings: string[],
+): Promise<Record<string, PriceBar[]>> {
+  const currencies = [...new Set(assets.map((asset) => normalizeMoneyCurrency(asset.currency)).filter((currency) => currency !== baseCurrency))];
+  const entries = await Promise.all(
+    currencies.map(async (currency) => [currency, await fetchFxRateHistoryToBase(currency, baseCurrency, startDate, warnings)] as const),
+  );
+  return Object.fromEntries(entries.filter(([, series]) => series.length >= 2));
+}
+
+function convertPriceToBase(input: {
+  symbol: string;
+  date: string;
+  price: number;
+  assetCurrencyBySymbol: Record<string, string>;
+  baseCurrency: string;
+  fxSeriesByCurrency: Record<string, PriceBar[]>;
+}): number | null {
+  const price = Number(input.price);
+  if (!(Number.isFinite(price) && price > 0)) return null;
+  const currency = normalizeMoneyCurrency(input.assetCurrencyBySymbol[input.symbol], input.baseCurrency);
+  if (currency === input.baseCurrency) return price;
+  const fx = latestCloseOnOrBefore(input.fxSeriesByCurrency[currency] || [], input.date);
+  if (!(fx && fx > 0)) return null;
+  return price * fx;
+}
+
+function buildPortfolioCalendar(input: {
+  startDate: string;
+  endDate: string;
+  priceSeriesBySymbol: Record<string, PriceBar[]>;
+  fxSeriesByCurrency: Record<string, PriceBar[]>;
+}): string[] {
+  const set = new Set<string>();
+  for (const series of Object.values(input.priceSeriesBySymbol)) {
+    for (const bar of series) {
+      if (bar.date >= input.startDate && bar.date <= input.endDate) set.add(bar.date);
+    }
+  }
+  for (const series of Object.values(input.fxSeriesByCurrency)) {
+    for (const bar of series) {
+      if (bar.date >= input.startDate && bar.date <= input.endDate) set.add(bar.date);
+    }
+  }
+  set.add(input.startDate);
+  set.add(input.endDate);
+  return [...set].sort();
 }
 
 async function fetchOhlcv(
@@ -131,6 +272,9 @@ async function fetchOhlcv(
       minDbDays: 60,
       timeoutMs: 10000,
     });
+    if (result.source !== "db") {
+      warnings.push(`资产 ${asset.assetKey} 的 breakout 行情使用 ${result.source} 数据源，建议复核样本稳定性`);
+    }
     if (result.error && result.data.length === 0) {
       warnings.push(`获取 ${asset.assetKey} 行情失败: ${result.error}`);
       return [];
@@ -155,6 +299,8 @@ async function fetchOhlcv(
     }
     if (bars.length === 0) {
       warnings.push(`资产 ${asset.assetKey} 在区间内缺少完整 OHLCV（突破策略需要 high/low/volume）`);
+    } else if (bars.length < DEFAULT_BREAKOUT_PARAMS.maSlow + 5) {
+      warnings.push(`资产 ${asset.assetKey} 的有效 OHLCV 样本仅 ${bars.length} 根，可能不足以稳定评估 breakout 策略`);
     }
     return bars;
   } catch (err) {
@@ -171,6 +317,10 @@ async function fetchOhlcv(
  */
 function simulatePortfolio(
   trades: BreakoutTrade[],
+  priceSeriesBySymbol: Record<string, PriceBar[]>,
+  assetCurrencyBySymbol: Record<string, string>,
+  baseCurrency: string,
+  fxSeriesByCurrency: Record<string, PriceBar[]>,
   params: BreakoutLabRunParams,
 ): BreakoutLabPortfolio {
   const initial = params.initialCapital;
@@ -183,57 +333,178 @@ function simulatePortfolio(
   let peak = initial;
   let maxDd = 0;
   let taken = 0;
-  let skipped = 0;
-  let openExitDates: string[] = [];
-  const equityCurve: BreakoutLabEquityPoint[] = [{ date: params.startDate, equity: round2(initial) }];
+  let skippedSlots = 0;
+  let skippedCapital = 0;
+  let cash = initial;
+  const positions: BreakoutPosition[] = [];
+  const equityCurve: BreakoutLabEquityPoint[] = [];
 
-  for (const tr of sorted) {
-    // 释放在本笔进场前已平仓的槽位
-    openExitDates = openExitDates.filter((d) => d > tr.entryDate);
-    if (openExitDates.length >= maxSlots) {
-      skipped += 1;
-      continue;
+  const entryByDate = new Map<string, BreakoutTrade[]>();
+  for (const trade of sorted) {
+    const list = entryByDate.get(trade.entryDate) || [];
+    list.push(trade);
+    entryByDate.set(trade.entryDate, list);
+  }
+
+  const dates = buildPortfolioCalendar({
+    startDate: params.startDate,
+    endDate: params.endDate,
+    priceSeriesBySymbol,
+    fxSeriesByCurrency,
+  });
+
+  function markPositionValue(date: string, position: BreakoutPosition): number {
+    const closeLocal = latestCloseOnOrBefore(priceSeriesBySymbol[position.symbol] || [], date);
+    if (!(closeLocal && closeLocal > 0)) return 0;
+    const closeBase = convertPriceToBase({
+      symbol: position.symbol,
+      date,
+      price: closeLocal,
+      assetCurrencyBySymbol,
+      baseCurrency,
+      fxSeriesByCurrency,
+    });
+    if (!(closeBase && closeBase > 0)) return 0;
+    return position.shares * closeBase;
+  }
+
+  for (const date of dates) {
+    const todayEntries = entryByDate.get(date) || [];
+    for (const tr of todayEntries) {
+      if (positions.length >= maxSlots) {
+        skippedSlots += 1;
+        continue;
+      }
+      const entryBase = convertPriceToBase({
+        symbol: tr.symbol,
+        date: tr.entryDate,
+        price: tr.entry,
+        assetCurrencyBySymbol,
+        baseCurrency,
+        fxSeriesByCurrency,
+      });
+      const stopBase = convertPriceToBase({
+        symbol: tr.symbol,
+        date: tr.entryDate,
+        price: tr.stop,
+        assetCurrencyBySymbol,
+        baseCurrency,
+        fxSeriesByCurrency,
+      });
+      if (!(entryBase && stopBase && entryBase > stopBase)) {
+        skippedCapital += 1;
+        continue;
+      }
+      const openValue = positions.reduce((sum, position) => sum + markPositionValue(date, position), 0);
+      const liveEquity = cash + openValue;
+      const riskPerShare = entryBase - stopBase;
+      const riskBudget = Math.max(0, liveEquity * riskPct);
+      let shares = riskBudget / riskPerShare;
+      if (shares * entryBase > maxPos) shares = maxPos / entryBase;
+      if (shares * entryBase > cash) shares = cash / entryBase;
+      if (!(shares > 0)) {
+        skippedCapital += 1;
+        continue;
+      }
+      cash -= shares * entryBase;
+      positions.push({ symbol: tr.symbol, trade: tr, shares });
+      taken += 1;
     }
-    const rps = tr.entry - tr.stop;
-    if (rps <= 0) continue;
-    const riskDollar = equity * riskPct;
-    let shares = riskDollar / rps;
-    if (shares * tr.entry > maxPos) shares = maxPos / tr.entry;
-    const actualRisk = shares * rps;
-    const pnl = tr.r * actualRisk;
-    equity += pnl;
+
+    const remaining: BreakoutPosition[] = [];
+    for (const position of positions) {
+      if (position.trade.exitDate !== date) {
+        remaining.push(position);
+        continue;
+      }
+      const exitBase = convertPriceToBase({
+        symbol: position.symbol,
+        date: position.trade.exitDate,
+        price: position.trade.exit,
+        assetCurrencyBySymbol,
+        baseCurrency,
+        fxSeriesByCurrency,
+      });
+      if (!(exitBase && exitBase > 0)) continue;
+      cash += position.shares * exitBase;
+    }
+    positions.length = 0;
+    positions.push(...remaining);
+
+    equity = cash + positions.reduce((sum, position) => sum + markPositionValue(date, position), 0);
     peak = Math.max(peak, equity);
-    maxDd = Math.max(maxDd, (peak - equity) / peak);
-    openExitDates.push(tr.exitDate);
-    taken += 1;
-    equityCurve.push({ date: tr.exitDate, equity: round2(equity) });
+    maxDd = Math.max(maxDd, peak > 0 ? (peak - equity) / peak : 0);
+    equityCurve.push({ date, equity: round2(equity) });
   }
 
   return {
+    baseCurrency,
     initialCapital: initial,
     finalEquity: round2(equity),
     totalReturnPct: round2((equity / initial - 1) * 100),
     maxDrawdownPct: round2(maxDd * 100),
     tradesTaken: taken,
-    tradesSkippedSlotsFull: skipped,
+    tradesSkippedSlotsFull: skippedSlots,
+    tradesSkippedCapitalLimited: skippedCapital,
     equityCurve,
   };
 }
 
-async function computeBenchmarkBuyHold(
-  symbolRaw: string,
-  startDate: string,
-  endDate: string,
-  warnings: string[],
-): Promise<number | null> {
-  const asset = resolveAsset(symbolRaw);
-  if (!asset) return null;
-  const bars = await fetchOhlcv(asset, startDate, endDate, warnings);
-  if (bars.length < 2) return null;
-  const first = bars[0].close;
-  const last = bars[bars.length - 1].close;
-  if (first <= 0) return null;
-  return round2((last / first - 1) * 100);
+function computeSelectedAssetsBuyHoldBenchmark(input: {
+  assets: ResolvedAsset[];
+  baseCurrency: string;
+  priceSeriesBySymbol: Record<string, PriceBar[]>;
+  fxSeriesByCurrency: Record<string, PriceBar[]>;
+}): BreakoutLabRunResult["benchmark"] {
+  if (!input.assets.length) return null;
+  const assetCurrencyBySymbol = Object.fromEntries(
+    input.assets.map((asset) => [asset.assetKey, normalizeMoneyCurrency(asset.currency, input.baseCurrency)]),
+  );
+  const dates = buildPortfolioCalendar({
+    startDate: minDate(Object.values(input.priceSeriesBySymbol).flatMap((series) => series.map((bar) => bar.date))),
+    endDate: maxDate(Object.values(input.priceSeriesBySymbol).flatMap((series) => series.map((bar) => bar.date))),
+    priceSeriesBySymbol: input.priceSeriesBySymbol,
+    fxSeriesByCurrency: input.fxSeriesByCurrency,
+  });
+  if (dates.length < 2) return null;
+
+  const firstDate = dates[0];
+  const lastDate = dates[dates.length - 1];
+  const weights = 1 / input.assets.length;
+  let startValue = 0;
+  let endValue = 0;
+
+  for (const asset of input.assets) {
+    const series = input.priceSeriesBySymbol[asset.assetKey] || [];
+    const firstClose = latestCloseOnOrBefore(series, firstDate);
+    const lastClose = latestCloseOnOrBefore(series, lastDate);
+    if (!(firstClose && lastClose)) return null;
+    const firstBase = convertPriceToBase({
+      symbol: asset.assetKey,
+      date: firstDate,
+      price: firstClose,
+      assetCurrencyBySymbol,
+      baseCurrency: input.baseCurrency,
+      fxSeriesByCurrency: input.fxSeriesByCurrency,
+    });
+    const lastBase = convertPriceToBase({
+      symbol: asset.assetKey,
+      date: lastDate,
+      price: lastClose,
+      assetCurrencyBySymbol,
+      baseCurrency: input.baseCurrency,
+      fxSeriesByCurrency: input.fxSeriesByCurrency,
+    });
+    if (!(firstBase && lastBase && firstBase > 0)) return null;
+    startValue += weights;
+    endValue += weights * (lastBase / firstBase);
+  }
+
+  const label = input.assets.length === 1 ? input.assets[0].assetKey : "等权买入持有篮子";
+  return {
+    symbol: label,
+    buyHoldReturnPct: round2((endValue / startValue - 1) * 100),
+  };
 }
 
 export async function runBreakoutLabBacktest(params: BreakoutLabRunParams): Promise<BreakoutLabRunResult> {
@@ -245,14 +516,23 @@ export async function runBreakoutLabBacktest(params: BreakoutLabRunParams): Prom
   if (!assets.length) {
     throw new BreakoutLabDomainError("NO_ASSETS", "至少需要一个资产", { status: 400 });
   }
+  const inferredBaseCurrency = normalizeMoneyCurrency(params.baseCurrency || assets[0]?.currency || "USD", "USD");
+  const assetCurrencies = [...new Set(assets.map((asset) => normalizeMoneyCurrency(asset.currency, inferredBaseCurrency)))];
+  if (assetCurrencies.length > 1 && !params.baseCurrency) {
+    warnings.push(`breakout 组合包含多币种资产，未显式指定基准货币，已默认使用首个资产币种 ${inferredBaseCurrency} 估值`);
+  }
   const resolvedParams: BreakoutParams = { ...DEFAULT_BREAKOUT_PARAMS, ...(params.strategy || {}) };
 
   const allTrades: BreakoutTrade[] = [];
   const perSymbol: BreakoutLabPerSymbol[] = [];
+  const priceSeriesBySymbol: Record<string, PriceBar[]> = {};
 
   // 逐只拉数据 + 回测（顺序执行，避免 Yahoo 限流）
   for (const asset of assets) {
     const bars = await fetchOhlcv(asset, params.startDate, params.endDate, warnings);
+    priceSeriesBySymbol[asset.assetKey] = normalizePriceBars(
+      bars.map((bar) => ({ date: bar.date, close: bar.close })),
+    );
     const res = backtestSingleNameBreakout(asset.assetKey, bars, resolvedParams);
     for (const w of res.warnings) warnings.push(w);
     if (res.trades.length) allTrades.push(...res.trades);
@@ -276,16 +556,31 @@ export async function runBreakoutLabBacktest(params: BreakoutLabRunParams): Prom
   }
 
   const aggregate = computeBreakoutStats(allTrades);
-  const portfolio = simulatePortfolio(allTrades, params);
+  const fxSeriesByCurrency = await fetchFxHistoriesForAssets(assets, inferredBaseCurrency, params.startDate, warnings);
+  const assetCurrencyBySymbol = Object.fromEntries(
+    assets.map((asset) => [asset.assetKey, normalizeMoneyCurrency(asset.currency, inferredBaseCurrency)]),
+  );
+  const portfolio = simulatePortfolio(
+    allTrades,
+    priceSeriesBySymbol,
+    assetCurrencyBySymbol,
+    inferredBaseCurrency,
+    fxSeriesByCurrency,
+    params,
+  );
 
-  let benchmark: BreakoutLabRunResult["benchmark"] = null;
-  const buyHold = await computeBenchmarkBuyHold("US::QQQ", params.startDate, params.endDate, warnings);
-  benchmark = { symbol: "QQQ", buyHoldReturnPct: buyHold };
+  const benchmark = computeSelectedAssetsBuyHoldBenchmark({
+    assets,
+    baseCurrency: inferredBaseCurrency,
+    priceSeriesBySymbol,
+    fxSeriesByCurrency,
+  });
 
   const result: BreakoutLabRunResult = {
     runId,
     createdAt,
     mode: "breakout",
+    baseCurrency: inferredBaseCurrency,
     params,
     resolvedParams,
     aggregate,
@@ -306,10 +601,10 @@ export async function runBreakoutLabBacktest(params: BreakoutLabRunParams): Prom
         [
           runId,
           createdAt,
-          "USD",
+          inferredBaseCurrency,
           params.startDate,
           params.endDate,
-          JSON.stringify({ mode: "breakout", ...params, resolvedParams }),
+          JSON.stringify({ mode: "breakout", ...params, baseCurrency: inferredBaseCurrency, resolvedParams }),
           JSON.stringify({
             mode: "breakout",
             aggregate,
@@ -330,4 +625,12 @@ export async function runBreakoutLabBacktest(params: BreakoutLabRunParams): Prom
 
 function round2(x: number): number {
   return Math.round(x * 100) / 100;
+}
+
+function minDate(values: string[]): string {
+  return values.filter(Boolean).sort()[0] || "";
+}
+
+function maxDate(values: string[]): string {
+  return values.filter(Boolean).sort().at(-1) || "";
 }

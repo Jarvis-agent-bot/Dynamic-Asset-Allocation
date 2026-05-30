@@ -285,4 +285,85 @@ describe("strategyLabService", () => {
       status: 422,
     } satisfies Partial<StrategyLabDomainError>);
   });
+
+  it("跨市场风险平价只使用真实交易样本，不把补平出来的静止日当成低波动", async () => {
+    const usSeries: Array<[string, number]> = [];
+    const hkSeries: Array<[string, number]> = [];
+    for (let day = 1; day <= 31; day += 1) {
+      const date = `2026-01-${String(day).padStart(2, "0")}`;
+      usSeries.push([date, day % 2 === 0 ? 110 : 100]);
+      if (day % 2 === 0) {
+        hkSeries.push([date, day % 4 === 0 ? 110 : 100]);
+      }
+    }
+    for (let day = 1; day <= 28; day += 1) {
+      const date = `2026-02-${String(day).padStart(2, "0")}`;
+      usSeries.push([date, day % 2 === 0 ? 110 : 100]);
+      if (day % 2 === 0) {
+        hkSeries.push([date, day % 4 === 0 ? 110 : 100]);
+      }
+    }
+    for (let day = 1; day <= 10; day += 1) {
+      const date = `2026-03-${String(day).padStart(2, "0")}`;
+      usSeries.push([date, day % 2 === 0 ? 110 : 100]);
+      if (day % 2 === 0) {
+        hkSeries.push([date, day % 4 === 0 ? 110 : 100]);
+      }
+    }
+
+    const seriesByYfinanceSymbol: Record<string, ReturnType<typeof buildDatedSeries>> = {
+      SPY: buildDatedSeries(usSeries),
+      "0700.HK": buildDatedSeries(hkSeries),
+      "USDHKD=X": buildDatedSeries(
+        [...usSeries].map(([date]) => [date, 7.8]),
+      ),
+    };
+
+    vi.mocked(fetchPriceSeriesWithCache).mockImplementation(async (symbol: string) => ({
+      symbol,
+      data: seriesByYfinanceSymbol[symbol] || [],
+      source: "db",
+      rowsCovered: (seriesByYfinanceSymbol[symbol] || []).length,
+    }));
+
+    const result = await runStrategyLabBacktest({
+      assets: ["US::SPY", "HK::0700"],
+      strategies: ["riskParity"],
+      startDate: "2026-01-01",
+      endDate: "2026-03-10",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+      feeRateBps: 0,
+      slippageBps: 0,
+    });
+
+    expect(result.targetWeights["US::SPY"]).toBeCloseTo(0.5, 1);
+    expect(result.targetWeights["HK::0700"]).toBeCloseTo(0.5, 1);
+  });
+
+  it("当价格数据来自降级源或有效样本偏少时给出充分性提示", async () => {
+    const series = buildSeries([100, 101, 102, 103, 104, 105, 106, 107]);
+    vi.mocked(fetchPriceSeriesWithCache).mockImplementation(async (symbol: string) => ({
+      symbol,
+      data: series,
+      source: "yahoo",
+      rowsCovered: series.length,
+      upstream: "yahoo_provider",
+    }));
+
+    const result = await runStrategyLabBacktest({
+      assets: ["US::SPY"],
+      strategies: ["riskParity"],
+      startDate: "2026-01-01",
+      endDate: "2026-01-08",
+      rebalanceFrequency: "monthly",
+      initialCapital: 100_000,
+      benchmarkSymbol: "SPY",
+      feeRateBps: 0,
+      slippageBps: 0,
+    });
+
+    expect(result.warnings.some((warning) => warning.includes("样本") || warning.includes("数据源"))).toBe(true);
+  });
 });
