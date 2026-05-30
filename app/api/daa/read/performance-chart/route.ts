@@ -1,7 +1,7 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
-import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { fetchMultiplePriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
