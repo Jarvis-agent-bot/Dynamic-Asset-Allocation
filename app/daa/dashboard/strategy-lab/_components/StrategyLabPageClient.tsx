@@ -14,6 +14,7 @@ import { StrategyLabResultsView } from "./StrategyLabResultsView";
 import { useStrategyLab } from "./useStrategyLab";
 import { BreakoutLabView } from "./BreakoutLabView";
 import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
+import type { StrategyLabInitialData } from "./strategyLabInitialData";
 
 type LabMode = "rebalance" | "breakout";
 
@@ -44,8 +45,14 @@ function ModeTab({
   );
 }
 
-export default function StrategyLabPageClient({ dateDefaults }: { dateDefaults: StrategyLabDateDefaults }) {
-  const state = useStrategyLab(dateDefaults);
+export default function StrategyLabPageClient({
+  dateDefaults,
+  initialData,
+}: {
+  dateDefaults: StrategyLabDateDefaults;
+  initialData: StrategyLabInitialData | null;
+}) {
+  const state = useStrategyLab(dateDefaults, initialData);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [mode, setMode] = useState<LabMode>("rebalance");
 

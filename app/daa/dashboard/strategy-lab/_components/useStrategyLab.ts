@@ -22,6 +22,7 @@ import {
 import { resolveStrategyLabApplyMeta } from "./strategyLabApplyMeta";
 import { buildStrategyLabChartData } from "./strategyLabChartData";
 import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
+import type { StrategyLabInitialData } from "./strategyLabInitialData";
 
 export const STRATEGY_OPTIONS = [
   { key: "equalWeight", label: "等权重", desc: "按相同比例配置所有资产" },
@@ -55,16 +56,19 @@ export type ConfigState = {
   minOrderNotional: number;
 };
 
-function createDefaultConfig(dateDefaults: StrategyLabDateDefaults): ConfigState {
+function createDefaultConfig(
+  dateDefaults: StrategyLabDateDefaults,
+  initialData: StrategyLabInitialData | null,
+): ConfigState {
   return {
-    selectedAssets: [],
+    selectedAssets: initialData?.selectedAssets ?? [],
     selectedStrategies: ["equalWeight"],
     startDate: dateDefaults.rebalanceStartDate,
     endDate: dateDefaults.rebalanceEndDate,
     rebalanceFrequency: "monthly",
     initialCapital: 100_000,
-    baseCurrency: "USD",
-    minOrderNotional: 50,
+    baseCurrency: initialData?.baseCurrency || "USD",
+    minOrderNotional: initialData?.minOrderNotional ?? 50,
   };
 }
 
@@ -102,10 +106,13 @@ export interface UseStrategyLabResult {
   canApply: boolean;
 }
 
-export function useStrategyLab(dateDefaults: StrategyLabDateDefaults): UseStrategyLabResult {
-  const [assets, setAssets] = useState<AssetUniverseView[]>([]);
-  const [assetsLoading, setAssetsLoading] = useState(true);
-  const [config, setConfig] = useState<ConfigState>(() => createDefaultConfig(dateDefaults));
+export function useStrategyLab(
+  dateDefaults: StrategyLabDateDefaults,
+  initialData: StrategyLabInitialData | null,
+): UseStrategyLabResult {
+  const [assets, setAssets] = useState<AssetUniverseView[]>(() => initialData?.assets ?? []);
+  const [assetsLoading, setAssetsLoading] = useState(initialData == null);
+  const [config, setConfig] = useState<ConfigState>(() => createDefaultConfig(dateDefaults, initialData));
   const [assetFilter, setAssetFilter] = useState("");
 
   const [running, setRunning] = useState(false);
@@ -132,9 +139,18 @@ export function useStrategyLab(dateDefaults: StrategyLabDateDefaults): UseStrate
             .map((a) => a.assetKey);
           setConfig((prev) => ({
             ...prev,
-            selectedAssets: defaultSelection.length > 0 ? defaultSelection : prev.selectedAssets,
+            selectedAssets: prev.selectedAssets.length > 0
+              ? prev.selectedAssets
+              : (defaultSelection.length > 0 ? defaultSelection : prev.selectedAssets),
             baseCurrency: model.bootstrap.baseCurrency || prev.baseCurrency,
-            minOrderNotional: Math.max(0, Number(system?.config.strategy.constraints.minNotional) || prev.minOrderNotional),
+            minOrderNotional: Math.max(
+              0,
+              Number(
+                system?.config.strategy.constraints.minNotional
+                ?? model.bootstrap.execution.minNotional
+                ?? prev.minOrderNotional,
+              ) || prev.minOrderNotional,
+            ),
           }));
         }
       } catch {
@@ -245,10 +261,10 @@ export function useStrategyLab(dateDefaults: StrategyLabDateDefaults): UseStrate
       rebalanceFrequency: p.rebalanceFrequency || "monthly",
       initialCapital: Number.isFinite(p.initialCapital) && p.initialCapital > 0 ? p.initialCapital : 100_000,
       baseCurrency: p.baseCurrency || "USD",
-      minOrderNotional: Math.max(0, Number(p.minOrderNotional) || createDefaultConfig(dateDefaults).minOrderNotional),
+      minOrderNotional: Math.max(0, Number(p.minOrderNotional) || createDefaultConfig(dateDefaults, initialData).minOrderNotional),
     });
     toast.message("已载入历史参数，可直接重新运行");
-  }, [dateDefaults]);
+  }, [dateDefaults, initialData]);
 
   const filteredAssets = useMemo(() => {
     if (!assetFilter.trim()) return assets;
