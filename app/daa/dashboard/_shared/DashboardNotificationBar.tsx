@@ -91,7 +91,7 @@ export function DashboardNotificationBar(props: {
           icon={<AlertCircle className="h-4 w-4" />}
           description={props.authRequired ? "当前会话未登录或已失效，请重新登录后再试一次。" : props.error}
           action={props.authRequired ? (
-            <Link href="/daa/login?returnTo=%2Fdaa%2Fdashboard%2Fworkbench" className="text-xs font-medium text-[var(--primary)] underline underline-offset-4">
+            <Link href="/daa/login?returnTo=%2Fdaa%2Fdashboard" className="text-xs font-medium text-[var(--primary)] underline underline-offset-4">
               前往登录
             </Link>
           ) : null}

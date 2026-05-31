@@ -263,10 +263,16 @@ export async function applyMemoryDecay(decayRate: number = 0.97): Promise<number
       [ownerAccountId],
     ).catch(e => logSwallowed("memoryStore.zombieCleanup", e));
 
-    // 衰减仍活跃的记忆
+    // 衰减仍活跃的记忆。
+    // 关键：衰减后必须把 last_accessed 推进到 NOW()。否则在一条记忆长期未被 recall 时，
+    // applyMemoryDecay 每个 cycle 都会用「自上次访问以来的全部天数」重新乘一遍衰减，
+    // 造成跨 cycle 过度复利，实际半衰期远快于配置（0.97/天 ≈ 23 天）。
+    // 推进 last_accessed 后，每次只衰减「距上次衰减/访问的真实增量时长」，
+    // 多个 cycle 的乘积正确 telescoping 为 decayRate^(总经过天数)。
     const res = await query(
       `UPDATE daa_agent_memory
-       SET strength = strength * POWER($1, EXTRACT(EPOCH FROM (NOW() - last_accessed)) / 86400)
+       SET strength = strength * POWER($1, EXTRACT(EPOCH FROM (NOW() - last_accessed)) / 86400),
+           last_accessed = NOW()
        WHERE owner_account_id = $2
          AND last_accessed < NOW() - INTERVAL '1 day'
          AND strength > 0.01

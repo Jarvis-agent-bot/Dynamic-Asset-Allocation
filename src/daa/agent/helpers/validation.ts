@@ -39,6 +39,9 @@ export function validateShape(
 
 /** 检查当前 cycle 是否应该触发熔断（连续 LLM 失败过多） */
 export function shouldCircuitBreak(errors: string[], threshold = 3): boolean {
-  const llmFailures = errors.filter(e => e.includes("DeepSeek") || e.includes("LLM") || e.includes("noJson")).length;
+  // 同时覆盖 LLM 业务错误与网络/限流层失败，避免「DeepSeek/LLM/noJson」之外的
+  // 连续网络失败（timeout/429/ECONNRESET 等）漏计而触发不了熔断。
+  const llmFailurePattern = /deepseek|llm|nojson|timeout|timed out|econnreset|econnrefused|etimedout|socket hang up|network|fetch failed|abort|rate limit|429|502|503|too many requests/i;
+  const llmFailures = errors.filter((e) => llmFailurePattern.test(e)).length;
   return llmFailures >= threshold;
 }
