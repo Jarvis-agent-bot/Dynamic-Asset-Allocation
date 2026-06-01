@@ -16,6 +16,43 @@ interface StrategyLabConfigPanelsProps {
   state: UseStrategyLabResult;
 }
 
+type DatePreset = {
+  label: string;
+  resolveStartDate: (endDate: Date) => Date;
+};
+
+const DATE_PRESETS: DatePreset[] = [
+  { label: "近 6 月", resolveStartDate: (endDate) => shiftMonths(endDate, -6) },
+  { label: "近 1 年", resolveStartDate: (endDate) => shiftYears(endDate, -1) },
+  { label: "近 3 年", resolveStartDate: (endDate) => shiftYears(endDate, -3) },
+  { label: "近 5 年", resolveStartDate: (endDate) => shiftYears(endDate, -5) },
+  { label: "今年以来", resolveStartDate: (endDate) => new Date(endDate.getFullYear(), 0, 1) },
+];
+
+function parseDateInput(value: string): Date {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isFinite(parsed.getTime()) ? parsed : new Date();
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function shiftMonths(date: Date, months: number): Date {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function shiftYears(date: Date, years: number): Date {
+  const next = new Date(date);
+  next.setFullYear(next.getFullYear() + years);
+  return next;
+}
+
 export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps) {
   const {
     assetsLoading,
@@ -121,6 +158,28 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
               onChange={(e) => setConfig((prev) => ({ ...prev, endDate: e.target.value }))}
               className={daaSurfaceFieldClassName}
             />
+          </div>
+          <div className="sm:col-span-2">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">常用区间</div>
+            <div className="flex flex-wrap gap-2">
+              {DATE_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => {
+                    const endDate = parseDateInput(config.endDate);
+                    setConfig((prev) => ({
+                      ...prev,
+                      startDate: formatDateInput(preset.resolveStartDate(endDate)),
+                      endDate: formatDateInput(endDate),
+                    }));
+                  }}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-bg)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-bg)]"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">再平衡频率</label>

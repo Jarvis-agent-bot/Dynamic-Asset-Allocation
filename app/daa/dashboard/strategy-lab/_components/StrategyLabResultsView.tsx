@@ -126,14 +126,14 @@ function MergedWarningsPanel({ summary }: { summary: StrategyLabWarningPresentat
 
 function StrategyComparisonTable({ result }: { result: StrategyLabRunResult }) {
   return (
-    <DaaSurfacePanel accent="slate" title="策略对比" subtitle="同一资产池、同一区间下的多策略回测结果。">
+    <DaaSurfacePanel accent="slate" title="策略对比" subtitle="同一资产池、同一区间下的多策略回测结果。夏普通常越高越好，代表单位波动承担得到的超额收益更高；但仍需结合最大回撤、样本长度和收益稳定性一起判断。">
       <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)]">
         <table className="w-full border-collapse bg-[var(--surface)]">
           <thead>
             <tr>
               <th className={daaSurfaceTableHeadClassName}>策略</th>
               <th className={`${daaSurfaceTableHeadClassName} text-right`}>总收益</th>
-              <th className={`${daaSurfaceTableHeadClassName} text-right`}>夏普</th>
+              <th className={`${daaSurfaceTableHeadClassName} text-right`}>夏普（越高越好）</th>
               <th className={`${daaSurfaceTableHeadClassName} text-right`}>最大回撤</th>
               <th className={`${daaSurfaceTableHeadClassName} text-right`}>胜率</th>
             </tr>
