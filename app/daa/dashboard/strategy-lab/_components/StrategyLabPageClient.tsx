@@ -82,7 +82,7 @@ export default function StrategyLabPageClient({
 
       {mode === "breakout" ? (
         <SectionErrorBoundary sectionName="放量突破回测">
-          <BreakoutLabView dateDefaults={dateDefaults} />
+          <BreakoutLabView dateDefaults={dateDefaults} initialData={initialData} />
         </SectionErrorBoundary>
       ) : (
         <>

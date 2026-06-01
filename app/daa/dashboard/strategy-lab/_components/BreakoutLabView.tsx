@@ -1,5 +1,8 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { Play } from "lucide-react";
+
 import {
   DaaSurfaceMetricCard,
   DaaSurfacePanel,
@@ -10,6 +13,44 @@ import {
 import { DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { useBreakoutLab, type BreakoutConfigState } from "./useBreakoutLab";
 import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
+import type { StrategyLabInitialData } from "./strategyLabInitialData";
+
+type DatePreset = {
+  label: string;
+  resolveStartDate: (endDate: Date) => Date;
+};
+
+const DATE_PRESETS: DatePreset[] = [
+  { label: "近 6 月", resolveStartDate: (endDate) => shiftMonths(endDate, -6) },
+  { label: "近 1 年", resolveStartDate: (endDate) => shiftYears(endDate, -1) },
+  { label: "近 3 年", resolveStartDate: (endDate) => shiftYears(endDate, -3) },
+  { label: "近 5 年", resolveStartDate: (endDate) => shiftYears(endDate, -5) },
+  { label: "今年以来", resolveStartDate: (endDate) => new Date(endDate.getFullYear(), 0, 1) },
+];
+
+function parseDateInput(value: string): Date {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isFinite(parsed.getTime()) ? parsed : new Date();
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function shiftMonths(date: Date, months: number): Date {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function shiftYears(date: Date, years: number): Date {
+  const next = new Date(date);
+  next.setFullYear(next.getFullYear() + years);
+  return next;
+}
 
 function NumberField({
   label,
@@ -56,11 +97,28 @@ function r2(n: number | null | undefined): string {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}`;
 }
 
-export function BreakoutLabView({ dateDefaults }: { dateDefaults: StrategyLabDateDefaults }) {
-  const lab = useBreakoutLab(dateDefaults);
+export function BreakoutLabView({
+  dateDefaults,
+  initialData,
+}: {
+  dateDefaults: StrategyLabDateDefaults;
+  initialData: StrategyLabInitialData | null;
+}) {
+  const lab = useBreakoutLab(dateDefaults, initialData);
   const { config, setConfig, result, running, error } = lab;
+  const [assetFilter, setAssetFilter] = useState("");
   const set = <K extends keyof BreakoutConfigState>(k: K, v: BreakoutConfigState[K]) =>
     setConfig((prev) => ({ ...prev, [k]: v }));
+  const assets = initialData?.assets ?? [];
+  const filteredAssets = useMemo(() => {
+    const q = assetFilter.trim().toLowerCase();
+    if (!q) return assets;
+    return assets.filter((asset) =>
+      asset.symbol.toLowerCase().includes(q)
+      || asset.assetKey.toLowerCase().includes(q)
+      || asset.assetClass.toLowerCase().includes(q)
+    );
+  }, [assetFilter, assets]);
 
   const agg = result?.aggregate ?? null;
   const port = result?.portfolio ?? null;
@@ -70,28 +128,102 @@ export function BreakoutLabView({ dateDefaults }: { dateDefaults: StrategyLabDat
       : null;
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+    <div className="space-y-5">
+      <div className="sticky top-[64px] z-20 -mx-1 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.25)] backdrop-blur sm:px-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+          <span className="rounded-full bg-[var(--elevated)] px-2 py-0.5 font-[var(--font-mono)] text-[11px]">
+            {lab.parsedAssets.length} 标的 · 放量突破
+          </span>
+          <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">{config.startDate} → {config.endDate}</span>
+          <span className="text-[11px] text-[var(--faint)]">{config.baseCurrency} {config.initialCapital.toLocaleString("en-US")} · 风险 {config.riskPct}%</span>
+        </div>
+        <DaaSurfaceActionButton
+          tone="primary"
+          onClick={() => void lab.run()}
+          disabled={!lab.canRun}
+          className="h-10 px-3 text-xs"
+        >
+          <Play className="h-3.5 w-3.5" />
+          {running ? "运行中…" : "运行回测"}
+        </DaaSurfaceActionButton>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
       {/* 配置面板 */}
       <div className="space-y-4">
-        <DaaSurfacePanel title="标的与区间" subtitle="逗号或空格分隔；可用 NVDA 或 US::NVDA">
+        <DaaSurfacePanel title="标的选择" subtitle="从当前资产池选择要纳入放量突破回测的标的。">
           <div className="space-y-3">
-            <textarea
-              value={config.assetsText}
-              onChange={(e) => set("assetsText", e.target.value)}
-              rows={3}
+            <input
+              type="text"
+              value={assetFilter}
+              onChange={(e) => setAssetFilter(e.target.value)}
               className={daaSurfaceFieldClassName}
-              placeholder="NVDA, AAPL, MSFT"
+              placeholder="搜索 symbol 或资产类别…"
             />
-            <div className="text-xs text-[var(--muted)]">已解析 {lab.parsedAssets.length} 个标的</div>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-                <span>开始日期</span>
-                <input type="date" value={config.startDate} onChange={(e) => set("startDate", e.target.value)} className={daaSurfaceFieldClassName} />
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-                <span>结束日期</span>
-                <input type="date" value={config.endDate} onChange={(e) => set("endDate", e.target.value)} className={daaSurfaceFieldClassName} />
-              </label>
+            <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-2">
+              {filteredAssets.length === 0 ? (
+                <div className="px-3 py-4 text-center text-xs text-[var(--faint)]">
+                  {assets.length === 0 ? "资产池为空，请先到持仓页添加资产" : "未找到匹配资产"}
+                </div>
+              ) : (
+                filteredAssets.map((asset) => {
+                  const checked = config.selectedAssets.includes(asset.assetKey);
+                  return (
+                    <label
+                      key={asset.assetKey}
+                      className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--elevated)]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => lab.toggleAsset(asset.assetKey)}
+                        className="h-3.5 w-3.5 rounded border-[var(--border-strong)] bg-transparent accent-[var(--primary)]"
+                      />
+                      <span className="font-[var(--font-mono)] text-xs text-[var(--text)]">{asset.symbol}</span>
+                      <span className="text-[11px] text-[var(--faint)]">{asset.assetClass}</span>
+                      {asset.holdingQty > 0 ? (
+                        <span className="ml-auto rounded-full border border-[var(--success-border)] bg-[var(--success-bg)] px-2 py-0.5 text-[9px] font-semibold text-[var(--success)]">持仓</span>
+                      ) : null}
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="text-xs text-[var(--faint)]">已选 {lab.parsedAssets.length} 个标的</div>
+          </div>
+        </DaaSurfacePanel>
+
+        <DaaSurfacePanel title="回测区间" subtitle="设置择时信号的历史样本范围。">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
+              <span>开始日期</span>
+              <input type="date" value={config.startDate} onChange={(e) => set("startDate", e.target.value)} className={daaSurfaceFieldClassName} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
+              <span>结束日期</span>
+              <input type="date" value={config.endDate} onChange={(e) => set("endDate", e.target.value)} className={daaSurfaceFieldClassName} />
+            </label>
+          </div>
+          <div className="mt-3">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">常用区间</div>
+            <div className="flex flex-wrap gap-2">
+              {DATE_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => {
+                    const endDate = parseDateInput(config.endDate);
+                    setConfig((prev) => ({
+                      ...prev,
+                      startDate: formatDateInput(preset.resolveStartDate(endDate)),
+                      endDate: formatDateInput(endDate),
+                    }));
+                  }}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-bg)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-bg)]"
+                >
+                  {preset.label}
+                </button>
+              ))}
             </div>
           </div>
         </DaaSurfacePanel>
@@ -151,9 +283,6 @@ export function BreakoutLabView({ dateDefaults }: { dateDefaults: StrategyLabDat
           </div>
         </DaaSurfacePanel>
 
-        <DaaSurfaceActionButton onClick={() => void lab.run()} disabled={!lab.canRun} className="w-full">
-          {running ? "回测运行中…" : "运行放量突破回测"}
-        </DaaSurfaceActionButton>
       </div>
 
       {/* 结果区 */}
@@ -245,10 +374,11 @@ export function BreakoutLabView({ dateDefaults }: { dateDefaults: StrategyLabDat
         {!result && !running ? (
           <DaaSurfaceEmptyState
             title="等待回测"
-            description="在左侧设置标的、区间和放量突破参数，点击「运行放量突破回测」。"
+            description="在左侧选择标的、区间和放量突破参数，点击顶部「运行回测」。"
             className="px-5 py-20"
           />
         ) : null}
+      </div>
       </div>
     </div>
   );

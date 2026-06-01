@@ -8,9 +8,10 @@ import type {
   BreakoutLabRunResult,
 } from "@/src/daa/modules/strategyLab/breakoutLabService";
 import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
+import type { StrategyLabInitialData } from "./strategyLabInitialData";
 
 export type BreakoutConfigState = {
-  assetsText: string; // 逗号/空格分隔的标的，如 "NVDA, AAPL, US::MSFT"
+  selectedAssets: string[];
   startDate: string;
   endDate: string;
   initialCapital: number;
@@ -30,13 +31,16 @@ export type BreakoutConfigState = {
   trailingPct: number; // 百分比形式
 };
 
-function createDefaultBreakoutConfig(dateDefaults: StrategyLabDateDefaults): BreakoutConfigState {
+function createDefaultBreakoutConfig(
+  dateDefaults: StrategyLabDateDefaults,
+  initialData: StrategyLabInitialData | null,
+): BreakoutConfigState {
   return {
-    assetsText: "NVDA, AAPL, MSFT, GOOGL, META, AMZN, AMD, AVGO, MU, TSLA, PLTR, ORCL, SMH, QQQ, VOO",
+    selectedAssets: initialData?.selectedAssets ?? [],
     startDate: dateDefaults.breakoutStartDate,
     endDate: dateDefaults.breakoutEndDate,
     initialCapital: 100_000,
-    baseCurrency: "USD",
+    baseCurrency: initialData?.baseCurrency || "USD",
     riskPct: 1, // 百分比形式，提交时 /100
     maxSlots: 3,
     breakoutLookback: 20,
@@ -60,31 +64,28 @@ export interface UseBreakoutLabResult {
   error: string;
   run: () => Promise<void>;
   reset: () => void;
+  toggleAsset: (assetKey: string) => void;
   canRun: boolean;
   parsedAssets: string[];
 }
 
-function parseAssets(text: string): string[] {
-  return text
-    .split(/[,\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-export function useBreakoutLab(dateDefaults: StrategyLabDateDefaults): UseBreakoutLabResult {
-  const [config, setConfig] = useState<BreakoutConfigState>(() => createDefaultBreakoutConfig(dateDefaults));
+export function useBreakoutLab(
+  dateDefaults: StrategyLabDateDefaults,
+  initialData: StrategyLabInitialData | null,
+): UseBreakoutLabResult {
+  const [config, setConfig] = useState<BreakoutConfigState>(() => createDefaultBreakoutConfig(dateDefaults, initialData));
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BreakoutLabRunResult | null>(null);
   const [error, setError] = useState("");
 
-  const parsedAssets = parseAssets(config.assetsText);
+  const parsedAssets = config.selectedAssets;
   const runReqIdRef = useRef(0);
 
   const run = useCallback(async () => {
     if (running) return;
-    const assets = parseAssets(config.assetsText);
+    const assets = config.selectedAssets;
     if (assets.length === 0) {
-      setError("请至少输入一个标的");
+      setError("请至少选择一个标的");
       return;
     }
     if (config.maxSlots < 1) {
@@ -137,7 +138,16 @@ export function useBreakoutLab(dateDefaults: StrategyLabDateDefaults): UseBreako
     setError("");
   }, []);
 
+  const toggleAsset = useCallback((assetKey: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      selectedAssets: prev.selectedAssets.includes(assetKey)
+        ? prev.selectedAssets.filter((key) => key !== assetKey)
+        : [...prev.selectedAssets, assetKey],
+    }));
+  }, []);
+
   const canRun = !running && parsedAssets.length > 0;
 
-  return { config, setConfig, running, result, error, run, reset, canRun, parsedAssets };
+  return { config, setConfig, running, result, error, run, reset, toggleAsset, canRun, parsedAssets };
 }
