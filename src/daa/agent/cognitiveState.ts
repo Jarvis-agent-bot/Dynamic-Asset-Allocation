@@ -32,6 +32,8 @@ export interface PortfolioSnapshot {
     valuationBase?: number | null;
     weightPct: number;
     unrealizedPnlPct: number | null;
+    targetWeightHint?: number;
+    gapPct?: number | null;
   }>;
   totalEquity: number;
   cashPct: number;

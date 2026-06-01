@@ -301,8 +301,18 @@ describe("automationGuards", () => {
     });
 
     expect(plan).toEqual({
+      agentRunId: "run-1",
       targetWeights: { "US::NVDA": 0.03 },
       baselineTargetWeights: { "US::NVDA": 0 },
+      intentReasons: {
+        "US::NVDA": {
+          symbol: "NVDA",
+          proposedTargetWeightPct: 3,
+          baselineTargetWeightPct: 0,
+          confidence: 82,
+          reasoning: "降低 AI 拥挤交易风险",
+        },
+      },
       acceptedCount: 1,
       skippedCount: 1,
       reason: "NVDA→3.0%",

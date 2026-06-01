@@ -203,7 +203,17 @@ describe("buildSurfacePrompt", () => {
 describe("buildStrategyAdvisorPrompt", () => {
   it("把自动跟踪项的 Agent 语义传给策略顾问，而不是只给天数", () => {
     const prompt = buildStrategyAdvisorPrompt({
-      holdings: [{ assetKey: "US::NVDA", symbol: "NVDA", weightPct: 0.107, price: 980 }],
+      holdings: [{
+        assetKey: "US::NVDA",
+        symbol: "NVDA",
+        weightPct: 0.107,
+        lastPrice: 980,
+        holdingQty: 10,
+        valuationBase: 9_800,
+        unrealizedPnlPct: 0.12,
+        targetWeightHint: 0.15,
+        gapPct: 4.3,
+      }],
       watchlist: [],
       theses: [{ ...mockThread, conviction: "uncertain" }],
       surprises: [],
@@ -221,6 +231,9 @@ describe("buildStrategyAdvisorPrompt", () => {
 
     expect(prompt).toContain("论点仍处观察态");
     expect(prompt).toContain("关注维度");
+    expect(prompt).toContain("目标15.0%");
+    expect(prompt).toContain("偏离+4.3pct");
+    expect(prompt).toContain("未实现盈亏+12.0%");
     expect(prompt).not.toContain("US::NVDA 权重10.7% 2天未更新");
   });
 

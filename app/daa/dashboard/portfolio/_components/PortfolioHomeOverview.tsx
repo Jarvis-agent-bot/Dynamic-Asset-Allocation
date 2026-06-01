@@ -111,8 +111,10 @@ function toneClass(tone: HomeAction["tone"]) {
 }
 
 type TargetAllocationSnapshot = {
+  agentRunId?: unknown;
   targetWeights?: Record<string, unknown> | null;
   baselineTargetWeights?: Record<string, unknown> | null;
+  intentReasons?: Record<string, unknown> | null;
   summary?: unknown;
   reason?: unknown;
 };
@@ -131,6 +133,16 @@ function readPlanWeightPct(weights: Record<string, unknown> | null | undefined, 
   return Number.isFinite(value) ? value * 100 : null;
 }
 
+function readIntentReason(plan: TargetAllocationSnapshot | null, assetKey: string): string | null {
+  const raw = plan?.intentReasons?.[assetKey.toUpperCase()];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const reasoning = compactReason(record.reasoning, 120);
+  const confidence = Number(record.confidence);
+  if (!reasoning) return null;
+  return Number.isFinite(confidence) ? `${reasoning}（置信 ${confidence.toFixed(0)}）` : reasoning;
+}
+
 function compactReason(text: unknown, maxLength = 96): string | null {
   const normalized = String(text ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) return null;
@@ -147,7 +159,7 @@ function resolveMaxDriftReason(input: {
   const plannedPct = readPlanWeightPct(plan?.targetWeights, input.row.assetKey);
   const baselinePct = readPlanWeightPct(plan?.baselineTargetWeights, input.row.assetKey);
   if (plannedPct != null && Math.abs(plannedPct - input.row.targetWeightPct) <= 0.05) {
-    const reason = compactReason(plan?.summary) || compactReason(plan?.reason);
+    const reason = readIntentReason(plan, input.row.assetKey) || compactReason(plan?.summary) || compactReason(plan?.reason);
     const baseline = baselinePct != null ? `原目标 ${formatPercent(baselinePct)} -> ` : "";
     return `${baseline}Agent 目标 ${formatPercent(plannedPct)}${reason ? `；${reason}` : ""}`;
   }
@@ -185,8 +197,7 @@ export function PortfolioHomeOverview(props: {
   const latestCycleStatus = cycleStatusLabel(props.latestCycle);
   const allocationRows = props.rows
     .filter((row) => row.holdingQty > 0 || row.actualWeightPct > 0 || row.targetWeightHint > 0)
-    .sort((a, b) => (b.actualWeightPct || b.targetWeightPct) - (a.actualWeightPct || a.targetWeightPct))
-    .slice(0, 5);
+    .sort((a, b) => (b.actualWeightPct || b.targetWeightPct) - (a.actualWeightPct || a.targetWeightPct));
   const maxAllocationPct = Math.max(1, ...allocationRows.map((row) => row.actualWeightPct || row.targetWeightPct));
   const maxDriftRow = props.rows
     .filter((row) => row.gapPct != null)
@@ -343,37 +354,58 @@ export function PortfolioHomeOverview(props: {
         </div>
       </div>
 
-      <div className="grid gap-px border-t border-[var(--border)] bg-[var(--border)] lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)_minmax(300px,0.58fr)]">
-        <div className="bg-[var(--surface)] p-5 sm:p-6">
+      <div className="grid gap-px border-t border-[var(--border)] bg-[var(--border)] lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
+        <div className="bg-[var(--surface)] p-5 sm:p-6 lg:col-span-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
-              <PieChart className="h-4 w-4 text-[var(--primary)]" />
-              配置分布
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+                <PieChart className="h-4 w-4 text-[var(--primary)]" />
+                配置分布
+              </div>
+              <div className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                展示全部持仓与目标篮子，当前权重优先；无持仓时显示目标权重。
+              </div>
             </div>
+            <DaaSurfaceStatusPill tone="slate">{allocationRows.length} 项</DaaSurfaceStatusPill>
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="mt-5 grid gap-3 xl:grid-cols-2">
             {allocationRows.length > 0 ? allocationRows.map((row) => {
               const pct = row.actualWeightPct || row.targetWeightPct;
               const widthPct = Math.max(6, Math.min(100, (pct / maxAllocationPct) * 100));
+              const gap = row.gapPct;
               return (
-                <div key={row.assetKey} className="grid grid-cols-[88px_minmax(0,1fr)_62px] items-center gap-3">
+                <div
+                  key={row.assetKey}
+                  className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5"
+                >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-[var(--text)]">{row.symbol}</div>
-                    <div className="truncate text-[11px] text-[var(--faint)]">{row.assetClass || row.market}</div>
+                    <div className="truncate text-[11px] text-[var(--muted)]">{row.assetClass || row.market}</div>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-[var(--elevated)]">
-                    <div
-                      className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary),var(--success))]"
-                      style={{ width: `${widthPct}%` }}
-                    />
+                  <div className="min-w-0">
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--elevated)]">
+                      <div
+                        className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary),var(--success))]"
+                        style={{ width: `${widthPct}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--muted)]">
+                      <span>当前 {formatPercent(row.actualWeightPct)}</span>
+                      <span>目标 {formatPercent(row.targetWeightPct)}</span>
+                      {gap != null ? (
+                        <span className={Math.abs(gap) >= 5 ? "text-[var(--amber)]" : "text-[var(--success)]"}>
+                          偏离 {gap >= 0 ? "+" : ""}{formatPercent(gap)}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="text-right font-[var(--font-mono)] text-xs text-[var(--muted)]">
+                  <div className="min-w-[58px] text-right font-[var(--font-mono)] text-sm text-[var(--text)]">
                     {formatPercent(pct)}
                   </div>
                 </div>
               );
             }) : (
-              <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] px-4 py-5 text-sm text-[var(--muted)]">
+              <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] px-4 py-5 text-sm text-[var(--muted)] xl:col-span-2">
                 暂无配置资产，记录入金后可在下方资产列表维护配置。
               </div>
             )}

@@ -1387,6 +1387,34 @@ const MIGRATIONS_: Migration[] = [
       }
     },
   },
+  {
+    id: "20260601_agent_decision_audit",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_agent_decision_audit (
+          owner_account_id TEXT NOT NULL DEFAULT '${DEFAULT_DAA_ACCOUNT_SCOPE_ID}',
+          id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          agent_run_id TEXT,
+          cycle_id TEXT,
+          node TEXT NOT NULL,
+          decision_kind TEXT NOT NULL,
+          asset_key TEXT,
+          symbol TEXT,
+          summary TEXT,
+          reasoning TEXT,
+          confidence_pct NUMERIC,
+          input_snapshot JSONB,
+          evidence_snapshot JSONB,
+          decision_payload JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_agent_decision_audit_owner_run_created ON daa_agent_decision_audit(owner_account_id, agent_run_id, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_agent_decision_audit_owner_asset_created ON daa_agent_decision_audit(owner_account_id, asset_key, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_agent_decision_audit_owner_cycle_created ON daa_agent_decision_audit(owner_account_id, cycle_id, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_agent_decision_audit_owner_kind_created ON daa_agent_decision_audit(owner_account_id, decision_kind, created_at DESC)");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

@@ -13,6 +13,8 @@ import { generateEmbedding } from "@/src/daa/agent/embedding";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getCurrentRunId } from "@/src/daa/agent/tools/registry";
+import { recordAgentDecisionAudit } from "@/src/daa/agent/store/agentDecisionAuditStore";
 
 export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
@@ -107,6 +109,42 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
               thread: { id: thread.id, assetKeys: thread.assetKeys, tags: thread.tags },
             });
           }
+
+          await recordAgentDecisionAudit({
+            agentRunId: getCurrentRunId(),
+            node: "review",
+            decisionKind: "thesis_review",
+            assetKey: thread.assetKeys[0] ?? null,
+            symbol: thread.assetKeys[0] ? (parseDaaAssetKey(thread.assetKeys[0])?.symbol ?? thread.assetKeys[0]) : null,
+            summary: data.shouldInvalidate
+              ? "复盘判定论点失效"
+              : data.shouldArchive
+                ? "复盘判定论点归档"
+                : "复盘判定继续观察",
+            reasoning: data.lesson || data.actualOutcome,
+            confidencePct: data.accuracyScore,
+            inputSnapshot: {
+              threadId: thread.id,
+              title: thread.title,
+              thesisText: thread.thesisText,
+              conviction: thread.conviction,
+              assetKeys: thread.assetKeys,
+              marketRegime: state.market?.regime ?? "unknown",
+              vix: state.market?.vix ?? null,
+              priceChangeText,
+            },
+            evidenceSnapshot: {
+              invalidationConditions: thread.invalidationConditions,
+              tags: thread.tags,
+            },
+            decisionPayload: {
+              actualOutcome: data.actualOutcome,
+              accuracyScore: data.accuracyScore,
+              lesson: data.lesson,
+              shouldInvalidate: data.shouldInvalidate,
+              shouldArchive: data.shouldArchive,
+            },
+          }).catch((error) => logSwallowed(`cognitiveGraph.review.decisionAudit.${thread.id}`, error));
 
           // 更新 thesis：失效 / 归档 / 继续观察（按优先级判定）
           if (data.shouldInvalidate) {

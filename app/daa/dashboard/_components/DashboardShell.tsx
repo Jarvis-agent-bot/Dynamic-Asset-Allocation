@@ -84,11 +84,11 @@ export default function DashboardShell({ children }: Props) {
         跳转到主内容
       </a>
 
-      <div className="flex min-h-screen w-full overflow-x-hidden bg-transparent">
+      <div className="min-h-screen w-full overflow-x-hidden bg-transparent">
         {/* ─── 侧边栏（Claude 风格：无边框、微妙背景差、圆角导航） ─── */}
         <aside
           className={cn(
-            "daa-scrollbar hidden h-screen shrink-0 overflow-hidden border-r border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-0 lg:flex lg:flex-col",
+            "daa-scrollbar hidden h-dvh max-h-dvh shrink-0 overflow-hidden border-r border-[var(--border)] bg-[var(--surface)] lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:flex-col",
             sidebarReady ? "transition-[width] duration-200 ease-out" : "transition-none",
             sidebarCollapsed ? "w-[68px]" : "w-[232px]",
           )}
@@ -142,7 +142,13 @@ export default function DashboardShell({ children }: Props) {
           ) : null}
         </aside>
 
-        <main className="min-w-0 max-w-full flex-1 overflow-x-hidden">
+        <main
+          className={cn(
+            "min-w-0 max-w-full overflow-x-hidden",
+            sidebarReady ? "transition-[margin-left] duration-200 ease-out" : "transition-none",
+            sidebarCollapsed ? "lg:ml-[68px]" : "lg:ml-[232px]",
+          )}
+        >
           {/* ─── 顶部栏（桌面）─── */}
           <header className="sticky top-0 z-30 hidden border-b border-[var(--elevated)] bg-[var(--surface)] backdrop-blur-xl lg:block">
             <div className="flex h-12 items-center gap-4 px-6">

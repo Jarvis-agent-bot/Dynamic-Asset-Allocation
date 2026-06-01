@@ -414,7 +414,18 @@ ${prevBriefingText}
 // ── 策略顾问 Prompt（surfaceNode 末尾，生成目标权重计划） ──
 
 export function buildStrategyAdvisorPrompt(ctx: {
-  holdings: Array<{ assetKey: string; symbol: string; weightPct: number; price: number }>;
+  holdings: Array<{
+    assetKey: string;
+    symbol: string;
+    weightPct: number;
+    lastPrice?: number;
+    price?: number;
+    unrealizedPnlPct?: number | null;
+    holdingQty?: number;
+    targetWeightHint?: number;
+    gapPct?: number | null;
+    valuationBase?: number | null;
+  }>;
   watchlist?: WatchlistSnapshot["candidates"];
   theses: ResearchThread[];
   surprises: Array<{ title: string; severityScore: number; suggestedAction: string }>;
@@ -425,7 +436,13 @@ export function buildStrategyAdvisorPrompt(ctx: {
 }): string {
   const holdingLines = ctx.holdings.slice(0, 30).map(h => {
     const thesis = ctx.theses.find(t => t.assetKeys.includes(h.assetKey));
-    return `${h.symbol} (${h.assetKey}) 权重${(h.weightPct * 100).toFixed(1)}% 现价$${h.price.toFixed(2)}${thesis ? ` 论点="${sanitizeForPrompt(thesis.title, 40)}" conviction=${thesis.conviction}` : " 无论点"}`;
+    const targetPct = h.targetWeightHint == null ? null : Math.max(0, h.targetWeightHint) * 100;
+    const targetText = targetPct == null ? "" : ` 目标${targetPct.toFixed(1)}%`;
+    const gapText = h.gapPct == null ? "" : ` 偏离${h.gapPct >= 0 ? "+" : ""}${h.gapPct.toFixed(1)}pct`;
+    const valueText = h.valuationBase == null ? "" : ` 估值$${fmtK(h.valuationBase)}`;
+    const pnlText = h.unrealizedPnlPct == null ? "" : ` 未实现盈亏${h.unrealizedPnlPct >= 0 ? "+" : ""}${(h.unrealizedPnlPct * 100).toFixed(1)}%`;
+    const price = h.lastPrice ?? h.price ?? 0;
+    return `${h.symbol} (${h.assetKey}) 当前${(h.weightPct * 100).toFixed(1)}%${targetText}${gapText}${valueText} 数量${Number(h.holdingQty ?? 0).toFixed(6)} 现价$${price.toFixed(2)}${pnlText}${thesis ? ` 论点="${sanitizeForPrompt(thesis.title, 40)}" conviction=${thesis.conviction}` : " 无论点"}`;
   }).join("\n");
 
   const thesisLines = ctx.theses.slice(0, 15).map(t =>
@@ -498,7 +515,9 @@ ${gapLines}
 - proposedTargetWeightPct 使用百分比口径，例如 3 表示 3%；自动执行时会被单仓上限截断
 - 可以对观察列表候选给出新目标权重；这会生成 BUY 提案。可以对当前持仓给出更低目标权重甚至 0；这会生成 SELL 提案。
 - 全自动模式下，优先从观察列表中选出 1-5 个最值得执行的资产并给出非 0 目标权重；不确定时也要给出小仓位试探目标，而不是只观察
-- targetAllocationPlan.intents 只列需要改变目标权重的资产；confidence 代表你的把握程度，但执行层默认会采纳
+- targetAllocationPlan.intents 只列需要改变目标权重的资产；每条 reasoning 必须解释“为什么从当前目标/当前权重调整到 proposedTargetWeightPct”，不要只写泛泛看好/看空
+- 单资产目标权重超过 20%，或相对当前目标提高超过 10pct 时，reasoning 必须包含强证据、主要风险和仓位上限考虑；证据不足时只能给小仓位试探或维持原目标
+- confidence 代表你的把握程度，但执行层默认会采纳；因此不能在信息不足时为了满足输出要求给出大仓位
 - regimeOverride.confidence < 80 时不会被采纳
 - 不要输出“继续观察”式空计划；你的任务是直接形成可执行目标权重
 

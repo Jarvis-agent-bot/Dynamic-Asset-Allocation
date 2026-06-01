@@ -2,6 +2,7 @@ import { bootstrapTheses, ensureAssetThesisCoverage, type BootstrapAsset } from 
 import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { getAgentStrategyOverlayForRun } from "@/src/daa/agent/store/overlayStore";
+import { attachCycleToAgentDecisionAudits } from "@/src/daa/agent/store/agentDecisionAuditStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
 import { evaluateBrainActionAuthority, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
@@ -342,8 +343,10 @@ async function maybeRunAgentDrivenRebalance(input: {
       : `Agent 自动驾驶检查${eventContext ? `: ${eventContext}` : ""}`,
     manual: false,
     targetAllocationPlan: input.targetPlan ? {
+      agentRunId: input.targetPlan.agentRunId,
       targetWeights: input.targetPlan.targetWeights,
       baselineTargetWeights: input.targetPlan.baselineTargetWeights,
+      intentReasons: input.targetPlan.intentReasons,
       summary: input.targetPlan.summary,
       reason: input.targetPlan.reason,
     } : undefined,
@@ -356,6 +359,12 @@ async function maybeRunAgentDrivenRebalance(input: {
       reason: generated.message,
     };
   }
+
+  await attachCycleToAgentDecisionAudits({
+    agentRunId: input.targetPlan?.agentRunId,
+    cycleId: cycle.cycleId,
+    assetKeys: Object.keys(input.targetPlan?.targetWeights ?? {}),
+  }).catch((error) => logSwallowed("autopilot.attachDecisionAuditCycle", error));
 
   return {
     attempted: true,

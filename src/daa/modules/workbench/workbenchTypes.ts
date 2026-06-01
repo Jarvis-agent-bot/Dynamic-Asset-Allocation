@@ -208,8 +208,16 @@ export type GenerateRebalanceCycleInput = {
    * Agent 目标配置计划（0-1），只影响本次周期生成，不直接写入系统配置。
    */
   targetAllocationPlan?: {
+    agentRunId?: string | null;
     targetWeights: Record<string, number>;
     baselineTargetWeights?: Record<string, number>;
+    intentReasons?: Record<string, {
+      symbol: string;
+      proposedTargetWeightPct: number;
+      baselineTargetWeightPct: number;
+      confidence: number;
+      reasoning: string;
+    }> | null;
     summary?: string | null;
     reason?: string | null;
   };

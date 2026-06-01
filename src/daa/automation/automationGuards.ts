@@ -277,8 +277,16 @@ export function shouldSendAgentBriefingTelegram(config: DaaSystemConfig): boolea
 }
 
 type AgentTargetWeightPlan = {
+  agentRunId: string | null;
   targetWeights: Record<string, number>;
   baselineTargetWeights: Record<string, number>;
+  intentReasons: Record<string, {
+    symbol: string;
+    proposedTargetWeightPct: number;
+    baselineTargetWeightPct: number;
+    confidence: number;
+    reasoning: string;
+  }>;
   acceptedCount: number;
   skippedCount: number;
   reason: string;
@@ -312,6 +320,7 @@ export function buildAgentTargetWeightPlan(input: {
   );
   const targetWeights: Record<string, number> = {};
   const baselineTargetWeights: Record<string, number> = {};
+  const intentReasons: AgentTargetWeightPlan["intentReasons"] = {};
   const acceptedLabels: string[] = [];
   let skippedCount = 0;
 
@@ -333,14 +342,23 @@ export function buildAgentTargetWeightPlan(input: {
     const targetPct = Math.min(proposedPct / 100, maxPositionPct > 0 ? maxPositionPct : proposedPct / 100);
     targetWeights[canonicalAssetKey] = Number(Math.max(0, targetPct).toFixed(6));
     baselineTargetWeights[canonicalAssetKey] = Number(Math.max(0, currentTargetWeights.get(canonicalAssetKey.toUpperCase()) ?? 0).toFixed(6));
+    intentReasons[canonicalAssetKey] = {
+      symbol: symbol || canonicalAssetKey,
+      proposedTargetWeightPct: Number((targetWeights[canonicalAssetKey] * 100).toFixed(6)),
+      baselineTargetWeightPct: Number((baselineTargetWeights[canonicalAssetKey] * 100).toFixed(6)),
+      confidence,
+      reasoning: String(intent.reasoning || "").trim().slice(0, 300),
+    };
     acceptedLabels.push(`${symbol || canonicalAssetKey}→${(targetWeights[canonicalAssetKey] * 100).toFixed(1)}%`);
   }
 
   if (acceptedLabels.length === 0) return null;
   const summary = String(plan?.reasoning || "Agent 目标权重计划").trim() || "Agent 目标权重计划";
   return {
+    agentRunId: input.overlay?.agentRunId ?? null,
     targetWeights,
     baselineTargetWeights,
+    intentReasons,
     acceptedCount: acceptedLabels.length,
     skippedCount,
     reason: acceptedLabels.join(", "),

@@ -722,8 +722,10 @@ export async function generateWorkbenchRebalanceCycle(
     marketRegime: agentResult.marketRegime,
     tokensUsed: agentResult.tokensUsed,
     targetAllocationPlan: normalizedTargetAllocationWeights ? {
+      agentRunId: input.targetAllocationPlan?.agentRunId ?? null,
       targetWeights: normalizedTargetAllocationWeights,
       baselineTargetWeights: normalizedTargetAllocationBaseline,
+      intentReasons: input.targetAllocationPlan?.intentReasons ?? null,
       summary: input.targetAllocationPlan?.summary ?? null,
       reason: input.targetAllocationPlan?.reason ?? null,
     } : null,

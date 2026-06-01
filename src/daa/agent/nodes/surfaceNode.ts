@@ -20,6 +20,7 @@ import { shouldSendAgentBriefingTelegram } from "@/src/daa/automation/automation
 import { buildAutopilotCoverageSummary } from "@/src/daa/agent/autopilotCoverage";
 import { getCurrentRunId } from "@/src/daa/agent/tools/registry";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
+import { recordAgentDecisionAudits } from "@/src/daa/agent/store/agentDecisionAuditStore";
 
 /**
  * 代码直出“自动跟踪清单”（原 cognitionGaps）。
@@ -248,14 +249,21 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         const maxPositionPct = sysCfg?.config.strategy?.constraints?.maxPositionPct ?? 0.30;
 
         const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
+        const advisorHoldings = portfolio.holdings.map(h => ({
+          assetKey: h.assetKey,
+          symbol: parseDaaAssetKey(h.assetKey)?.symbol ?? h.assetKey,
+          weightPct: h.weightPct,
+          lastPrice: h.lastPrice ?? 0,
+          holdingQty: h.holdingQty ?? 0,
+          valuationBase: h.valuationBase ?? null,
+          unrealizedPnlPct: h.unrealizedPnlPct ?? null,
+          targetWeightHint: h.targetWeightHint,
+          gapPct: h.gapPct ?? null,
+        }));
+        const advisorWatchlist = state.watchlist?.candidates ?? [];
         const advisorPrompt = buildStrategyAdvisorPrompt({
-          holdings: portfolio.holdings.map(h => ({
-            assetKey: h.assetKey,
-            symbol: parseDaaAssetKey(h.assetKey)?.symbol ?? h.assetKey,
-            weightPct: h.weightPct,
-            price: h.lastPrice ?? 0,
-          })),
-          watchlist: state.watchlist?.candidates ?? [],
+          holdings: advisorHoldings,
+          watchlist: advisorWatchlist,
           theses,
           surprises: briefing.surprises,
           cognitionGaps: briefing.cognitionGaps,
@@ -293,10 +301,11 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
                 })),
             }
             : null;
+          const agentRunId = getCurrentRunId() ?? `surface-${new Date().toISOString()}`;
 
           briefing.strategyOverlay = {
             generatedAt: new Date().toISOString(),
-            agentRunId: getCurrentRunId() ?? `surface-${new Date().toISOString()}`,
+            agentRunId,
             regimeOverride: raw.regimeOverride && typeof raw.regimeOverride === "object"
               ? { ...raw.regimeOverride, ruleBasedRegime: state.market?.regime ?? "unknown" }
               : null,
@@ -306,6 +315,83 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
           // 更新 briefing token 计数
           briefing.totalTokens += overlayResult.tokensUsed;
           briefing.estimatedCost = briefing.totalTokens * DEEPSEEK_AVG_COST_PER_TOKEN;
+
+          const advisorInputSnapshot = {
+            holdings: advisorHoldings.slice(0, 30),
+            watchlist: advisorWatchlist.slice(0, 40),
+            constraints: {
+              ruleRegime: state.market?.regime ?? "unknown",
+              defaultDriftThresholdPct,
+              maxPositionPct,
+            },
+            thesisCount: theses.length,
+          };
+          const advisorEvidenceSnapshot = {
+            theses: theses.slice(0, 15).map((thread) => ({
+              id: thread.id,
+              title: thread.title,
+              conviction: thread.conviction,
+              assetKeys: thread.assetKeys,
+              invalidationConditions: thread.invalidationConditions,
+            })),
+            surprises: briefing.surprises.slice(0, 10),
+            cognitionGaps: briefing.cognitionGaps.slice(0, 10),
+          };
+          const auditInputs = [];
+          if (briefing.strategyOverlay.regimeOverride) {
+            auditInputs.push({
+              agentRunId,
+              node: "surface",
+              decisionKind: "strategy_regime_override" as const,
+              summary: `建议 regime=${briefing.strategyOverlay.regimeOverride.suggestedRegime}`,
+              reasoning: briefing.strategyOverlay.regimeOverride.reasoning,
+              confidencePct: briefing.strategyOverlay.regimeOverride.confidence,
+              inputSnapshot: advisorInputSnapshot,
+              evidenceSnapshot: advisorEvidenceSnapshot,
+              decisionPayload: briefing.strategyOverlay.regimeOverride,
+            });
+          }
+          if (targetAllocationPlan) {
+            auditInputs.push({
+              agentRunId,
+              node: "surface",
+              decisionKind: "strategy_plan_summary" as const,
+              summary: targetAllocationPlan.reasoning,
+              reasoning: targetAllocationPlan.reasoning,
+              inputSnapshot: advisorInputSnapshot,
+              evidenceSnapshot: advisorEvidenceSnapshot,
+              decisionPayload: { intentCount: targetAllocationPlan.intents.length },
+            });
+            for (const intent of targetAllocationPlan.intents) {
+              const current = advisorHoldings.find((holding) => holding.assetKey.toUpperCase() === intent.assetKey.toUpperCase());
+              auditInputs.push({
+                agentRunId,
+                node: "surface",
+                decisionKind: "strategy_target_allocation" as const,
+                assetKey: intent.assetKey,
+                symbol: intent.symbol,
+                summary: `${intent.symbol || intent.assetKey} 目标 ${intent.proposedTargetWeightPct.toFixed(2)}%`,
+                reasoning: intent.reasoning,
+                confidencePct: intent.confidence,
+                inputSnapshot: {
+                  currentHolding: current ?? null,
+                  constraints: advisorInputSnapshot.constraints,
+                },
+                evidenceSnapshot: advisorEvidenceSnapshot,
+                decisionPayload: {
+                  proposedTargetWeightPct: intent.proposedTargetWeightPct,
+                  currentTargetWeightPct: current?.targetWeightHint == null ? null : current.targetWeightHint * 100,
+                  currentWeightPct: current == null ? null : current.weightPct * 100,
+                },
+              });
+            }
+          }
+          if (auditInputs.length > 0) {
+            await recordAgentDecisionAudits(auditInputs).catch((error) => {
+              logSwallowed("cognitiveGraph.surface.decisionAudit", error);
+              return [];
+            });
+          }
         }
       } catch (e) {
         logSwallowed("cognitiveGraph.surface.advisor", e);
