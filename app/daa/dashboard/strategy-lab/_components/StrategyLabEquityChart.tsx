@@ -8,7 +8,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
+  Brush,
 } from "recharts";
 
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
@@ -43,6 +43,13 @@ const BENCHMARK_LINE_COLORS: Record<string, string> = {
   QQQ: "hsl(334 74% 62%)",
 };
 
+type LegendItem = {
+  key: string;
+  label: string;
+  color: string;
+  dashed?: boolean;
+};
+
 interface StrategyLabEquityChartProps {
   baseCurrency: string;
   chartData: Array<Record<string, string | number>>;
@@ -63,6 +70,19 @@ export function StrategyLabEquityChart({
     : Math.max(320, Math.min(960, Math.floor(window.innerWidth || 640) - 48));
   const chartWidth = chartSize.width > 0 ? chartSize.width : fallbackWidth;
   const chartHeight = chartSize.height > 0 ? chartSize.height : 300;
+  const legendItems: LegendItem[] = [
+    ...strategyResults.map((item) => ({
+      key: `strategy-${item.strategy}`,
+      label: strategyLabel(item.strategy),
+      color: STRATEGY_LINE_COLORS[item.strategy] || STRATEGY_LINE_COLORS.equalWeight,
+    })),
+    ...benchmarkResults.map((item) => ({
+      key: `benchmark-${item.symbol}`,
+      label: item.label,
+      color: BENCHMARK_LINE_COLORS[item.symbol] || CHART_COLORS.muted,
+      dashed: true,
+    })),
+  ];
 
   useEffect(() => {
     const element = containerRef.current;
@@ -90,69 +110,99 @@ export function StrategyLabEquityChart({
   }, [chartData.length]);
 
   return (
-    <DaaSurfacePanel accent="cyan" title="权益曲线" subtitle="回测期间的组合净值走势，含基准对比。" className="min-w-0" bodyClassName="min-w-0">
+    <DaaSurfacePanel accent="cyan" title="权益曲线" subtitle="回测期间的组合净值走势，含基准对比。底部滑块可拖动缩放查看局部区间。" className="min-w-0" bodyClassName="min-w-0">
       {chartData.length >= 2 ? (
-        <div ref={containerRef} className="h-[300px] min-w-0 w-full">
-          <LineChart width={chartWidth} height={chartHeight} data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke={CHART_COLORS.grid} vertical={false} />
-            <XAxis
-              dataKey="date"
-              tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value: string) => String(value).slice(5, 10)}
-            />
-            <YAxis
-              tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              width={60}
-              domain={[(min: number) => Math.floor(min * 0.995), (max: number) => Math.ceil(max * 1.005)]}
-              tickFormatter={(v: number) => formatStrategyLabCurrencyTick(v, baseCurrency)}
-            />
-            <Tooltip
-              contentStyle={daaChartTooltipContentStyle}
-              itemStyle={daaChartTooltipItemStyle}
-              labelStyle={daaChartTooltipLabelStyle}
-              cursor={{ stroke: "hsla(199,89%,60%,0.28)", strokeDasharray: "4 4" }}
-              formatter={(value: number | undefined, name?: string) => [
-                formatStrategyLabCurrencyTooltipValue(value, baseCurrency),
-                name ?? "净值",
-              ]}
-              labelFormatter={(label: unknown) => `日期: ${String(label)}`}
-            />
-            <Legend verticalAlign="bottom" height={28} iconType="line" wrapperStyle={{ fontSize: 11 }} />
-            {strategyResults.map((item) => (
-              <Line
-                key={item.strategy}
-                type="monotone"
-                dataKey={item.strategy}
-                name={strategyLabel(item.strategy)}
-                stroke={STRATEGY_LINE_COLORS[item.strategy] || STRATEGY_LINE_COLORS.equalWeight}
-                strokeWidth={2.2}
-                dot={false}
-                activeDot={{ r: 4 }}
+        <div className="space-y-3">
+          <StaticLegend items={legendItems} />
+          <div ref={containerRef} className="h-[340px] min-w-0 w-full">
+            <LineChart width={chartWidth} height={chartHeight} data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+              <CartesianGrid stroke={CHART_COLORS.grid} vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value: string) => String(value).slice(5, 10)}
               />
-            ))}
-            {benchmarkResults.map((item) => (
-              <Line
-                key={item.symbol}
-                type="monotone"
-                dataKey={strategyLabBenchmarkDataKey(item.symbol)}
-                name={item.label}
-                stroke={BENCHMARK_LINE_COLORS[item.symbol] || CHART_COLORS.muted}
-                strokeWidth={1.7}
-                strokeDasharray="5 3"
-                dot={false}
-                activeDot={{ r: 4 }}
-                connectNulls
+              <YAxis
+                tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={60}
+                domain={[(min: number) => Math.floor(min * 0.995), (max: number) => Math.ceil(max * 1.005)]}
+                tickFormatter={(v: number) => formatStrategyLabCurrencyTick(v, baseCurrency)}
               />
-            ))}
-          </LineChart>
+              <Tooltip
+                contentStyle={daaChartTooltipContentStyle}
+                itemStyle={daaChartTooltipItemStyle}
+                labelStyle={daaChartTooltipLabelStyle}
+                cursor={{ stroke: "hsla(199,89%,60%,0.28)", strokeDasharray: "4 4" }}
+                formatter={(value: number | undefined, name?: string) => [
+                  formatStrategyLabCurrencyTooltipValue(value, baseCurrency),
+                  name ?? "净值",
+                ]}
+                labelFormatter={(label: unknown) => `日期: ${String(label)}`}
+              />
+              {strategyResults.map((item) => (
+                <Line
+                  key={item.strategy}
+                  type="monotone"
+                  dataKey={item.strategy}
+                  name={strategyLabel(item.strategy)}
+                  stroke={STRATEGY_LINE_COLORS[item.strategy] || STRATEGY_LINE_COLORS.equalWeight}
+                  strokeWidth={2.2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              ))}
+              {benchmarkResults.map((item) => (
+                <Line
+                  key={item.symbol}
+                  type="monotone"
+                  dataKey={strategyLabBenchmarkDataKey(item.symbol)}
+                  name={item.label}
+                  stroke={BENCHMARK_LINE_COLORS[item.symbol] || CHART_COLORS.muted}
+                  strokeWidth={1.7}
+                  strokeDasharray="5 3"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  connectNulls
+                />
+              ))}
+              <Brush
+                dataKey="date"
+                height={24}
+                travellerWidth={8}
+                stroke="hsl(199 89% 60%)"
+                fill="rgba(15,23,42,0.04)"
+                tickFormatter={(value: string) => String(value).slice(5, 10)}
+              />
+            </LineChart>
+          </div>
         </div>
       ) : (
         <DashboardEmptyState title="数据点不足" description="权益曲线至少需要两个数据点。" className="py-10" />
       )}
     </DaaSurfacePanel>
+  );
+}
+
+function StaticLegend({ items }: { items: LegendItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[var(--muted)]">
+      {items.map((item) => (
+        <div key={item.key} className="inline-flex items-center gap-1.5">
+          <span
+            className="h-0 w-5 border-t-2"
+            style={{
+              borderColor: item.color,
+              borderTopStyle: item.dashed ? "dashed" : "solid",
+            }}
+          />
+          <span>{item.label}</span>
+        </div>
+      ))}
+    </div>
   );
 }

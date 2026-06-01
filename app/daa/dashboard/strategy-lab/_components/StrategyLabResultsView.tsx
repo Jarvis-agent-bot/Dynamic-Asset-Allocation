@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, Info } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Info, Loader2, Sparkles } from "lucide-react";
 
 import {
   DaaSurfaceMetricCard,
@@ -9,7 +10,8 @@ import {
   daaSurfaceTableCellClassName,
   daaSurfaceTableHeadClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import type { StrategyLabRunResult } from "@/src/daa/modules/strategyLab/strategyLabTypes";
+import { analyzeBacktest } from "@/src/daa/modules/strategyLab/strategyLabApi";
+import type { StrategyLabAiAnalysis, StrategyLabRunResult } from "@/src/daa/modules/strategyLab/strategyLabTypes";
 import { StrategyLabEquityChart } from "./StrategyLabEquityChart";
 import { strategyLabel, type UseStrategyLabResult } from "./useStrategyLab";
 import type { StrategyLabWarningPresentation } from "./strategyLabWarningPresentation";
@@ -24,8 +26,6 @@ export function StrategyLabResultsView({ state }: StrategyLabResultsViewProps) {
 
   return (
     <>
-      <MergedWarningsPanel summary={warningSummary} />
-
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <DaaSurfaceMetricCard
           label="总收益"
@@ -47,7 +47,9 @@ export function StrategyLabResultsView({ state }: StrategyLabResultsViewProps) {
         />
       </div>
 
-      {strategyResults.length > 1 ? <StrategyComparisonTable result={result} /> : null}
+      <BacktestAiAnalysisPanel result={result} />
+
+      {strategyResults.length > 1 || benchmarkResults.length > 0 ? <StrategyComparisonTable result={result} /> : null}
 
       <StrategyLabEquityChart
         baseCurrency={result.baseCurrency}
@@ -59,6 +61,8 @@ export function StrategyLabResultsView({ state }: StrategyLabResultsViewProps) {
       {result.attribution.perAsset.length > 0 ? <AttributionPanel result={result} /> : null}
 
       {result.attribution.rebalanceEvents.length > 0 ? <RebalanceEventsPanel result={result} /> : null}
+
+      <MergedWarningsPanel summary={warningSummary} />
     </>
   );
 }
@@ -104,7 +108,13 @@ function MergedWarningsPanel({ summary }: { summary: StrategyLabWarningPresentat
       title={`回测说明 · ${totalItems} 项`}
       icon={hasWarning ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
     >
-      <div className="space-y-3">
+      <details className="group">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-[var(--muted)]">
+          <span>默认收起详细说明，展开查看估值口径、下单约束和其他提醒。</span>
+          <span className="shrink-0 rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] text-[var(--text)] group-open:hidden">展开</span>
+          <span className="hidden shrink-0 rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] text-[var(--text)] group-open:inline">收起</span>
+        </summary>
+        <div className="mt-3 space-y-3">
         {groups.map((g) => (
           <div key={g.key}>
             <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-[var(--text)]">
@@ -113,25 +123,116 @@ function MergedWarningsPanel({ summary }: { summary: StrategyLabWarningPresentat
               <span className="text-[10px] font-normal text-[var(--faint)]">{g.items.length}</span>
             </div>
             <ul className="list-inside list-disc space-y-1 pl-1 text-xs text-[var(--muted)]">
-              {g.items.map((item) => (
+              {g.items.slice(0, 30).map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
+            {g.items.length > 30 ? (
+              <div className="mt-1 text-[11px] text-[var(--faint)]">已显示前 30 条，另有 {g.items.length - 30} 条同类说明。</div>
+            ) : null}
           </div>
         ))}
-      </div>
+        </div>
+      </details>
     </DaaSurfaceNoticeBox>
   );
 }
 
+function BacktestAiAnalysisPanel({ result }: { result: StrategyLabRunResult }) {
+  const [analysis, setAnalysis] = useState<StrategyLabAiAnalysis | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function runAnalysis() {
+    if (loading) return;
+    setLoading(true);
+    setError("");
+    try {
+      setAnalysis(await analyzeBacktest(result));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI 分析失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <DaaSurfacePanel
+      accent="cyan"
+      title="AI 回测解读"
+      subtitle="将本次回测的策略指标、基准收益、归因和约束摘要交给 AI 分析；若未配置模型，会使用本地规则解读。"
+      action={(
+        <button
+          type="button"
+          onClick={() => void runAnalysis()}
+          disabled={loading}
+          className="inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--primary)] hover:text-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {analysis ? "重新分析" : "分析回测结果"}
+        </button>
+      )}
+    >
+      {error ? <div className="rounded-[var(--radius-md)] border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-sm text-[var(--danger)]">{error}</div> : null}
+      {!analysis && !error ? (
+        <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border)] bg-[var(--surface)] px-4 py-6 text-center text-sm text-[var(--muted)]">
+          点击上方按钮生成一份面向决策的回测解读。
+        </div>
+      ) : null}
+      {analysis ? (
+        <div className="grid gap-3 lg:grid-cols-3">
+          <AiAnalysisColumn title="核心结论" items={analysis.summary} />
+          <AiAnalysisColumn title="主要风险" items={analysis.risks} />
+          <AiAnalysisColumn title="下一步建议" items={analysis.suggestions} />
+          <div className="lg:col-span-3 text-[11px] text-[var(--faint)]">
+            来源：{analysis.source === "llm" ? "LLM 分析" : "本地规则分析"}
+          </div>
+        </div>
+      ) : null}
+    </DaaSurfacePanel>
+  );
+}
+
+function AiAnalysisColumn({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      <div className="mb-2 text-xs font-semibold text-[var(--text)]">{title}</div>
+      <ul className="space-y-2 text-xs leading-5 text-[var(--muted)]">
+        {items.length > 0 ? items.map((item) => <li key={item}>• {item}</li>) : <li>暂无。</li>}
+      </ul>
+    </div>
+  );
+}
+
 function StrategyComparisonTable({ result }: { result: StrategyLabRunResult }) {
+  const benchmarkRows = result.benchmarkResults.map((item) => ({
+    key: `benchmark-${item.symbol}`,
+    name: item.label,
+    type: "基准",
+    totalReturn: item.return,
+    sharpe: null as number | null,
+    maxDrawdown: null as number | null,
+    winRate: null as number | null,
+  }));
+  const strategyRows = result.strategyResults.map((item) => ({
+    key: `strategy-${item.strategy}`,
+    name: strategyLabel(item.strategy),
+    type: "策略",
+    totalReturn: item.metrics.totalReturn,
+    sharpe: item.metrics.sharpe,
+    maxDrawdown: item.metrics.maxDrawdown,
+    winRate: item.metrics.winRate,
+  }));
+  const rows = [...strategyRows, ...benchmarkRows];
+
   return (
     <DaaSurfacePanel accent="slate" title="策略对比" subtitle="同一资产池、同一区间下的多策略回测结果。夏普通常越高越好，代表单位波动承担得到的超额收益更高；但仍需结合最大回撤、样本长度和收益稳定性一起判断。">
       <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)]">
         <table className="w-full border-collapse bg-[var(--surface)]">
           <thead>
             <tr>
-              <th className={daaSurfaceTableHeadClassName}>策略</th>
+              <th className={daaSurfaceTableHeadClassName}>名称</th>
+              <th className={daaSurfaceTableHeadClassName}>类型</th>
               <th className={`${daaSurfaceTableHeadClassName} text-right`}>总收益</th>
               <th className={`${daaSurfaceTableHeadClassName} text-right`}>夏普（越高越好）</th>
               <th className={`${daaSurfaceTableHeadClassName} text-right`}>最大回撤</th>
@@ -139,23 +240,24 @@ function StrategyComparisonTable({ result }: { result: StrategyLabRunResult }) {
             </tr>
           </thead>
           <tbody>
-            {result.strategyResults.map((item) => (
-              <tr key={item.strategy}>
-                <td className={`${daaSurfaceTableCellClassName} text-[var(--text)]`}>{strategyLabel(item.strategy)}</td>
+            {rows.map((item) => (
+              <tr key={item.key}>
+                <td className={`${daaSurfaceTableCellClassName} text-[var(--text)]`}>{item.name}</td>
+                <td className={`${daaSurfaceTableCellClassName} text-[var(--muted)]`}>{item.type}</td>
                 <td
                   className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)]`}
-                  style={{ color: item.metrics.totalReturn >= 0 ? "var(--success)" : "var(--danger)" }}
+                  style={{ color: (item.totalReturn ?? 0) >= 0 ? "var(--success)" : "var(--danger)" }}
                 >
-                  {item.metrics.totalReturn >= 0 ? "+" : ""}{(item.metrics.totalReturn * 100).toFixed(2)}%
+                  {item.totalReturn == null ? "-" : `${item.totalReturn >= 0 ? "+" : ""}${(item.totalReturn * 100).toFixed(2)}%`}
                 </td>
                 <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--text)]`}>
-                  {item.metrics.sharpe.toFixed(2)}
+                  {item.sharpe == null ? "-" : item.sharpe.toFixed(2)}
                 </td>
                 <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--muted)]`}>
-                  {(item.metrics.maxDrawdown * 100).toFixed(2)}%
+                  {item.maxDrawdown == null ? "-" : `${(item.maxDrawdown * 100).toFixed(2)}%`}
                 </td>
                 <td className={`${daaSurfaceTableCellClassName} text-right font-[var(--font-mono)] text-[var(--muted)]`}>
-                  {(item.metrics.winRate * 100).toFixed(1)}%
+                  {item.winRate == null ? "-" : `${(item.winRate * 100).toFixed(1)}%`}
                 </td>
               </tr>
             ))}

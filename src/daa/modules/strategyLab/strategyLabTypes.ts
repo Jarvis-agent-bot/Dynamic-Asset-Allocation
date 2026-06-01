@@ -80,3 +80,10 @@ export type StrategyLabHistoryItem = {
   params: StrategyLabRunParams;
   metrics: BacktestMetrics;
 };
+
+export type StrategyLabAiAnalysis = {
+  source: "llm" | "local";
+  summary: string[];
+  risks: string[];
+  suggestions: string[];
+};
