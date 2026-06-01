@@ -250,7 +250,7 @@ function WatchlistRow(props: {
           void props.onRemove?.(row);
         }}
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--faint)] transition-colors hover:bg-red-500/10 hover:text-red-300",
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger-bg)]",
           (props.disabled || props.removing) ? "cursor-not-allowed opacity-50" : "",
         )}
       >
@@ -336,7 +336,7 @@ export function WatchlistItemList(props: {
                 aria-selected={activeCategory === cat.key}
                 onClick={() => setActiveCategory(cat.key)}
                 className={cn(
-                  "rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors",
+                  "min-h-9 rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors",
                   activeCategory === cat.key
                     ? "bg-[var(--primary-bg)] text-[var(--text)]"
                     : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--elevated)]",
@@ -353,7 +353,7 @@ export function WatchlistItemList(props: {
           <select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
-            className="h-7 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--muted)] outline-none"
+            className="h-10 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--muted)] outline-none"
             aria-label="排序方式"
           >
             <option value="default">默认</option>
@@ -391,7 +391,7 @@ export function WatchlistItemList(props: {
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="mx-auto block rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+          className="mx-auto block min-h-9 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
         >
           展开剩余 {totalCount - PAGE_SIZE} 条
         </button>

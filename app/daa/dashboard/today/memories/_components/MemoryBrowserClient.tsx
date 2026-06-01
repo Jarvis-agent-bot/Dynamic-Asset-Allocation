@@ -31,9 +31,9 @@ const MEMORY_TYPES = [
 ] as const;
 
 const TYPE_COLORS: Record<string, string> = {
-  pattern: "bg-purple-500/15 text-purple-400",
-  lesson: "bg-amber-500/15 text-amber-400",
-  preference: "bg-blue-500/15 text-blue-400",
+  pattern: "bg-[var(--indigo-bg)] text-[var(--indigo)]",
+  lesson: "bg-[var(--amber-bg)] text-[var(--amber)]",
+  preference: "bg-[var(--primary-bg)] text-[var(--primary)]",
   fact: "bg-[var(--success-bg)] text-[var(--success)]",
 };
 
@@ -174,7 +174,7 @@ export default function MemoryBrowserClient() {
                 <button
                   onClick={() => handleDelete(m.id)}
                   disabled={deleting === m.id}
-                  className="shrink-0 rounded p-1.5 text-[var(--faint)] opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                  className="shrink-0 rounded p-1.5 text-[var(--faint)] opacity-0 transition-all hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger-bg)] group-hover:opacity-100 disabled:opacity-50"
                   title="删除记忆"
                 >
                   {deleting === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}

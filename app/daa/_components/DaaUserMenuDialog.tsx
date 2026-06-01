@@ -149,7 +149,7 @@ export default function DaaUserMenuDialog() {
     <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" size="sm" variant="outline">
+          <Button type="button" size="sm" variant="outline" className="min-h-10">
             <span className="max-w-[160px] truncate">{username}</span>
             <ChevronDown className="ml-1 h-4 w-4 opacity-70" />
           </Button>

@@ -113,9 +113,9 @@ export default function DashboardShell({ children }: Props) {
                 onClick={toggleSidebar}
                 aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
                 title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--faint)] transition-all hover:bg-[var(--elevated)] hover:text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-all hover:bg-[var(--elevated)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {sidebarCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+                {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
               </button>
             </div>
           </div>

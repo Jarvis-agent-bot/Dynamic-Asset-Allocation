@@ -98,7 +98,7 @@ export function WatchlistSearchBar(props: {
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSearch(); } }}
             placeholder="搜索标的 NVDA / 0700 / BTC ..."
-            className="w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--faint)]"
+            className="h-[34px] w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--faint)]"
           />
           {q ? (
             <button

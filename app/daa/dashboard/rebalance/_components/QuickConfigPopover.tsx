@@ -88,7 +88,8 @@ export function QuickConfigPopover(props: {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
+        aria-label="打开快速调参"
+        className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
         title="快速调参"
       >
         <Settings2 className="h-4 w-4" />

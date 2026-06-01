@@ -31,8 +31,8 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
   }, [active, tabs]);
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-slate-200 bg-white">
-      <div role="tablist" aria-label="资产详情信息" className="flex gap-0 overflow-x-auto border-b border-slate-100 bg-slate-50 px-2">
+    <div className="overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--card)]">
+      <div role="tablist" aria-label="资产详情信息" className="flex gap-0 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-2">
         {tabs.map((tab) => (
           <button
             type="button"
@@ -43,19 +43,19 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
             className={cn(
               "relative inline-flex h-10 shrink-0 items-center gap-1.5 px-3 text-xs font-semibold transition-colors",
               active === tab.key
-                ? "text-slate-900"
-                : "text-slate-500 hover:text-slate-900",
+                ? "text-[var(--text)]"
+                : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
             {tab.icon}
             {tab.label}
-            {tab.count ? <span className="text-slate-400">{tab.count}</span> : null}
+            {tab.count ? <span className="text-[var(--faint)]">{tab.count}</span> : null}
             {active === tab.key ? <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-[var(--primary)]" /> : null}
           </button>
         ))}
       </div>
 
-      <div role="tabpanel" className="bg-white">
+      <div role="tabpanel" className="bg-[var(--card)]">
         {active === "technical" ? (
           <AssetTechnicalPanel symbol={row.yfinanceSymbol || row.symbol} currency={row.currency} />
         ) : null}

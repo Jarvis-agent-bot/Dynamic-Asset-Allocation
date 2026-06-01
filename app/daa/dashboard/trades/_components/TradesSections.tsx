@@ -99,7 +99,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
             type="button"
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              "flex items-center gap-1 rounded-[8px] px-2 py-1 text-xs transition-colors",
+              "flex min-h-10 items-center gap-1 rounded-[8px] px-3 py-1.5 text-xs font-medium transition-colors",
               showFilters || hasActiveFilter ? "bg-[var(--primary-bg)] text-[var(--primary)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
@@ -201,7 +201,7 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
             aria-selected={tab === safeTab}
             onClick={() => model.setActiveTab(tab)}
             className={cn(
-              "rounded-[10px] px-3 py-2 text-sm transition-colors",
+              "min-h-10 rounded-[10px] px-3 py-2 text-sm transition-colors",
               tab === safeTab ? "bg-[var(--primary-bg)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >

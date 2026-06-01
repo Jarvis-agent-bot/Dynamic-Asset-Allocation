@@ -48,7 +48,7 @@ export function RebalanceMarketStrip({ marketContext }: { marketContext: DaaMark
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="inline-flex h-8 items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border)] px-2.5 text-[11px] font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+          className="inline-flex min-h-10 items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
         >
           {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           {expanded ? "收起" : "展开全部指标"}

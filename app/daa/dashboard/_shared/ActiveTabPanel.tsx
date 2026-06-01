@@ -55,7 +55,7 @@ export function ActiveTabPanel(props: {
             aria-controls={`tabpanel-${item.key}`}
             onClick={() => (props.onNavigateTab ? props.onNavigateTab(item.key) : model.setActiveTab(item.key))}
             className={cn(
-              "rounded-[12px] px-3 py-2 text-sm transition-colors",
+              "min-h-10 rounded-[12px] px-3 py-2 text-sm transition-colors",
               model.activeTab === item.key
                 ? "bg-[var(--primary-bg)] text-[var(--text)]"
                 : "text-[var(--muted)] hover:text-[var(--text)]",

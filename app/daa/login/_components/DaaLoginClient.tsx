@@ -283,9 +283,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           style={{ borderTop: "1px solid var(--border)" }}
         >
           {[
-            { value: "¥2.34M", label: "资产规模" },
-            { value: "+18.6%", label: "年化收益" },
-            { value: "0.92", label: "夏普比率" },
+            { value: "本地", label: "会话认证" },
+            { value: "风控", label: "执行前校验" },
+            { value: "复核", label: "Agent 工作流" },
           ].map((s) => (
             <div key={s.label}>
               <div
@@ -384,7 +384,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 value={email}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
-                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
+                className="min-h-11 w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
                 style={{
                   background: "var(--elevated)",
                   borderColor: "var(--border-strong)",
@@ -412,7 +412,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 value={password}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setPassword(e.target.value); setAuthError(null); }}
-                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
+                className="min-h-11 w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
                 style={{
                   background: "var(--elevated)",
                   borderColor: "var(--border-strong)",
@@ -442,7 +442,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             <button
               type="submit"
               disabled={busy || session.kind === "checking"}
-              className="w-full rounded-md py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="min-h-11 w-full rounded-md py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ background: "var(--primary)", color: "var(--bg)" }}
             >
               {busy ? (

@@ -64,23 +64,23 @@ function formatAsOf(iso: string | null): string {
 }
 
 function peTone(pe: number | null): string {
-  if (pe == null) return "text-slate-400";
-  if (pe < 0) return "text-red-600";
-  if (pe > 60) return "text-amber-600";
-  return "text-slate-800";
+  if (pe == null) return "text-[var(--faint)]";
+  if (pe < 0) return "text-[var(--danger)]";
+  if (pe > 60) return "text-[var(--amber)]";
+  return "text-[var(--text)]";
 }
 
 function debtTone(ratio: number | null): string {
-  if (ratio == null) return "text-slate-400";
-  if (ratio > 200) return "text-red-600";
-  if (ratio > 100) return "text-amber-600";
-  return "text-emerald-600";
+  if (ratio == null) return "text-[var(--faint)]";
+  if (ratio > 200) return "text-[var(--danger)]";
+  if (ratio > 100) return "text-[var(--amber)]";
+  return "text-[var(--success)]";
 }
 
 function profitTone(value: number | null): string {
-  if (value == null) return "text-slate-400";
-  if (value < 0) return "text-red-600";
-  return "text-emerald-600";
+  if (value == null) return "text-[var(--faint)]";
+  if (value < 0) return "text-[var(--danger)]";
+  return "text-[var(--success)]";
 }
 
 export function PortfolioFundamentalsTable() {
@@ -124,18 +124,18 @@ export function PortfolioFundamentalsTable() {
   }, [data]);
 
   return (
-    <section className="overflow-hidden rounded-[16px] border border-slate-200 bg-white">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+    <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)]">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
         <div className="flex items-center gap-2">
           <TableProperties className="h-4 w-4 text-[var(--primary)]" />
-          <h2 className="text-sm font-semibold text-slate-900">持仓基本面</h2>
-          <span className="text-[11px] text-slate-400">{data.length} 只 · 数据日期 {formatAsOf(asOf)}</span>
+          <h2 className="text-sm font-semibold text-[var(--text)]">持仓基本面</h2>
+          <span className="text-[11px] text-[var(--faint)]">{data.length} 只 · 数据日期 {formatAsOf(asOf)}</span>
         </div>
         <button
           type="button"
           onClick={() => void load(true)}
           disabled={refreshing || loading}
-          className="inline-flex items-center gap-1 rounded-[6px] px-2 py-1 text-[11px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+          className="inline-flex min-h-10 items-center gap-1 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)] disabled:opacity-50"
         >
           {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           刷新
@@ -143,21 +143,21 @@ export function PortfolioFundamentalsTable() {
       </header>
 
       {loading ? (
-        <div className="flex items-center gap-2 px-4 py-8 text-sm text-slate-500">
+        <div className="flex items-center gap-2 px-4 py-8 text-sm text-[var(--muted)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           加载基本面…
         </div>
       ) : null}
 
       {error ? (
-        <div className="m-4 flex items-center gap-2 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+        <div className="m-4 flex items-center gap-2 rounded-[10px] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2 text-sm text-[var(--amber)]">
           <AlertCircle className="h-4 w-4" />
           {error}
         </div>
       ) : null}
 
       {!loading && !error && sortedRows.length === 0 ? (
-        <div className="m-4 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+        <div className="m-4 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-8 text-center text-sm text-[var(--muted)]">
           暂无持仓，基本面数据待 cron_fundamentals_refresh 写入后展示
         </div>
       ) : null}
@@ -165,7 +165,7 @@ export function PortfolioFundamentalsTable() {
       {!loading && sortedRows.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500">
+            <thead className="bg-[var(--surface)] text-[11px] font-semibold text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-2.5">标的</th>
                 <th className="px-3 py-2.5 text-right">PE (TTM)</th>
@@ -177,19 +177,19 @@ export function PortfolioFundamentalsTable() {
                 <th className="px-3 py-2.5 text-right">EPS (TTM)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[var(--border)]">
               {sortedRows.map((row) => (
                 <tr key={row.assetKey} className={cn(!row.hasData && "opacity-60")}>
                   <td className="px-4 py-2.5">
-                    <div className="font-medium text-slate-900">{row.displayName}</div>
-                    <div className="font-[var(--font-mono)] text-[11px] text-slate-400">
+                    <div className="font-medium text-[var(--text)]">{row.displayName}</div>
+                    <div className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">
                       {row.symbol} · {row.market}
                     </div>
                   </td>
                   <td className={cn("px-3 py-2.5 text-right font-[var(--font-mono)]", peTone(row.pe))}>
                     {formatRatio(row.pe)}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-[var(--font-mono)] text-slate-800">
+                  <td className="px-3 py-2.5 text-right font-[var(--font-mono)] text-[var(--text)]">
                     {formatRatio(row.pb)}
                   </td>
                   <td className={cn("px-3 py-2.5 text-right font-[var(--font-mono)]", debtTone(row.debtToEquityPct))}>
@@ -198,20 +198,20 @@ export function PortfolioFundamentalsTable() {
                   <td className={cn("px-3 py-2.5 text-right font-[var(--font-mono)]", profitTone(row.freeCashflow))}>
                     {formatBigNumber(row.freeCashflow, row.currency)}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-[var(--font-mono)] text-slate-800">
+                  <td className="px-3 py-2.5 text-right font-[var(--font-mono)] text-[var(--text)]">
                     {formatBigNumber(row.totalRevenue, row.currency)}
                   </td>
                   <td className={cn("px-3 py-2.5 text-right font-[var(--font-mono)]", profitTone(row.netIncome))}>
                     {formatBigNumber(row.netIncome, row.currency)}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-[var(--font-mono)] text-slate-800">
+                  <td className="px-3 py-2.5 text-right font-[var(--font-mono)] text-[var(--text)]">
                     {formatEps(row.trailingEps, row.currency)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[11px] text-slate-400">
+          <div className="border-t border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-[11px] text-[var(--faint)]">
             数据来源 Yahoo Finance（quoteSummary）· 此处现金流字段为 Yahoo `financialData.freeCashflow` 口径，更接近杠杆自由现金流；ETF / 商品 / 加密无个股基本面
           </div>
         </div>
