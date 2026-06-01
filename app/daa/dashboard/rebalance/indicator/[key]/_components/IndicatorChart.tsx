@@ -5,14 +5,13 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
+import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 import { cn } from "@/lib/utils";
 
 const COLORS = {
   primary: "hsl(199 89% 60%)",
   muted: "hsl(215 16% 57%)",
   grid: "hsla(215,16%,57%,0.12)",
-  tooltipBg: "hsl(222 47% 11%)",
-  tooltipBorder: "hsla(215,16%,57%,0.2)",
   band: "hsla(199,89%,60%,0.08)",
 };
 
@@ -98,9 +97,9 @@ export function IndicatorChart(props: {
               tickFormatter={(v: number) => `${v.toFixed(props.unit === "x" ? 2 : 1)}${props.unit === "%" ? "%" : ""}`}
             />
             <Tooltip
-              contentStyle={{ backgroundColor: COLORS.tooltipBg, border: `1px solid ${COLORS.tooltipBorder}`, borderRadius: 10, color: "#e2e8f0" }}
-              itemStyle={{ color: "#e2e8f0" }}
-              labelStyle={{ color: "#94a3b8" }}
+              contentStyle={daaChartTooltipContentStyle}
+              itemStyle={daaChartTooltipItemStyle}
+              labelStyle={daaChartTooltipLabelStyle}
               formatter={tooltipFormatter}
               labelFormatter={(l) => `日期: ${l}`}
             />

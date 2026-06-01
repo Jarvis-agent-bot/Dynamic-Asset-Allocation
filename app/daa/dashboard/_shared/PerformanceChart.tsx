@@ -13,6 +13,7 @@ import {
 } from "recharts";
 
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -45,10 +46,6 @@ type EquityPoint = {
 const CHART_COLORS = {
   /** var(--muted) — 坐标轴刻度文字 */
   muted: "hsl(215 16% 57%)",
-  /** var(--foreground) — 工具提示背景 */
-  tooltipBg: "hsl(222 47% 11%)",
-  /** var(--border) — 工具提示边框 */
-  tooltipBorder: "hsla(215,16%,57%,0.2)",
   /** 网格线 */
   grid: "hsla(215,16%,57%,0.12)",
   /** var(--primary) / 主图线 */
@@ -375,11 +372,9 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
               tickFormatter={(v: number) => mode === "equity" ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${v.toFixed(0)}`}
             />
             <Tooltip
-              contentStyle={{
-                background: CHART_COLORS.tooltipBg,
-                border: `1px solid ${CHART_COLORS.tooltipBorder}`,
-                borderRadius: 14,
-              }}
+              contentStyle={daaChartTooltipContentStyle}
+              itemStyle={daaChartTooltipItemStyle}
+              labelStyle={daaChartTooltipLabelStyle}
               formatter={(value: number | undefined, name?: string) => [
                 mode === "equity"
                   ? `$${(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`

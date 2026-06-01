@@ -13,6 +13,7 @@ import {
 
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { DaaSurfacePanel } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 import type {
   StrategyLabBenchmarkResult,
   StrategyLabStrategyResult,
@@ -26,8 +27,6 @@ import { strategyLabel } from "./useStrategyLab";
 
 const CHART_COLORS = {
   muted: "hsl(215 16% 57%)",
-  tooltipBg: "hsl(222 47% 11%)",
-  tooltipBorder: "hsla(215,16%,57%,0.2)",
   grid: "hsla(215,16%,57%,0.12)",
 } as const;
 
@@ -112,11 +111,9 @@ export function StrategyLabEquityChart({
               tickFormatter={(v: number) => formatStrategyLabCurrencyTick(v, baseCurrency)}
             />
             <Tooltip
-              contentStyle={{
-                background: CHART_COLORS.tooltipBg,
-                border: `1px solid ${CHART_COLORS.tooltipBorder}`,
-                borderRadius: 14,
-              }}
+              contentStyle={daaChartTooltipContentStyle}
+              itemStyle={daaChartTooltipItemStyle}
+              labelStyle={daaChartTooltipLabelStyle}
               cursor={{ stroke: "hsla(199,89%,60%,0.28)", strokeDasharray: "4 4" }}
               formatter={(value: number | undefined, name?: string) => [
                 formatStrategyLabCurrencyTooltipValue(value, baseCurrency),

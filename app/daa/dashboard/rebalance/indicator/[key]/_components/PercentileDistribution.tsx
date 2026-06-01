@@ -2,13 +2,13 @@
 
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from "recharts";
 import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
+import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 
 const COLORS = {
   bar: "hsla(199,89%,60%,0.4)",
   barHighlight: "hsl(199 89% 60%)",
   muted: "hsl(215 16% 57%)",
   grid: "hsla(215,16%,57%,0.12)",
-  tooltipBg: "hsl(222 47% 11%)",
 };
 
 type Bin = { min: number; max: number; count: number };
@@ -49,7 +49,9 @@ export function PercentileDistribution(props: {
             <XAxis dataKey="label" tick={false} axisLine={false} tickLine={false} />
             <YAxis hide />
             <Tooltip
-              contentStyle={{ backgroundColor: COLORS.tooltipBg, border: "1px solid hsla(215,16%,57%,0.2)", borderRadius: 8, fontSize: 11, color: "#e2e8f0" }}
+              contentStyle={{ ...daaChartTooltipContentStyle, fontSize: 11 }}
+              itemStyle={daaChartTooltipItemStyle}
+              labelStyle={daaChartTooltipLabelStyle}
               formatter={tooltipFormatter}
               labelFormatter={(l) => `区间: ${l}${props.unit}`}
             />

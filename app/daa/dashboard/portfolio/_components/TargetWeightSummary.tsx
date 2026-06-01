@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
+import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 import {
   DaaSurfaceActionButton,
   DaaSurfacePanel,
@@ -181,12 +182,9 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(222 47% 11%)",
-                  border: "1px solid hsla(215,16%,57%,0.2)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
+                contentStyle={{ ...daaChartTooltipContentStyle, fontSize: 12 }}
+                itemStyle={daaChartTooltipItemStyle}
+                labelStyle={daaChartTooltipLabelStyle}
                 formatter={tooltipFormatter}
               />
             </PieChart>

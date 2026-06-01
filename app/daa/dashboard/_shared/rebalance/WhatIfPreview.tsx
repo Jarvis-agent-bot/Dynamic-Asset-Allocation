@@ -6,6 +6,7 @@ import type { Formatter, NameType, ValueType } from "recharts/types/component/De
 import { Loader2 } from "lucide-react";
 import { DaaSurfacePanel, DaaSurfaceMiniStat, daaSurfaceSubtlePanelClassName } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatPercent, formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
+import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 import { cn } from "@/lib/utils";
 
 const COLORS = [
@@ -116,7 +117,9 @@ export function WhatIfPreview(props: WhatIfPreviewProps) {
             {items.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
           </Pie>
           <Tooltip
-            contentStyle={{ backgroundColor: "hsl(222 47% 11%)", border: "1px solid hsla(215,16%,57%,0.2)", borderRadius: 8, fontSize: 11 }}
+            contentStyle={{ ...daaChartTooltipContentStyle, fontSize: 11 }}
+            itemStyle={daaChartTooltipItemStyle}
+            labelStyle={daaChartTooltipLabelStyle}
             formatter={valueFormatter}
           />
         </PieChart>
