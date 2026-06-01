@@ -73,8 +73,8 @@ function SidebarLink(props: {
       title={collapsed ? item.label : undefined}
       onClick={onNavigate}
       className={cn(
-        "group relative flex items-center rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        collapsed ? "mx-auto h-10 w-10 justify-center" : "w-full gap-3 px-3 py-2.5",
+        "group relative flex items-center rounded-xl transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        collapsed ? "h-10 w-10 justify-center" : "h-10 w-full gap-3 px-3",
         isActive
           ? "bg-[var(--hover)] text-[var(--text)]"
           : "text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]",
@@ -88,7 +88,7 @@ function SidebarLink(props: {
       <item.Icon
         className={cn(
           "h-[18px] w-[18px] shrink-0 transition-colors duration-200",
-          isActive ? "text-[var(--primary)]" : "text-[var(--faint)] group-hover:text-[var(--muted)]",
+          isActive ? "text-[var(--primary)]" : "text-[var(--muted)] group-hover:text-[var(--text)]",
         )}
         aria-hidden="true"
       />
@@ -116,7 +116,7 @@ export function DaaSidebarNav({ collapsed = false, onNavigate }: SidebarNavProps
 
   return (
     <TooltipProvider delayDuration={120}>
-      <nav className="flex flex-col gap-1" aria-label="DAA 主导航">
+      <nav className={cn("flex flex-col gap-1", collapsed ? "items-center" : "items-stretch")} aria-label="DAA 主导航">
         {items.map((item) => (
           <SidebarLink
             key={item.key}

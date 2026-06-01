@@ -57,10 +57,12 @@ function resolveSection(pathname: string): string {
 export default function DashboardShell({ children }: Props) {
   const pathname = usePathname() || "/daa/dashboard/portfolio";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarReady, setSidebarReady] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("daa:sidebar:collapsed");
     if (stored === "0") setSidebarCollapsed(false);
+    setSidebarReady(true);
   }, []);
 
   const currentSection = useMemo(() => SECTION_META[resolveSection(pathname)] ?? DEFAULT_SECTION_META, [pathname]);
@@ -82,17 +84,17 @@ export default function DashboardShell({ children }: Props) {
         跳转到主内容
       </a>
 
-      <div className="flex min-h-screen w-full overflow-x-clip bg-transparent">
+      <div className="flex min-h-screen w-full overflow-x-hidden bg-transparent">
         {/* ─── 侧边栏（Claude 风格：无边框、微妙背景差、圆角导航） ─── */}
         <aside
           className={cn(
-            "daa-scrollbar hidden h-screen shrink-0 transition-[width] duration-300 ease-out lg:sticky lg:top-0 lg:flex lg:flex-col",
-            "bg-[var(--surface)]",
-            sidebarCollapsed ? "w-[60px]" : "w-[220px]",
+            "daa-scrollbar hidden h-screen shrink-0 overflow-hidden border-r border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-0 lg:flex lg:flex-col",
+            sidebarReady ? "transition-[width] duration-200 ease-out" : "transition-none",
+            sidebarCollapsed ? "w-[68px]" : "w-[232px]",
           )}
         >
           {/* 顶部：Logo + 品牌名 + 折叠按钮 */}
-          <div className={cn("flex-shrink-0", sidebarCollapsed ? "px-2.5 py-4" : "px-3.5 py-4")}>
+          <div className={cn("flex-shrink-0", sidebarCollapsed ? "px-3 py-4" : "px-4 py-4")}>
             <div className={cn("flex items-center", sidebarCollapsed ? "flex-col gap-3" : "gap-2.5")}>
               <Link
                 href="/daa/dashboard/portfolio"
@@ -103,7 +105,7 @@ export default function DashboardShell({ children }: Props) {
               </Link>
 
               {!sidebarCollapsed ? (
-                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-[var(--text)]">
                   {DAA_BRAND_NAME}
                 </span>
               ) : null}
@@ -113,7 +115,7 @@ export default function DashboardShell({ children }: Props) {
                 onClick={toggleSidebar}
                 aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
                 title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-all hover:bg-[var(--elevated)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
               </button>
@@ -121,7 +123,7 @@ export default function DashboardShell({ children }: Props) {
           </div>
 
           {/* 导航区 */}
-          <div className={cn("flex-1 overflow-y-auto", sidebarCollapsed ? "px-1.5 py-1" : "px-2.5 py-1")}>
+          <div className={cn("flex-1 overflow-y-auto", sidebarCollapsed ? "px-3 py-1" : "px-3 py-1")}>
             <DaaSidebarNav collapsed={sidebarCollapsed} />
           </div>
 
@@ -140,7 +142,7 @@ export default function DashboardShell({ children }: Props) {
           ) : null}
         </aside>
 
-        <main className="min-w-0 flex-1 overflow-x-clip">
+        <main className="min-w-0 max-w-full flex-1 overflow-x-hidden">
           {/* ─── 顶部栏（桌面）─── */}
           <header className="sticky top-0 z-30 hidden border-b border-[var(--elevated)] bg-[var(--surface)] backdrop-blur-xl lg:block">
             <div className="flex h-12 items-center gap-4 px-6">
@@ -170,9 +172,9 @@ export default function DashboardShell({ children }: Props) {
 
           <section
             id="daa-dashboard-main-content"
-            className="min-w-0 w-full max-w-full overflow-x-clip px-4 py-5 sm:px-5 lg:px-7 lg:py-6"
+            className="min-w-0 w-full max-w-full overflow-x-hidden px-4 py-5 sm:px-5 lg:px-7 lg:py-6 2xl:px-9"
           >
-            <div className="mx-auto max-w-[1440px]">{children}</div>
+            <div className="w-full min-w-0">{children}</div>
           </section>
         </main>
       </div>

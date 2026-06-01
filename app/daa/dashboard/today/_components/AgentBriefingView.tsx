@@ -275,7 +275,9 @@ export default function AgentBriefingView() {
     <DaaSurfacePanel
       accent="cyan"
       title="今日复核"
-      subtitle="按类型分栏排列，先处理左列的新变化，再回头扫缺口与风险。"
+      subtitle="桌面看板按优先级展开：先看新变化，再处理仓位缺口与论点风险。"
+      className="w-full"
+      bodyClassName="px-5 py-5 sm:px-6 xl:px-7"
       action={(
         <div className="flex items-center gap-2">
           {!hasTheses ? (
@@ -302,8 +304,8 @@ export default function AgentBriefingView() {
         </div>
       )}
     >
-      <div className="space-y-5">
-        <div className="grid gap-4 border-b border-[var(--border)] pb-4 sm:grid-cols-4">
+      <div className="space-y-6">
+        <div className="grid gap-3 border-b border-[var(--border)] pb-5 md:grid-cols-2 xl:grid-cols-4">
           <SummaryStat label="共计待复核" value={totalToReview} hint={hasTheses ? "按下方三列优先处理" : "Agent 未初始化"} />
           <SummaryStat label="新变化" value={sortedBuckets.surprises.length} hint={sortedBuckets.surprises.filter((s) => s.severityScore >= 8).length > 0 ? `${sortedBuckets.surprises.filter((s) => s.severityScore >= 8).length} 条高重要度` : "暂无紧急"} />
           <SummaryStat label="仓位缺口" value={sortedBuckets.gaps.length} hint={sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length > 0 ? `${sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length} 条高权重` : "全部已复核"} />
@@ -350,7 +352,7 @@ export default function AgentBriefingView() {
         ) : null}
 
         {status?.latestRun ? (
-          <div className="text-xs leading-5 text-[var(--faint)]">
+          <div className="text-xs leading-5 text-[var(--muted)]">
             状态 {status.latestRun.status} · {status.latestRun.totalTokens} tokens
             {briefing?.estimatedCost ? ` · $${briefing.estimatedCost.toFixed(4)}` : ""}
             {status.memoryCount > 0 ? (
@@ -370,10 +372,10 @@ export default function AgentBriefingView() {
 
 function SummaryStat({ label, value, hint }: { label: string; value: string | number; hint: string }) {
   return (
-    <div className="min-w-0">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">{label}</div>
-      <div className="mt-1 truncate font-[var(--font-mono)] text-lg text-[var(--text)]">{value}</div>
-      <div className="mt-1 truncate text-xs text-[var(--muted)]">{hint}</div>
+    <div className="min-w-0 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">{label}</div>
+      <div className="mt-1.5 truncate font-[var(--font-mono)] text-xl leading-7 text-[var(--text)]">{value}</div>
+      <div className="mt-1 truncate text-xs leading-5 text-[var(--muted)]">{hint}</div>
     </div>
   );
 }
@@ -387,7 +389,7 @@ interface BriefingBuckets {
 
 function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid gap-4 xl:grid-cols-[1.08fr_1fr_1fr]">
       <KanbanColumn
         icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
         title="新变化"
@@ -447,23 +449,23 @@ function KanbanColumn({
 }) {
   const hasChildren = Array.isArray(children) ? children.flat().some(Boolean) : Boolean(children);
   return (
-    <section className="flex min-w-0 flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
-      <header className="flex items-start justify-between gap-2 border-b border-[var(--border)] px-3.5 py-3">
+    <section className="flex min-w-0 flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[inset_0_1px_0_var(--surface)]">
+      <header className="flex items-start justify-between gap-2 border-b border-[var(--border)] px-4 py-3.5">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text)]">
             {icon}
             {title}
             <span className="rounded-full bg-[var(--elevated)] px-1.5 py-0.5 font-[var(--font-mono)] text-[11px] text-[var(--muted)]">{count}</span>
           </div>
-          <div className="mt-1 text-[11px] leading-4 text-[var(--faint)]">{subtitle}</div>
+          <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{subtitle}</div>
         </div>
       </header>
-      <div className="flex flex-col gap-2 p-2.5">
+      <div className="flex flex-col gap-2.5 p-3">
         {hasChildren ? children : (
           <div className="px-2 py-6 text-center text-xs text-[var(--muted)]">{emptyText}</div>
         )}
         {count > COLUMN_LIMIT ? (
-          <div className="px-2 pt-1 text-[11px] text-[var(--faint)]">
+          <div className="px-2 pt-1 text-xs text-[var(--muted)]">
             另有 {count - COLUMN_LIMIT} 条未显示
           </div>
         ) : null}
@@ -496,14 +498,14 @@ function CardShell({
   );
 
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--elevated)]/55 px-3.5 py-3">
       <div className="flex items-center justify-between gap-2">
         <ActionBadge tone={action.tone}>{action.label}</ActionBadge>
-        {meta ? <span className="truncate text-[11px] text-[var(--faint)]">{meta}</span> : null}
+        {meta ? <span className="truncate text-[11px] text-[var(--muted)]">{meta}</span> : null}
       </div>
-      <div className="mt-1.5 text-sm leading-5">{titleNode}</div>
-      {detail ? <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{detail}</div> : null}
-      {hint ? <div className="mt-1 text-xs leading-5 text-[var(--primary)]">{hint}</div> : null}
+      <div className="mt-2 text-sm leading-5">{titleNode}</div>
+      {detail ? <div className="mt-1.5 line-clamp-3 text-[13px] leading-5 text-[var(--muted)]">{detail}</div> : null}
+      {hint ? <div className="mt-1.5 text-[13px] leading-5 text-[var(--primary)]">{hint}</div> : null}
     </div>
   );
 }
@@ -576,13 +578,13 @@ function MindChangeSection({ conditions }: { conditions: MindChangeCondition[] }
           <div key={`${condition.thesisTitle}-${index}`} className="text-sm leading-6">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-[var(--text)]">{condition.thesisTitle}</span>
-              <span className="text-xs text-[var(--faint)]">{condition.currentConviction}</span>
+              <span className="text-xs text-[var(--muted)]">{condition.currentConviction}</span>
             </div>
             <div className="mt-1 text-xs leading-5 text-[var(--muted)]">
               {condition.conditions.slice(0, 2).join("；")}
             </div>
             {condition.monitoringIndicators.length > 0 ? (
-              <div className="mt-1 text-[11px] text-[var(--faint)]">
+              <div className="mt-1 text-xs text-[var(--muted)]">
                 观察：{condition.monitoringIndicators.slice(0, 4).join(" / ")}
               </div>
             ) : null}
