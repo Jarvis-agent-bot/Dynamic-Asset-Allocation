@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   Activity,
   AlertTriangle,
@@ -17,11 +18,20 @@ import type { ComponentType } from "react";
 
 import { useState } from "react";
 
+import { SkeletonChart } from "@/app/daa/dashboard/_components/SkeletonPatterns";
 import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DaaSurfaceActionButton, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { PortfolioCashEntryPopover } from "./PortfolioCashEntryPopover";
+
+const LazyPerformanceChart = dynamic(
+  () => import("@/app/daa/dashboard/_shared/PerformanceChart").then((mod) => mod.PerformanceChart),
+  {
+    ssr: false,
+    loading: () => <SkeletonChart />,
+  },
+);
 
 type HomeAction = {
   label: string;
@@ -100,6 +110,54 @@ function toneClass(tone: HomeAction["tone"]) {
   return "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
 }
 
+type TargetAllocationSnapshot = {
+  targetWeights?: Record<string, unknown> | null;
+  baselineTargetWeights?: Record<string, unknown> | null;
+  summary?: unknown;
+  reason?: unknown;
+};
+
+function getTargetAllocationSnapshot(cycle: RebalanceCycle | null | undefined): TargetAllocationSnapshot | null {
+  const snapshot = cycle?.agentDecisionSnapshot as (RebalanceCycle["agentDecisionSnapshot"] & {
+    targetAllocationPlan?: TargetAllocationSnapshot | null;
+  }) | null | undefined;
+  const plan = snapshot?.targetAllocationPlan;
+  return plan && typeof plan === "object" ? plan : null;
+}
+
+function readPlanWeightPct(weights: Record<string, unknown> | null | undefined, assetKey: string): number | null {
+  const raw = weights?.[assetKey.toUpperCase()];
+  const value = Number(raw);
+  return Number.isFinite(value) ? value * 100 : null;
+}
+
+function compactReason(text: unknown, maxLength = 96): string | null {
+  const normalized = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
+}
+
+function resolveMaxDriftReason(input: {
+  row: AssetUniverseView | undefined;
+  latestCycle: RebalanceCycle | null | undefined;
+}): string {
+  if (!input.row) return "目标权重设置后会记录偏离来源。";
+
+  const plan = getTargetAllocationSnapshot(input.latestCycle);
+  const plannedPct = readPlanWeightPct(plan?.targetWeights, input.row.assetKey);
+  const baselinePct = readPlanWeightPct(plan?.baselineTargetWeights, input.row.assetKey);
+  if (plannedPct != null && Math.abs(plannedPct - input.row.targetWeightPct) <= 0.05) {
+    const reason = compactReason(plan?.summary) || compactReason(plan?.reason);
+    const baseline = baselinePct != null ? `原目标 ${formatPercent(baselinePct)} -> ` : "";
+    return `${baseline}Agent 目标 ${formatPercent(plannedPct)}${reason ? `；${reason}` : ""}`;
+  }
+
+  const triggerReason = compactReason(input.latestCycle?.triggerReason, 120);
+  if (triggerReason) return `最近周期记录：${triggerReason}`;
+
+  return "当前只记录了目标权重数值，未找到对应的 Agent 或调仓周期原因。";
+}
+
 export function PortfolioHomeOverview(props: {
   baseCurrency: string;
   totalEquity: number;
@@ -109,6 +167,9 @@ export function PortfolioHomeOverview(props: {
   holdingCount: number;
   watchlistCount: number;
   rows: AssetUniverseView[];
+  snapshots: Array<{ ts: string; totalEquity: number }>;
+  cashFlowEvents?: Array<{ ts: string; side: "deposit" | "withdraw"; amount: number }>;
+  equityDelta: { dayChange: number | null; dayChangePct: number | null; weekChange: number | null; weekChangePct: number | null } | null;
   latestCycle?: RebalanceCycle | null;
   refreshing: boolean;
   priceStreamConnected?: boolean;
@@ -131,6 +192,7 @@ export function PortfolioHomeOverview(props: {
     .filter((row) => row.gapPct != null)
     .sort((a, b) => Math.abs(b.gapPct ?? 0) - Math.abs(a.gapPct ?? 0))[0];
   const maxDriftPct = Math.abs(maxDriftRow?.gapPct ?? 0);
+  const maxDriftReason = resolveMaxDriftReason({ row: maxDriftRow, latestCycle: props.latestCycle });
   const priceIssueCount = props.rows.filter((row) => row.priceStatus === "missing" || row.priceStatus === "stale").length;
   const primaryAction = resolvePrimaryAction({
     totalEquity: props.totalEquity,
@@ -148,15 +210,15 @@ export function PortfolioHomeOverview(props: {
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--surface),var(--surface)_58%,var(--elevated))] shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+    <section className="relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--card),var(--surface)_58%,var(--elevated))] shadow-[0_18px_46px_rgba(15,23,42,0.08)]">
       <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--primary),var(--amber),transparent)]" />
-      <div className="grid gap-0 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+      <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.42fr)]">
         <div className="border-b border-[var(--border)] p-5 sm:p-6 xl:border-b-0 xl:border-r">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
-                资产中枢
+                资产中枢 · 权益走势
               </div>
               <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-2">
                 <div className="font-[var(--font-mono)] text-[34px] leading-none tracking-[-0.03em] text-[var(--text)] sm:text-[42px]">
@@ -194,9 +256,53 @@ export function PortfolioHomeOverview(props: {
               </div>
             ))}
           </div>
+
+          <div className="mt-5 rounded-[16px] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+                  <LineChart className="h-4 w-4 text-[var(--primary)]" />
+                  当前项目权益走势
+                </div>
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  默认显示收益率，并提供标普 500 / 纳斯达克 100 基准对比
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {props.equityDelta?.dayChangePct != null ? (
+                  <span className={cn(
+                    "rounded-full border px-2.5 py-1 font-[var(--font-mono)]",
+                    props.equityDelta.dayChangePct >= 0
+                      ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]"
+                      : "border-[rgba(239,68,68,0.22)] bg-[rgba(239,68,68,0.12)] text-[rgb(248,113,113)]",
+                  )}>
+                    当日 {props.equityDelta.dayChangePct >= 0 ? "+" : ""}{props.equityDelta.dayChangePct.toFixed(2)}%
+                  </span>
+                ) : null}
+                {props.equityDelta?.weekChangePct != null ? (
+                  <span className={cn(
+                    "rounded-full border px-2.5 py-1 font-[var(--font-mono)]",
+                    props.equityDelta.weekChangePct >= 0
+                      ? "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]"
+                      : "border-[rgba(239,68,68,0.22)] bg-[rgba(239,68,68,0.12)] text-[rgb(248,113,113)]",
+                  )}>
+                    近 7 天 {props.equityDelta.weekChangePct >= 0 ? "+" : ""}{props.equityDelta.weekChangePct.toFixed(2)}%
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <LazyPerformanceChart
+                snapshots={props.snapshots}
+                cashFlowEvents={props.cashFlowEvents}
+                mode="twr"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="p-5 sm:p-6">
+        <div className="bg-[var(--surface)] p-5 sm:p-6">
           <div className={cn("inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]", toneClass(primaryAction.tone))}>
             下一步
           </div>
@@ -283,7 +389,7 @@ export function PortfolioHomeOverview(props: {
             <DaaSurfaceStatusPill tone={cycleStatusTone(props.latestCycle)}>{latestCycleStatus}</DaaSurfaceStatusPill>
           </div>
           <div className="mt-5 space-y-3">
-            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--card)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">最大偏离</div>
               <div className="mt-2 flex items-end justify-between gap-3">
                 <div className="min-w-0">
@@ -298,6 +404,9 @@ export function PortfolioHomeOverview(props: {
                 )}>
                   {maxDriftRow ? formatPercent(maxDriftRow.gapPct ?? 0) : "--"}
                 </div>
+              </div>
+              <div className="mt-3 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">
+                {maxDriftReason}
               </div>
             </div>
             <button

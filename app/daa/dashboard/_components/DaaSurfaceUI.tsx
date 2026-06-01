@@ -355,19 +355,19 @@ export const DaaSurfaceActionButton = forwardRef<HTMLButtonElement, ButtonHTMLAt
   const toneClasses = tone === "primary"
     ? "border-transparent bg-[var(--primary)] text-[var(--bg)] hover:opacity-90"
     : tone === "success"
-      ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)] hover:border-[var(--success-border)] hover:bg-[var(--success-bg)]"
+      ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)] hover:border-[var(--success)]/45 hover:bg-[rgba(22,163,74,0.12)]"
       : tone === "warning"
-        ? "border-amber-400/24 bg-amber-500/10 text-amber-200 hover:border-amber-300/42 hover:bg-amber-500/14"
+        ? "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)] hover:border-[var(--amber)]/45 hover:bg-[rgba(245,158,11,0.13)]"
         : tone === "danger"
-          ? "border-rose-400/22 bg-rose-500/10 text-rose-200 hover:border-rose-300/42 hover:bg-rose-500/14"
-          : "border-[var(--border-strong)] bg-[var(--elevated)] text-[var(--muted)] hover:border-[var(--primary)]/30 hover:text-[var(--text)]";
+          ? "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)] hover:border-[var(--danger)]/45 hover:bg-[rgba(220,38,38,0.12)]"
+          : "border-[var(--border-strong)] bg-[var(--card)] text-[var(--text)] hover:border-[var(--primary)]/35 hover:bg-[var(--hover)]";
 
   return (
     <button
       ref={ref}
       type="button"
       className={cn(
-        "inline-flex items-center gap-2 rounded-[var(--radius-sm)] border px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-bg)] disabled:cursor-not-allowed disabled:opacity-60",
         toneClasses,
         className,
       )}

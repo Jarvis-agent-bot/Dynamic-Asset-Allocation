@@ -7,7 +7,6 @@ import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel"
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 
-import { PortfolioStatus } from "@/app/daa/dashboard/_shared/PortfolioStatus";
 import { ActiveTabPanel } from "@/app/daa/dashboard/_shared/ActiveTabPanel";
 import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
 import { resolveTabFromLocation } from "@/app/daa/dashboard/_shared/dashboardNavigation";
@@ -54,6 +53,7 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
   return (
     <div className="space-y-4">
       {wbModel.bootstrap ? (
+        <SectionErrorBoundary sectionName="资产中枢">
         <PortfolioHomeOverview
           baseCurrency={baseCurrency}
           totalEquity={wbModel.totalEquity}
@@ -63,6 +63,9 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
           holdingCount={wbModel.summary.holdingAssets}
           watchlistCount={wbModel.summary.watchlistAssets}
           rows={wbModel.tableProps.rows}
+          snapshots={wbModel.snapshots || []}
+          cashFlowEvents={wbModel.cashLedger?.filter((e) => (e.side === "deposit" || e.side === "withdraw") && e.entryKind === "manual").map((e) => ({ ts: e.ts, side: e.side as "deposit" | "withdraw", amount: e.amountInAccountBase ?? e.amount })) ?? []}
+          equityDelta={wbModel.equityDelta}
           latestCycle={wbModel.bootstrap.latestCycle}
           refreshing={wbModel.refreshing}
           priceStreamConnected={wbModel.priceStreamConnected}
@@ -70,6 +73,7 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
           onCashRefresh={() => void wbModel.loadBootstrap(true)}
           onOpenRebalance={navigateToRebalance}
         />
+        </SectionErrorBoundary>
       ) : null}
 
       {wbModel.bootstrap ? (
@@ -79,31 +83,9 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
       ) : null}
 
       {wbModel.bootstrap ? (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
-          <SectionErrorBoundary sectionName="资产列表">
-            <ActiveTabPanel model={wbModel} onNavigateTab={navigateToTab} />
-          </SectionErrorBoundary>
-
-          <SectionErrorBoundary sectionName="组合状态">
-            <div className="lg:sticky lg:top-[80px] lg:self-start">
-              <PortfolioStatus
-                baseCurrency={baseCurrency}
-                totalEquity={wbModel.totalEquity}
-                holdingsValue={wbModel.holdingsValue}
-                availableCashValue={wbModel.availableCashValue}
-                frozenCashValue={wbModel.frozenCashValue}
-                equityDelta={wbModel.equityDelta}
-                snapshots={wbModel.snapshots || []}
-                cashFlowEvents={wbModel.cashLedger?.filter((e) => (e.side === "deposit" || e.side === "withdraw") && e.entryKind === "manual").map((e) => ({ ts: e.ts, side: e.side as "deposit" | "withdraw", amount: e.amountInAccountBase ?? e.amount })) ?? []}
-                allocationSummary={wbModel.allocationSummary}
-                loading={wbModel.loading && !wbModel.bootstrap}
-                refreshing={wbModel.refreshing}
-                priceStreamConnected={wbModel.priceStreamConnected}
-                onRefresh={() => void wbModel.loadBootstrap(true)}
-              />
-            </div>
-          </SectionErrorBoundary>
-        </div>
+        <SectionErrorBoundary sectionName="资产列表">
+          <ActiveTabPanel model={wbModel} onNavigateTab={navigateToTab} />
+        </SectionErrorBoundary>
       ) : null}
 
       <DashboardDialogs {...wbModel.dialogProps} />
