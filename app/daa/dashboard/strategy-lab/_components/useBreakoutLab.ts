@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { runBreakoutBacktest } from "@/src/daa/modules/strategyLab/breakoutLabApi";
 import type {
@@ -78,6 +78,7 @@ export function useBreakoutLab(dateDefaults: StrategyLabDateDefaults): UseBreako
   const [error, setError] = useState("");
 
   const parsedAssets = parseAssets(config.assetsText);
+  const runReqIdRef = useRef(0);
 
   const run = useCallback(async () => {
     if (running) return;
@@ -86,6 +87,15 @@ export function useBreakoutLab(dateDefaults: StrategyLabDateDefaults): UseBreako
       setError("请至少输入一个标的");
       return;
     }
+    if (config.maxSlots < 1) {
+      setError("最大持仓数需 ≥ 1");
+      return;
+    }
+    if (config.maFast >= config.maSlow) {
+      setError("快线周期需小于慢线周期");
+      return;
+    }
+    const reqId = ++runReqIdRef.current;
     setRunning(true);
     setError("");
     setResult(null);
@@ -112,11 +122,13 @@ export function useBreakoutLab(dateDefaults: StrategyLabDateDefaults): UseBreako
         },
       };
       const res = await runBreakoutBacktest(params);
+      if (reqId !== runReqIdRef.current) return;
       setResult(res);
     } catch (e) {
+      if (reqId !== runReqIdRef.current) return;
       setError(e instanceof Error ? e.message : "回测执行失败");
     } finally {
-      setRunning(false);
+      if (reqId === runReqIdRef.current) setRunning(false);
     }
   }, [running, config]);
 

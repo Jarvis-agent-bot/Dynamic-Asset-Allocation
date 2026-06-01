@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { DashboardEmptyState, DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import {
   DaaSurfaceEmptyState,
   DaaSurfacePageHeader,
@@ -80,7 +81,9 @@ export default function StrategyLabPageClient({
       </div>
 
       {mode === "breakout" ? (
-        <BreakoutLabView dateDefaults={dateDefaults} />
+        <SectionErrorBoundary sectionName="放量突破回测">
+          <BreakoutLabView dateDefaults={dateDefaults} />
+        </SectionErrorBoundary>
       ) : (
         <>
           <StrategyLabActionBar
@@ -104,7 +107,9 @@ export default function StrategyLabPageClient({
               ) : null}
 
               {state.result && !state.running ? (
-                <StrategyLabResultsView state={state} />
+                <SectionErrorBoundary sectionName="回测结果">
+                  <StrategyLabResultsView state={state} />
+                </SectionErrorBoundary>
               ) : null}
 
               {!state.result && !state.running ? (

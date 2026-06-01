@@ -15,7 +15,7 @@ export function SettingsDataSourcesSection(props: {
   const { config, setConfig } = props;
 
   return (
-    <section id="settings-data" className="scroll-mt-28">
+    <section id="settings-data-sources" className="scroll-mt-28">
       <SectionCard title="数据源与模型">
         <div style={{ display: "grid", gap: 18 }}>
           <SettingsAiAnalysisBlock config={config} setConfig={setConfig} />

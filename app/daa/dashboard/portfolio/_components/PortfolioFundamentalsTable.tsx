@@ -171,7 +171,7 @@ export function PortfolioFundamentalsTable() {
                 <th className="px-3 py-2.5 text-right">PE (TTM)</th>
                 <th className="px-3 py-2.5 text-right">PB</th>
                 <th className="px-3 py-2.5 text-right">负债率 D/E</th>
-                <th className="px-3 py-2.5 text-right">自由现金流</th>
+                <th className="px-3 py-2.5 text-right">杠杆自由现金流 (TTM)</th>
                 <th className="px-3 py-2.5 text-right">营收 (TTM)</th>
                 <th className="px-3 py-2.5 text-right">净利润 (TTM)</th>
                 <th className="px-3 py-2.5 text-right">EPS (TTM)</th>
@@ -212,7 +212,7 @@ export function PortfolioFundamentalsTable() {
             </tbody>
           </table>
           <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[11px] text-slate-400">
-            数据来源 Yahoo Finance（quoteSummary）· ETF / 商品 / 加密无个股基本面
+            数据来源 Yahoo Finance（quoteSummary）· 此处现金流字段为 Yahoo `financialData.freeCashflow` 口径，更接近杠杆自由现金流；ETF / 商品 / 加密无个股基本面
           </div>
         </div>
       ) : null}

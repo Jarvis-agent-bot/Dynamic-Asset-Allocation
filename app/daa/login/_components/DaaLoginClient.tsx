@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -475,13 +474,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
           {/* Footer */}
           <div
-            className="flex items-center justify-between pt-2 text-[11px]"
+            className="flex items-center pt-2 text-[11px]"
             style={{ color: "var(--faint)", borderTop: "1px solid var(--border)" }}
           >
             <span>{DAA_BRAND_NAME} v{packageJson.version}</span>
-            <Link href="/support" className="hover:underline">
-              需要帮助？
-            </Link>
           </div>
 
         </div>

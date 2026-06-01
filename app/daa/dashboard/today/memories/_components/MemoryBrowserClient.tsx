@@ -6,9 +6,11 @@
  * 分页列表 + 类型过滤 + 删除
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Brain, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 interface AgentMemory {
   id: string;
@@ -45,22 +47,26 @@ export default function MemoryBrowserClient() {
   const [typeFilter, setTypeFilter] = useState("");
   const [offset, setOffset] = useState(0);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {
+    const reqId = ++requestIdRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
       if (typeFilter) params.set("type", typeFilter);
       const res = await fetch(`/api/daa/agent/memories?${params}`);
+      // 丢弃过期请求的响应，避免快速切换过滤/翻页时旧结果覆盖新结果。
+      if (reqId !== requestIdRef.current) return;
       if (res.ok) {
         const json = await res.json();
         setItems(json.data.items);
         setTotal(json.data.total);
       }
-    } catch {
-      // silent
+    } catch (error) {
+      logSwallowed("today.memoryBrowser.load", error);
     } finally {
-      setLoading(false);
+      if (reqId === requestIdRef.current) setLoading(false);
     }
   }, [typeFilter, offset]);
 
@@ -70,10 +76,15 @@ export default function MemoryBrowserClient() {
     if (!confirm("确定删除这条记忆？此操作不可撤销。")) return;
     setDeleting(id);
     try {
-      await fetch(`/api/daa/agent/memories?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/daa/agent/memories?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        alert("删除失败，请稍后重试。");
+        return;
+      }
       await load();
-    } catch {
-      // silent
+    } catch (error) {
+      logSwallowed("today.memoryBrowser.delete", error);
+      alert("删除失败，请检查网络后重试。");
     } finally {
       setDeleting(null);
     }

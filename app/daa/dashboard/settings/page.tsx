@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { emitDashboardDataUpdated, emitDashboardRefresh } from "@/app/daa/dashboard/dashboardEvents";
 import { DashboardEmptyState, DashboardErrorNotice, DashboardSuccessNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfaceActionButton, DaaSurfacePageHeader, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import {
   SETTINGS_NAV_ITEMS_,
@@ -125,6 +126,27 @@ export default function SettingsPage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
+  // 拦截站内 SPA 导航（侧边栏等 <Link>），未保存时二次确认，避免静默丢弃改动。
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as HTMLElement | null)?.closest?.("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || anchor.target === "_blank") return;
+      const url = new URL(href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname) return;
+      if (!window.confirm("有未保存的设置修改，确定离开？未保存的修改将丢失。")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [isDirty]);
+
   const dataHealthSummary = useMemo(() => {
     if (dataHealthAssets.length === 0) {
       return { healthyCount: 0, attentionCount: 0, label: "切换到数据页后同步行情健康状态" };
@@ -142,6 +164,7 @@ export default function SettingsPage() {
 
   const saveConfig = useCallback(async (): Promise<boolean> => {
     if (!config || version == null) return false;
+    if (saving) return false; // 防止重入导致并发保存
     setSaving(true);
     setError("");
     setHint("");
@@ -151,7 +174,6 @@ export default function SettingsPage() {
       setConfig(saved.config);
       setBaselineConfig(saved.config);
       setHint(`保存成功 ${formatDateTime(saved.updatedAt)}；已生成的再平衡周期需重新生成/刷新建议后才会应用新配置`);
-      toast.message("设置已保存；请重新生成或刷新建议，使新配置应用到当前再平衡周期。");
       emitDashboardDataUpdated();
       return true;
     } catch (e) {
@@ -172,7 +194,7 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [config, version]);
+  }, [config, version, saving]);
 
   const handleRefreshMarketContext = useCallback(async () => {
     if (marketRefreshing) return;
@@ -308,7 +330,9 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {activeContent}
+      <SectionErrorBoundary sectionName="设置">
+        {activeContent}
+      </SectionErrorBoundary>
     </div>
   );
 }

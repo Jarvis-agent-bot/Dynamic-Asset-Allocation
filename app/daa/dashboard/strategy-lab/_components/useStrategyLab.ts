@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
 
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import { getSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
 import { applyWorkbenchTargetWeights } from "@/src/daa/modules/workbench/targetAllocationApply";
 import { runBacktest, getBacktestHistory } from "@/src/daa/modules/strategyLab/strategyLabApi";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type {
   StrategyLabRunParams,
   StrategyLabBenchmarkResult,
@@ -153,8 +154,8 @@ export function useStrategyLab(
             ),
           }));
         }
-      } catch {
-        // 静默处理，用户可手动输入资产
+      } catch (error) {
+        logSwallowed("strategyLab.bootstrap", error); // 用户仍可手动输入资产
       } finally {
         if (!cancelled) setAssetsLoading(false);
       }
@@ -167,8 +168,8 @@ export function useStrategyLab(
     try {
       const items = await getBacktestHistory(10);
       setHistory(items);
-    } catch {
-      // 静默处理
+    } catch (error) {
+      logSwallowed("strategyLab.loadHistory", error);
     } finally {
       setHistoryLoading(false);
     }
@@ -178,8 +179,10 @@ export function useStrategyLab(
     void loadHistory();
   }, [loadHistory]);
 
+  const runReqIdRef = useRef(0);
+
   const runBacktestFn = useCallback(async () => {
-    if (running) return;
+    if (running || applying) return;
     if (config.selectedAssets.length === 0) {
       setError("请至少选择一个资产");
       return;
@@ -188,6 +191,7 @@ export function useStrategyLab(
       setError("请至少选择一个策略");
       return;
     }
+    const reqId = ++runReqIdRef.current;
     setRunning(true);
     setError("");
     setResult(null);
@@ -203,14 +207,17 @@ export function useStrategyLab(
         minOrderNotional: config.minOrderNotional,
       };
       const res = await runBacktest(params);
+      // 丢弃过期回测响应，避免并发提交时旧结果覆盖新结果。
+      if (reqId !== runReqIdRef.current) return;
       setResult(res);
       void loadHistory();
     } catch (e) {
+      if (reqId !== runReqIdRef.current) return;
       setError(e instanceof Error ? e.message : "回测执行失败");
     } finally {
-      setRunning(false);
+      if (reqId === runReqIdRef.current) setRunning(false);
     }
-  }, [running, config, loadHistory]);
+  }, [running, applying, config, loadHistory]);
 
   const applyTargetWeightsFn = useCallback(async () => {
     const applyMeta = resolveStrategyLabApplyMeta(result, false);
@@ -304,7 +311,7 @@ export function useStrategyLab(
     [result?.warnings],
   );
 
-  const canRun = !running && config.selectedAssets.length > 0 && config.selectedStrategies.length > 0;
+  const canRun = !running && !applying && config.selectedAssets.length > 0 && config.selectedStrategies.length > 0;
   const canApply = useMemo(() => resolveStrategyLabApplyMeta(result, applying).canApply, [result, applying]);
 
   return {

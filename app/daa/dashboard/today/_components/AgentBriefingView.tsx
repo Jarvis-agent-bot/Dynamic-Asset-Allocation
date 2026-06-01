@@ -14,6 +14,7 @@ import {
   DaaSurfacePanel,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatAssetLabelByKey } from "@/src/daa/assetRegistry";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 interface Surprise {
   title: string;
@@ -197,8 +198,8 @@ export default function AgentBriefingView() {
         const json = await res.json();
         setStatus(json.data);
       }
-    } catch {
-      // 静默失败，页面保留当前状态。
+    } catch (error) {
+      logSwallowed("today.agentBriefing.loadStatus", error); // 页面保留当前状态
     } finally {
       setLoading(false);
     }
@@ -216,8 +217,8 @@ export default function AgentBriefingView() {
         setRunResult(json.data);
         await loadStatus();
       }
-    } catch {
-      // 静默失败，按钮状态会恢复。
+    } catch (error) {
+      logSwallowed("today.agentBriefing.triggerRun", error); // 按钮状态会恢复
     } finally {
       setRunning(false);
     }
@@ -228,8 +229,8 @@ export default function AgentBriefingView() {
     try {
       const res = await fetch("/api/daa/agent/bootstrap", { method: "POST" });
       if (res.ok) await loadStatus();
-    } catch {
-      // 静默失败，按钮状态会恢复。
+    } catch (error) {
+      logSwallowed("today.agentBriefing.triggerBootstrap", error); // 按钮状态会恢复
     } finally {
       setRunning(false);
     }

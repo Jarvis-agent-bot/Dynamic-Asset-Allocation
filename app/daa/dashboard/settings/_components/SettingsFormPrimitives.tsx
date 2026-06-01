@@ -6,7 +6,7 @@ import type {
   SelectHTMLAttributes,
   SetStateAction,
 } from "react";
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import type { DaaMarketIndicatorConfigKey, DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
@@ -136,17 +136,32 @@ export function NumberInput(props: {
   onChange: (value: number) => void;
   disabled?: boolean;
 }) {
+  // 编辑期维护本地草稿字符串，允许中途清空/重输，不被父级 clamp 强制回填打断；
+  // 仅在失焦时把显示值规整回父级的受控值。
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+  const controlledValue = Number.isFinite(props.value) ? String(props.value) : "0";
+
   return (
     <FormInput
       type="number"
       id={props.id}
       name={props.name}
-      value={Number.isFinite(props.value) ? props.value : 0}
+      value={focused ? draft : controlledValue}
       min={props.min}
       max={props.max}
       step={props.step || 1}
       disabled={props.disabled}
-      onChange={(e) => props.onChange(Number(e.target.value))}
+      onFocus={() => {
+        setDraft(controlledValue);
+        setFocused(true);
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const parsed = Number(e.target.value);
+        if (e.target.value !== "" && Number.isFinite(parsed)) props.onChange(parsed);
+      }}
+      onBlur={() => setFocused(false)}
     />
   );
 }

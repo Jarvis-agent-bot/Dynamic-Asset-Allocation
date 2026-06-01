@@ -126,7 +126,7 @@ export function SettingsMarketContextBlock(props: {
                     <div style={{ marginTop: 6, fontSize: 11, color: "var(--faint)" }}>依赖：{item.dependencies}</div>
                   </div>
                   <CheckboxRow
-                    checked={config.dataSources.marketIndicators.indicators[item.key].enabled}
+                    checked={config.dataSources.marketIndicators.indicators[item.key]?.enabled ?? false}
                     onChange={(value) =>
                       setConfig((prev) =>
                         prev
@@ -156,7 +156,7 @@ export function SettingsMarketContextBlock(props: {
                 <div style={{ marginTop: 12 }}>
                   <FieldLabel>权重</FieldLabel>
                   <NumberInput
-                    value={config.dataSources.marketIndicators.indicators[item.key].weight}
+                    value={config.dataSources.marketIndicators.indicators[item.key]?.weight ?? 0}
                     min={0}
                     max={5}
                     step={0.05}

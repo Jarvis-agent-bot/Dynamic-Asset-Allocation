@@ -12,7 +12,7 @@ export function resolveStrategyLabApplyMeta(
   applying: boolean,
 ): StrategyLabApplyMeta {
   const hasTargetWeights = Boolean(result?.targetWeights && Object.keys(result.targetWeights).length > 0);
-  const strategyCount = result?.strategyResults.length || result?.params.strategies.length || 0;
+  const strategyCount = result?.strategyResults?.length || result?.params?.strategies?.length || 0;
   const isSingleStrategy = strategyCount <= 1;
   const strategyKey = result?.primaryStrategy || result?.params.strategies[0] || null;
 

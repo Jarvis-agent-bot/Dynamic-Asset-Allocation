@@ -12,6 +12,27 @@ import {
 import type { RebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import type { ExecuteRebalanceSummary, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
+import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
+
+/**
+ * 对比确认时的预估买卖总额与实际成交名义额。
+ * 执行会用 forceRefresh 的最新价 + 滑点重算，故二者可能不一致——这里生成一句知情说明。
+ */
+function buildEstimateNote(
+  confirmed: ExecuteRebalanceSummary | null,
+  actualNotional: number,
+  baseCurrency: string,
+): string | undefined {
+  if (!confirmed) return undefined;
+  const estimatedGross = Math.max(0, confirmed.buyNotional) + Math.max(0, confirmed.sellNotional);
+  if (!(estimatedGross > 0) && !(actualNotional > 0)) return undefined;
+  const base = `预估买卖总额 ${formatCurrency(estimatedGross, baseCurrency)}，实际成交 ${formatCurrency(actualNotional, baseCurrency)}`;
+  const diffPct = estimatedGross > 0 ? Math.abs(actualNotional - estimatedGross) / estimatedGross : 0;
+  if (diffPct >= 0.01) {
+    return `${base}（执行按最新刷新价 + 滑点重算，存在 ${(diffPct * 100).toFixed(1)}% 差异）`;
+  }
+  return `${base}（执行已按最新刷新价 + 滑点重算）`;
+}
 
 function isExecutableCycleStatus(status: RebalanceCycle["status"]): boolean {
   return status === "generated" || status === "reviewing";
@@ -21,6 +42,7 @@ export function useExecutionFlow(input: {
   currentCycle: RebalanceCycle | null;
   currentRiskCheck: PreTradeRiskCheck | null;
   selectedProposalCount: number;
+  baseCurrency: string;
   busy: boolean;
   setBusy: Dispatch<SetStateAction<boolean>>;
   setRiskCheck: Dispatch<SetStateAction<PreTradeRiskCheck | null>>;
@@ -33,7 +55,7 @@ export function useExecutionFlow(input: {
   const [executeSummaryError, setExecuteSummaryError] = useState("");
   const [executionReceipt, setExecutionReceipt] = useState<ExecutionReceipt | null>(null);
 
-  const executeCycleNow = useCallback(async (mode: RebalanceExecuteMode) => {
+  const executeCycleNow = useCallback(async (mode: RebalanceExecuteMode, confirmedSummary: ExecuteRebalanceSummary | null = null) => {
     if (!input.currentCycle || input.busy) return;
     input.setBusy(true);
     try {
@@ -64,6 +86,8 @@ export function useExecutionFlow(input: {
       const executed = result.cycle.executionSummary?.ordersExecuted || 0;
       const submitted = result.cycle.executionSummary?.ordersSubmitted || 0;
       const failed = result.cycle.executionSummary?.ordersFailed || 0;
+      const actualNotional = Math.max(0, result.cycle.executionSummary?.totalNotional || 0);
+      const estimateNote = buildEstimateNote(confirmedSummary, actualNotional, input.baseCurrency);
       if (executed > 0 && submitted <= 0 && failed <= 0) {
         setExecutionReceipt({
           cycleId: result.cycle.cycleId,
@@ -73,6 +97,7 @@ export function useExecutionFlow(input: {
           submitted,
           failed,
           summary: `执行完成：${executed} 笔成功。`,
+          estimateNote,
           ts: new Date().toISOString(),
         });
         toast.success(`执行完成：${executed} 笔成功`);
@@ -85,6 +110,7 @@ export function useExecutionFlow(input: {
           submitted,
           failed,
           summary: `订单已提交：${submitted} 笔等待后续成交或撤单更新。`,
+          estimateNote,
           ts: new Date().toISOString(),
         });
         toast.message(`订单已提交：${submitted} 笔等待后续成交或撤单更新`);
@@ -100,6 +126,7 @@ export function useExecutionFlow(input: {
           submitted,
           failed,
           summary,
+          estimateNote,
           ts: new Date().toISOString(),
         });
         toast.message(summary);
@@ -115,6 +142,7 @@ export function useExecutionFlow(input: {
           submitted,
           failed,
           summary,
+          estimateNote,
           ts: new Date().toISOString(),
         });
         if (submitted > 0) {
@@ -157,15 +185,17 @@ export function useExecutionFlow(input: {
     } finally {
       input.setBusy(false);
     }
-  }, [input.currentCycle, input.busy, input.setBusy, input.setRiskCheck, input.mergeCycleState, input.loadBootstrap]);
+  }, [input.currentCycle, input.busy, input.baseCurrency, input.setBusy, input.setRiskCheck, input.mergeCycleState, input.loadBootstrap]);
 
   const handleConfirmExecuteCycle = useCallback(async () => {
     if (!pendingExecuteMode) return;
     const mode = pendingExecuteMode;
+    // 捕获用户确认时所见的摘要，执行后用于对比预估 vs 实际成交。
+    const confirmedSummary = executeSummary;
     setPendingExecuteMode(null);
     setExecuteSummary(null);
-    await executeCycleNow(mode);
-  }, [executeCycleNow, pendingExecuteMode]);
+    await executeCycleNow(mode, confirmedSummary);
+  }, [executeCycleNow, pendingExecuteMode, executeSummary]);
 
   const handleOpenExecuteDialog = useCallback((mode: RebalanceExecuteMode) => {
     if (!input.currentCycle || input.busy) return;

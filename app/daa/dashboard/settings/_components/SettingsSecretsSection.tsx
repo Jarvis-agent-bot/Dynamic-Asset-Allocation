@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { SectionCard } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 import { DaaSurfaceActionButton } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { emitDashboardDataUpdated } from "@/app/daa/dashboard/dashboardEvents";
 import {
   deleteSecretValue,
   listSecrets,
@@ -260,6 +261,12 @@ export function SettingsSecretsSection() {
     void loadSecrets();
   }, [loadSecrets]);
 
+  // 凭证保存/删除后同步本地列表，并广播给其它面板（如通知 tab 的凭证状态）。
+  const handleSecretsChanged = useCallback((next: StoreSecretStatus[]) => {
+    setSecrets(next);
+    emitDashboardDataUpdated();
+  }, []);
+
   const handleTest = useCallback(async (key: string, mode: StoreSecretTestMode = "connectivity") => {
     setTestingKey(key);
     try {
@@ -336,7 +343,7 @@ export function SettingsSecretsSection() {
                     <SecretRow
                       key={secret.key}
                       secret={secret}
-                      onSaved={setSecrets}
+                      onSaved={handleSecretsChanged}
                       testResult={testResults[secret.key] ?? null}
                       onTest={handleTest}
                       testing={testingKey === secret.key}

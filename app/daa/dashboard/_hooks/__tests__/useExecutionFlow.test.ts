@@ -40,6 +40,7 @@ function makeInput(overrides?: Record<string, unknown>) {
     currentCycle: makeCycle() as RebalanceCycle | null,
     currentRiskCheck: makeRiskCheck() as PreTradeRiskCheck | null,
     selectedProposalCount: 1,
+    baseCurrency: "USD",
     busy: false,
     setBusy: vi.fn(),
     setRiskCheck: vi.fn(),

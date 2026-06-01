@@ -197,7 +197,10 @@ export default function RebalancePageClient() {
                 <Gauge className="h-4 w-4 text-[var(--primary)]" />
                 调仓工作台
               </div>
-              <QuickConfigPopover driftThresholdPct={wbModel.bootstrap.policy?.drift?.outerBandPct} />
+              <QuickConfigPopover
+                driftThresholdPct={wbModel.bootstrap.policy?.drift?.outerBandPct}
+                onSaved={() => void wbModel.loadBootstrap(true)}
+              />
             </div>
             <RebalanceDecisionSummary
               bootstrap={wbModel.bootstrap}

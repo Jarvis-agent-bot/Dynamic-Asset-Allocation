@@ -36,12 +36,16 @@ export function useSettingsDirty(
     if (!config || !baselineConfig) {
       return { strategy: false, brain: false, data: false, notification: false };
     }
-    const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+    // 与 isDirty 保持同一比较口径（深度排序），避免“顶部提示未保存但 tab 圆点不亮”的矛盾。
+    const changed = (a: unknown, b: unknown) => stableStringify(a) !== stableStringify(b);
     return {
       strategy: changed(config.policy, baselineConfig.policy)
+        || changed(config.strategy?.style, baselineConfig.strategy?.style)
         || changed(config.strategy?.risk, baselineConfig.strategy?.risk)
         || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints)
-        || changed(config.strategy?.execution, baselineConfig.strategy?.execution),
+        || changed(config.strategy?.execution, baselineConfig.strategy?.execution)
+        || changed(config.strategy?.breakout, baselineConfig.strategy?.breakout)
+        || changed(config.aiTargetWeightPool, baselineConfig.aiTargetWeightPool),
       brain: changed(config.brain, baselineConfig.brain)
         || changed(config.cognitiveAgent, baselineConfig.cognitiveAgent),
       data: changed(config.dataSources, baselineConfig.dataSources),

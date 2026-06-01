@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Filter, HelpCircle, RefreshCcw } from "lucide-react";
 
@@ -130,7 +130,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
           </div>
           <label className="space-y-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">状态</span>
-            <select value={model.filters.status ?? ""} onChange={(e) => updateFilter({ status: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[100px]")}>
+            <select value={model.filters.status ?? ""} onChange={(e) => updateFilter({ status: (e.target.value || undefined) as TradeFilters["status"] })} className={cn(daaSurfaceDenseFieldClassName, "w-[100px]")}>
               <option value="">全部</option>
               <option value="ready">待执行</option>
               <option value="submitted">已提交</option>
@@ -319,6 +319,9 @@ function CyclesTimeline({ model }: { model: TradesModel }) {
 function OrdersPanel({ model }: { model: TradesModel }) {
   const [visibleCount, setVisibleCount] = useState(50);
 
+  // 筛选/数据集变化时复位「加载更多」进度，避免沿用上一数据集的展开量。
+  useEffect(() => { setVisibleCount(50); }, [model.orders]);
+
   if (model.orders.length <= 0) {
     return (
       <DaaSurfaceEmptyState
@@ -360,6 +363,11 @@ function OrdersPanel({ model }: { model: TradesModel }) {
           <button type="button" className="text-xs text-[var(--primary)] hover:underline" onClick={() => setVisibleCount((p) => p + 50)}>
             加载更多（剩余 {model.orders.length - visibleCount}）
           </button>
+        </div>
+      ) : null}
+      {model.ordersTruncated ? (
+        <div className="border-t border-[var(--border)] px-4 py-2 text-center text-[11px] text-[var(--faint)]">
+          仅展示最近 {model.ordersDisplayCap} 条订单（共 {model.totalOrderCount} 条），更早记录请用日期筛选缩小范围。
         </div>
       ) : null}
     </div>

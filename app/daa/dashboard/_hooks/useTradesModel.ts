@@ -1,12 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getTradesReadModel } from "@/src/daa/modules/read/readApi";
 import type { TradesReadModel } from "@/src/daa/modules/read/readModels";
+import type { TradeTicketStatus } from "@/src/daa/modules/trade/tradeTypes";
 import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 
 export type TradeTab = "cycles" | "orders";
+
+const ORDERS_DISPLAY_CAP = 300;
+const TRADE_SIDES = ["BUY", "SELL"] as const;
+const TRADE_STATUSES: TradeTicketStatus[] = [
+  "ready", "submitted", "partially_filled", "executed", "canceled", "rejected",
+];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function maxIso(values: Array<string | null | undefined>): string | null {
   const timestamps = values
@@ -16,12 +24,14 @@ function maxIso(values: Array<string | null | undefined>): string | null {
   return new Date(Math.max(...timestamps)).toISOString();
 }
 
+export type TradeSide = (typeof TRADE_SIDES)[number];
+
 export type TradeFilters = {
   startDate?: string;
   endDate?: string;
   symbol?: string;
-  side?: string;
-  status?: string;
+  side?: TradeSide;
+  status?: TradeTicketStatus;
 };
 
 function readFiltersFromUrl(): TradeFilters {
@@ -33,11 +43,12 @@ function readFiltersFromUrl(): TradeFilters {
   const symbol = params.get("symbol");
   const side = params.get("side");
   const status = params.get("status");
-  if (start) filters.startDate = start;
-  if (end) filters.endDate = end;
+  // 校验 URL 入参，丢弃非法值，避免污染受控控件与请求参数。
+  if (start && ISO_DATE_RE.test(start)) filters.startDate = start;
+  if (end && ISO_DATE_RE.test(end)) filters.endDate = end;
   if (symbol) filters.symbol = symbol;
-  if (side) filters.side = side;
-  if (status) filters.status = status;
+  if (side && (TRADE_SIDES as readonly string[]).includes(side)) filters.side = side as TradeSide;
+  if (status && (TRADE_STATUSES as string[]).includes(status)) filters.status = status as TradeTicketStatus;
   return filters;
 }
 
@@ -72,21 +83,30 @@ export function useTradesModel(input: {
     }
   }, [filters]);
 
+  const requestIdRef = useRef(0);
+
   const load = useCallback(async (silent = false) => {
+    const reqId = ++requestIdRef.current;
     if (silent) setRefreshing(true);
     else setLoading(true);
     setError("");
     try {
-      setData(await getTradesReadModel({
+      const next = await getTradesReadModel({
         tradeLimit,
         reportLimit,
         ...filters,
-      }));
+      });
+      // 丢弃过期请求：快速切换筛选/刷新时，先发后到的旧响应不得覆盖最新结果。
+      if (reqId !== requestIdRef.current) return;
+      setData(next);
     } catch (e) {
+      if (reqId !== requestIdRef.current) return;
       setError(e instanceof Error ? e.message : "加载交易记录失败");
     } finally {
-      if (silent) setRefreshing(false);
-      else setLoading(false);
+      if (reqId === requestIdRef.current) {
+        if (silent) setRefreshing(false);
+        else setLoading(false);
+      }
     }
   }, [reportLimit, tradeLimit, filters]);
 
@@ -96,10 +116,12 @@ export function useTradesModel(input: {
     () => [...(data?.records.cycles || [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     [data?.records.cycles],
   );
+  const totalOrderCount = data?.records.orders?.length ?? 0;
   const orders = useMemo(
-    () => [...(data?.records.orders || [])].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 300),
+    () => [...(data?.records.orders || [])].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, ORDERS_DISPLAY_CAP),
     [data?.records.orders],
   );
+  const ordersTruncated = totalOrderCount > ORDERS_DISPLAY_CAP;
   const sortedReports = useMemo(
     () => [...(data?.reports || [])].sort((a, b) => Date.parse(b.reportCreatedAt) - Date.parse(a.reportCreatedAt)),
     [data?.reports],
@@ -142,6 +164,9 @@ export function useTradesModel(input: {
     load,
     cycles,
     orders,
+    totalOrderCount,
+    ordersTruncated,
+    ordersDisplayCap: ORDERS_DISPLAY_CAP,
     sortedReports,
     completedCycleCount,
     executedOrderCount,

@@ -125,6 +125,9 @@ export function DashboardDialogs(props: DashboardPageModel["dialogProps"]) {
                 {props.executeSummary.riskWarnings.length > 0 ? (
                   <DaaSurfaceNoticeBox tone="amber" title="风险提示" description={props.executeSummary.riskWarnings.join("；")} />
                 ) : null}
+                <div className="text-xs text-[var(--faint)]">
+                  以上为基于最新缓存价格的预估值；执行时会重新拉取实时价并计入滑点，实际成交结果可能略有差异。
+                </div>
               </div>
             ) : null}
           </div>

@@ -10,10 +10,13 @@ import {
   daaSurfaceFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { getSystemConfig, patchSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export function QuickConfigPopover(props: {
   driftThresholdPct?: number;
+  onSaved?: () => void;
 }) {
+  const { onSaved } = props;
   const [open, setOpen] = useState(false);
   const [driftThreshold, setDriftThreshold] = useState(String((props.driftThresholdPct ?? 0.05) * 100));
   const [maxPosition, setMaxPosition] = useState("20");
@@ -35,8 +38,9 @@ export function QuickConfigPopover(props: {
       setMaxPosition(String((current.config.strategy.constraints.maxPositionPct ?? 0.2) * 100));
       setStopLoss(String((current.config.strategy.risk.perAssetStopLossPct ?? 0.1) * 100));
       setTakeProfit(String((current.config.strategy.risk.perAssetTakeProfitPct ?? 0.3) * 100));
-    }).catch(() => {
+    }).catch((error) => {
       // 打开调参面板时读取失败不阻断，保存时仍会重新读取版本。
+      logSwallowed("rebalance.quickConfig.load", error);
     });
     return () => {
       cancelled = true;
@@ -44,11 +48,19 @@ export function QuickConfigPopover(props: {
   }, [open]);
 
   const handleSave = useCallback(async () => {
-    const vals = [Number(driftThreshold), Number(maxPosition), Number(stopLoss), Number(takeProfit)];
-    if (vals.some((v) => !Number.isFinite(v) || v <= 0)) {
+    const drift = Number(driftThreshold);
+    const maxPos = Number(maxPosition);
+    const stop = Number(stopLoss);
+    const profit = Number(takeProfit);
+    if ([drift, maxPos, stop, profit].some((v) => !Number.isFinite(v) || v <= 0)) {
       toast.error("所有参数必须为正数");
       return;
     }
+    // 与输入框 max 约束保持一致，避免写入越界参数削弱风控护栏。
+    if (drift > 50) { toast.error("漂移阈值需 ≤ 50%"); return; }
+    if (maxPos > 100) { toast.error("最大单仓需 ≤ 100%"); return; }
+    if (stop > 50) { toast.error("止损需 ≤ 50%"); return; }
+    if (profit > 100) { toast.error("止盈需 ≤ 100%"); return; }
     setSaving(true);
     try {
       const current = await getSystemConfig();
@@ -63,12 +75,13 @@ export function QuickConfigPopover(props: {
       });
       toast.success("策略参数已更新");
       setOpen(false);
+      onSaved?.();
     } catch (err) {
       toast.error("保存失败：" + (err instanceof Error ? err.message : "未知错误"));
     } finally {
       setSaving(false);
     }
-  }, [driftThreshold, maxPosition, stopLoss, takeProfit]);
+  }, [driftThreshold, maxPosition, stopLoss, takeProfit, onSaved]);
 
   return (
     <div className="relative">

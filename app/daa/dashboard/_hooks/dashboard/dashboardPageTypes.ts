@@ -11,6 +11,8 @@ export type ExecutionReceipt = {
   summary: string;
   reason?: string;
   ts: string;
+  /** 确认时预估值与实际成交的对比说明（执行会按最新刷新价 + 滑点重算，二者可能有差异）。 */
+  estimateNote?: string;
 };
 
 export type OrderDraft = { row: AssetUniverseView; side: "BUY" | "SELL" } | null;

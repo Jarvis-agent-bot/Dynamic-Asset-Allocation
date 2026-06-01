@@ -2,6 +2,7 @@
 
 import { useTradesModel } from "@/app/daa/dashboard/_hooks/useTradesModel";
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import {
   TradesErrorState,
   TradesHeader,
@@ -29,9 +30,13 @@ export default function TradesPageClient() {
   return (
     <div className="space-y-4">
       <TradesHeader model={model} />
-      <TradesCompactOverview model={model} />
       <TradesErrorState error={model.error} />
-      <TradesTabsPanel model={model} />
+      <SectionErrorBoundary sectionName="交易概览">
+        <TradesCompactOverview model={model} />
+      </SectionErrorBoundary>
+      <SectionErrorBoundary sectionName="交易记录">
+        <TradesTabsPanel model={model} />
+      </SectionErrorBoundary>
     </div>
   );
 }

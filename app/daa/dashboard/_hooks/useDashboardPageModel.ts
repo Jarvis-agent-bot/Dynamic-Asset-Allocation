@@ -107,6 +107,7 @@ export function useDashboardPageModel(input: {
     currentCycle,
     currentRiskCheck: rebalanceFlow.currentRiskCheck,
     selectedProposalCount: rebalanceFlow.selectedProposalCount,
+    baseCurrency: bootstrap?.baseCurrency || "USD",
     busy,
     setBusy,
     setRiskCheck,

@@ -132,6 +132,11 @@ export function DashboardNotificationBar(props: {
                 详情：{props.executionReceipt.reason}
               </div>
             ) : null}
+            {props.executionReceipt.estimateNote ? (
+              <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--faint)]">
+                {props.executionReceipt.estimateNote}
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2 pt-1">
               <Link href="/daa/dashboard/trades" className={actionLinkClassName}>查看交易记录</Link>
               <DaaSurfaceActionButton tone="slate" onClick={props.onClearExecutionReceipt}>关闭回执</DaaSurfaceActionButton>
