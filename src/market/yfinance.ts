@@ -19,20 +19,22 @@ export function addDaysIsoUtc(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function asIsoDate(x: unknown): string {
+function asIsoPoint(x: unknown, interval: "1d" | "1h" = "1d"): string {
   if (x instanceof Date) {
     const t = x.getTime();
     if (!Number.isFinite(t)) return "";
-    return x.toISOString().slice(0, 10);
+    const iso = x.toISOString();
+    return interval === "1h" ? iso : iso.slice(0, 10);
   }
 
   // yahoo-finance2 sometimes serializes as ISO strings.
   if (typeof x === "string") {
-    // Accept YYYY-MM-DD or full ISO; normalize to YYYY-MM-DD.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return x;
+    // Accept YYYY-MM-DD or full ISO; daily normalizes to date, hourly preserves the timestamp.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return interval === "1h" ? `${x}T00:00:00.000Z` : x;
     const d = new Date(x);
     if (!Number.isFinite(d.getTime())) return "";
-    return d.toISOString().slice(0, 10);
+    const iso = d.toISOString();
+    return interval === "1h" ? iso : iso.slice(0, 10);
   }
 
   return "";
@@ -57,9 +59,10 @@ type YahooFinanceHistoricalQuoteLike = {
  */
 export function normalizeYfinanceHistoricalQuotes(
   input: unknown,
-  opts: { start?: string; end?: string } = {},
+  opts: { start?: string; end?: string; interval?: "1d" | "1h" } = {},
 ): NormalizeYfinanceHistoricalQuotesResult {
   const issues: string[] = [];
+  const interval = opts.interval === "1h" ? "1h" : "1d";
 
   const arr: unknown[] = Array.isArray(input) ? input : [];
   if (!arr.length) {
@@ -75,7 +78,7 @@ export function normalizeYfinanceHistoricalQuotes(
       continue;
     }
 
-    const date = asIsoDate(row.date);
+    const date = asIsoPoint(row.date, interval);
     if (!date) {
       issues.push(`yfinance quote #${i + 1} has invalid date: ${String(row.date)}`);
       continue;

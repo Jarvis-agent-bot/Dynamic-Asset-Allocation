@@ -10,6 +10,7 @@ export type PriceUpdate = {
   ts: string;
   delta: number;
   currency: string;
+  source?: string;
   /** 价格方向: "up" | "down" | "flat" */
   direction: "up" | "down" | "flat";
 };
@@ -78,12 +79,13 @@ export function usePriceStream(assetKeys: string[]): StreamState {
           setState((prev) => {
             const next = new Map(prev.prices);
             for (const [key, update] of Object.entries(parsed.data)) {
-              const u = update as { price: number; ts: string; delta: number; currency: string };
+              const u = update as { price: number; ts: string; delta: number; currency: string; source?: string };
               next.set(key, {
                 price: u.price,
                 ts: u.ts,
                 delta: u.delta,
                 currency: u.currency,
+                source: u.source,
                 direction: u.delta > 0 ? "up" : u.delta < 0 ? "down" : "flat",
               });
             }

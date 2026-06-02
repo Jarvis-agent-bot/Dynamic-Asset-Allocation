@@ -28,7 +28,8 @@ type PriceBar = {
   volume?: number;
 };
 
-type RangeKey = "5D" | "1M" | "3M" | "6M" | "1Y" | "2Y" | "5Y";
+type PriceSeriesInterval = "1d" | "1h";
+type RangeKey = "1D" | "5D" | "1M" | "3M" | "1Y";
 type IndicatorKey = "ma" | "ema" | "boll" | "volume" | "macd" | "kdj";
 
 type CrosshairSnapshot = {
@@ -82,6 +83,10 @@ type KlineDataSource = {
   source: string;
   upstream: string;
   rawCount: number;
+  rows: number;
+  interval: PriceSeriesInterval;
+  updatedAt: string;
+  completeOhlcv: boolean;
 };
 
 export type KlineTradeMarker = {
@@ -91,14 +96,12 @@ export type KlineTradeMarker = {
   price: number;
 };
 
-const TIME_RANGES: { key: RangeKey; label: string; days: number }[] = [
-  { key: "5D", label: "5日", days: 10 },
-  { key: "1M", label: "1月", days: 30 },
-  { key: "3M", label: "3月", days: 90 },
-  { key: "6M", label: "6月", days: 180 },
-  { key: "1Y", label: "1年", days: 365 },
-  { key: "2Y", label: "2年", days: 730 },
-  { key: "5Y", label: "5年", days: 1825 },
+const TIME_RANGES: { key: RangeKey; label: string; days: number; interval: PriceSeriesInterval }[] = [
+  { key: "1D", label: "1日", days: 2, interval: "1h" },
+  { key: "5D", label: "5日", days: 10, interval: "1h" },
+  { key: "1M", label: "1月", days: 30, interval: "1d" },
+  { key: "3M", label: "3月", days: 90, interval: "1d" },
+  { key: "1Y", label: "1年", days: 365, interval: "1d" },
 ];
 
 const MA_LINES = [
@@ -169,6 +172,10 @@ function hasCompleteOhlc(bar: PriceBar): boolean {
     bar.low > 0 &&
     bar.close > 0
   );
+}
+
+function hasCompleteOhlcv(bar: PriceBar): boolean {
+  return hasCompleteOhlc(bar) && finiteNumber(bar.volume) && bar.volume >= 0;
 }
 
 function toCandlestickData(bars: PriceBar[]): CandlestickData[] {
@@ -354,6 +361,107 @@ function formatVolume(value: number | null | undefined): string {
   return value.toFixed(0);
 }
 
+function formatChartTime(value: string | null | undefined, interval: PriceSeriesInterval): string {
+  if (!value) return "--";
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return value;
+  const date = new Date(ms);
+  if (interval === "1h") {
+    return date.toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+function getRangeConfig(range: RangeKey) {
+  return TIME_RANGES.find((item) => item.key === range) ?? TIME_RANGES[2];
+}
+
+function bucketLiveTime(ts: string, interval: PriceSeriesInterval): string {
+  const ms = Date.parse(ts);
+  if (!Number.isFinite(ms)) return ts;
+  const date = new Date(ms);
+  if (interval === "1d") return date.toISOString().slice(0, 10);
+  date.setUTCMinutes(0, 0, 0);
+  return date.toISOString();
+}
+
+function compareBarTime(left: string, right: string): number {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (Number.isFinite(leftMs) && Number.isFinite(rightMs)) return leftMs - rightMs;
+  return left.localeCompare(right);
+}
+
+function mergeLivePriceIntoBars(
+  bars: PriceBar[],
+  livePrice: { price: number; ts: string } | null | undefined,
+  interval: PriceSeriesInterval,
+): PriceBar[] {
+  if (!livePrice || !finiteNumber(livePrice.price) || livePrice.price <= 0 || !livePrice.ts) return bars;
+  const bucket = bucketLiveTime(livePrice.ts, interval);
+  const next = [...bars];
+  const last = next[next.length - 1];
+
+  if (!last) {
+    next.push({
+      date: bucket,
+      open: livePrice.price,
+      high: livePrice.price,
+      low: livePrice.price,
+      close: livePrice.price,
+      volume: 0,
+    });
+    return next;
+  }
+
+  const cmp = compareBarTime(bucket, last.date);
+  if (cmp < 0) return bars;
+
+  if (cmp === 0) {
+    next[next.length - 1] = {
+      ...last,
+      high: Math.max(barHigh(last), livePrice.price),
+      low: Math.min(barLow(last), livePrice.price),
+      close: livePrice.price,
+      volume: last.volume ?? 0,
+    };
+    return next;
+  }
+
+  const open = last.close;
+  next.push({
+    date: bucket,
+    open,
+    high: Math.max(open, livePrice.price),
+    low: Math.min(open, livePrice.price),
+    close: livePrice.price,
+    volume: 0,
+  });
+  return next;
+}
+
+function dataAgeMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Date.now() - ms);
+}
+
+function resolveMarkerTime(markerDate: string, bars: PriceBar[]): string | null {
+  if (bars.some((bar) => bar.date === markerDate)) return markerDate;
+  return bars.find((bar) => bar.date.startsWith(markerDate))?.date ?? null;
+}
+
 function seriesValueAt(series: LineData[], date: string): number | undefined {
   return series.find((point) => String(point.time) === date)?.value;
 }
@@ -412,12 +520,14 @@ export function AssetKlineChart({
   className,
   tradeMarkers,
   costBasisPerShare,
+  livePrice,
 }: {
   symbol: string;
   market: string;
   className?: string;
   tradeMarkers?: KlineTradeMarker[];
   costBasisPerShare?: number | null;
+  livePrice?: { price: number; ts: string; currency?: string; source?: string } | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -450,18 +560,21 @@ export function AssetKlineChart({
     kdj: true,
   });
 
+  const rangeConfig = useMemo(() => getRangeConfig(range), [range]);
+  const currentInterval = rangeConfig.interval;
+
   const startDate = useMemo(() => {
-    const days = TIME_RANGES.find((item) => item.key === range)?.days ?? 0;
+    const days = rangeConfig.days;
     if (days <= 0) return undefined;
     const date = new Date(Date.now() - days * 86_400_000);
     return date.toISOString().slice(0, 10);
-  }, [range]);
+  }, [rangeConfig.days]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const qs = new URLSearchParams({ symbol, adjusted: "0", requireOhlcv: "1", interval: "1d" });
+      const qs = new URLSearchParams({ symbol, adjusted: "0", requireOhlcv: "1", interval: currentInterval });
       if (market) qs.set("market", market);
       if (startDate) qs.set("start", startDate);
 
@@ -481,10 +594,15 @@ export function AssetKlineChart({
       if (series.length === 0) setError("暂无行情数据");
       else if (completeSeries.length === 0) setError("行情缺少真实 OHLCV，不能绘制蜡烛线");
       setBars(completeSeries);
+      const latest = completeSeries[completeSeries.length - 1] ?? null;
       setDataSource({
         source: typeof data.source === "string" ? data.source : "--",
         upstream: typeof data.upstream === "string" ? data.upstream : "--",
         rawCount: Number.isFinite(Number(data.rawCount)) ? Number(data.rawCount) : completeSeries.length,
+        rows: completeSeries.length,
+        interval: currentInterval,
+        updatedAt: latest?.date ?? "",
+        completeOhlcv: series.length > 0 && completeSeries.length === series.length && completeSeries.every(hasCompleteOhlcv),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载行情失败");
@@ -492,11 +610,16 @@ export function AssetKlineChart({
     } finally {
       setLoading(false);
     }
-  }, [symbol, market, startDate]);
+  }, [symbol, market, startDate, currentInterval]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  const chartBars = useMemo(
+    () => mergeLivePriceIntoBars(bars, livePrice, currentInterval),
+    [bars, livePrice, currentInterval],
+  );
 
   const indicatorData = useMemo(() => {
     const ma = MA_LINES.map((line) => ({
@@ -504,20 +627,20 @@ export function AssetKlineChart({
       period: line.period,
       label: line.label,
       color: line.color,
-      data: computeMA(bars, line.period),
+      data: computeMA(chartBars, line.period),
     }));
-    const ema12 = computeEMA(bars, 12);
-    const ema26 = computeEMA(bars, 26);
-    const boll = computeBoll(bars);
-    const macd = computeMACD(bars);
-    const kdj = computeKDJ(bars);
+    const ema12 = computeEMA(chartBars, 12);
+    const ema26 = computeEMA(chartBars, 26);
+    const boll = computeBoll(chartBars);
+    const macd = computeMACD(chartBars);
+    const kdj = computeKDJ(chartBars);
     return { ma, ema12, ema26, boll, macd, kdj };
-  }, [bars]);
+  }, [chartBars]);
 
   const latestPrice = useMemo(() => {
-    if (bars.length <= 0) return null;
-    const last = bars[bars.length - 1];
-    const previous = bars.length >= 2 ? bars[bars.length - 2] : null;
+    if (chartBars.length <= 0) return null;
+    const last = chartBars[chartBars.length - 1];
+    const previous = chartBars.length >= 2 ? chartBars[chartBars.length - 2] : null;
     const change = previous ? last.close - previous.close : 0;
     const changePct = previous && previous.close > 0 ? (change / previous.close) * 100 : 0;
     return {
@@ -530,7 +653,7 @@ export function AssetKlineChart({
       change,
       changePct,
     };
-  }, [bars]);
+  }, [chartBars]);
 
   const displayData = crosshairData ?? latestPrice;
   const displayIndicators = useMemo<IndicatorSnapshot>(() => {
@@ -563,9 +686,17 @@ export function AssetKlineChart({
 
   const visibleCostBasis = useMemo(() => {
     if (costBasisPerShare == null || costBasisPerShare <= 0) return null;
-    const candles = toCandlestickData(bars);
+    const candles = toCandlestickData(chartBars);
     return isPriceNearVisibleRange(costBasisPerShare, candles) ? costBasisPerShare : null;
-  }, [bars, costBasisPerShare]);
+  }, [chartBars, costBasisPerShare]);
+
+  const effectiveUpdatedAt = livePrice?.ts || dataSource?.updatedAt || "";
+  const effectiveAgeMs = dataAgeMs(effectiveUpdatedAt);
+  const delayedThresholdMs = currentInterval === "1h" ? 2 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
+  const isDelayed = effectiveAgeMs == null ? true : effectiveAgeMs > delayedThresholdMs;
+  const effectiveSource = livePrice?.source || dataSource?.source || "--";
+  const effectiveUpstream = livePrice?.source ? "stream" : (dataSource?.upstream || "--");
+  const ohlcvComplete = Boolean(dataSource?.completeOhlcv);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -813,10 +944,17 @@ export function AssetKlineChart({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    chartRef.current?.timeScale().applyOptions({
+      timeVisible: currentInterval === "1h",
+      secondsVisible: false,
+    });
+  }, [currentInterval]);
+
+  useEffect(() => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
 
-    const candles = toCandlestickData(bars);
-    const volumes = toVolumeData(bars);
+    const candles = toCandlestickData(chartBars);
+    const volumes = toVolumeData(chartBars);
     candleSeriesRef.current.setData(candles);
     volumeSeriesRef.current.setData(volumes);
     volumeSeriesRef.current.applyOptions({ visible: indicatorVisibility.volume });
@@ -861,14 +999,14 @@ export function AssetKlineChart({
       markersPluginRef.current = null;
     }
     if (tradeMarkers?.length && candleSeriesRef.current) {
-      const barDates = new Set(bars.map((bar) => bar.date));
       const dayMap = new Map<string, { buys: number; sells: number }>();
       for (const marker of tradeMarkers) {
-        if (!barDates.has(marker.date)) continue;
-        const entry = dayMap.get(marker.date) ?? { buys: 0, sells: 0 };
+        const markerTime = resolveMarkerTime(marker.date, chartBars);
+        if (!markerTime) continue;
+        const entry = dayMap.get(markerTime) ?? { buys: 0, sells: 0 };
         if (marker.side === "BUY") entry.buys += marker.qty;
         else entry.sells += marker.qty;
-        dayMap.set(marker.date, entry);
+        dayMap.set(markerTime, entry);
       }
 
       const markerData = [...dayMap.entries()]
@@ -934,7 +1072,7 @@ export function AssetKlineChart({
       applyPaneHeights(chartRef.current, indicatorVisibility);
       setPaddedVisibleRange(chartRef.current, candles);
     }
-  }, [bars, indicatorData, indicatorVisibility, tradeMarkers, costBasisPerShare]);
+  }, [chartBars, indicatorData, indicatorVisibility, tradeMarkers, costBasisPerShare]);
 
   const toggleIndicator = useCallback((key: IndicatorKey) => {
     setIndicatorVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -997,7 +1135,7 @@ export function AssetKlineChart({
       <div className="relative min-h-0 flex-1">
         <div className="pointer-events-none absolute left-3 top-3 z-[5] max-w-[calc(100%-1.5rem)] space-y-1 rounded-[8px] border border-[#1a222a] bg-[#090d10]/95 px-2.5 py-2 font-[var(--font-mono)] text-[11px] leading-tight shadow-[0_10px_24px_rgba(0,0,0,0.32)] backdrop-blur-sm">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
-            <span className="font-semibold text-[#d6dde5]">{symbol} · 1D · {market || "MARKET"}</span>
+            <span className="font-semibold text-[#d6dde5]">{symbol} · {currentInterval.toUpperCase()} · {market || "MARKET"}</span>
             <span className="text-[#8a939f]">开 <b className="font-normal text-[#b8c0ca]">{formatPrice(displayData?.open)}</b></span>
             <span className="text-[#8a939f]">高 <b className="font-normal text-[#00c076]">{formatPrice(displayData?.high)}</b></span>
             <span className="text-[#8a939f]">低 <b className="font-normal text-[#f84960]">{formatPrice(displayData?.low)}</b></span>
@@ -1032,9 +1170,18 @@ export function AssetKlineChart({
           ) : null}
         </div>
 
-        <div className="absolute right-3 top-3 z-[5] hidden items-center gap-2 rounded-[8px] border border-[#1a222a] bg-[#090d10]/95 px-2 py-1.5 font-[var(--font-mono)] text-[10px] text-[#8a939f] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm lg:flex">
-          <span title={dataSource ? `${dataSource.source} · ${dataSource.upstream}` : undefined}>
-            OHLCV {dataSource ? `${dataSource.rawCount}` : ""}
+        <div className="absolute right-3 top-3 z-[5] hidden max-w-[min(520px,calc(100%-1.5rem))] flex-wrap items-center justify-end gap-1.5 rounded-[8px] border border-[#1a222a] bg-[#090d10]/95 px-2 py-1.5 font-[var(--font-mono)] text-[10px] text-[#8a939f] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm lg:flex">
+          <span className="rounded-[5px] border border-[#202832] bg-[#050607] px-1.5 py-0.5" title={`${effectiveSource} · ${effectiveUpstream}`}>
+            {effectiveSource} · {effectiveUpstream}
+          </span>
+          <span className="rounded-[5px] border border-[#202832] bg-[#050607] px-1.5 py-0.5">
+            {currentInterval.toUpperCase()} · {dataSource ? `${dataSource.rows}/${dataSource.rawCount}` : "--"}
+          </span>
+          <span className={`rounded-[5px] border px-1.5 py-0.5 ${isDelayed ? "border-[#5a3a12] bg-[#1a1206] text-[#f7b500]" : "border-[#123827] bg-[#061812] text-[#00c076]"}`}>
+            {isDelayed ? "延迟" : "新鲜"} · {formatChartTime(effectiveUpdatedAt, currentInterval)}
+          </span>
+          <span className={`rounded-[5px] border px-1.5 py-0.5 ${ohlcvComplete ? "border-[#123827] bg-[#061812] text-[#00c076]" : "border-[#5a3a12] bg-[#1a1206] text-[#f7b500]"}`}>
+            {ohlcvComplete ? "OHLCV 完整" : "OHLCV 不完整"}
           </span>
           {visibleCostBasis != null ? <span className="text-[#f7b500]">成本 {formatPrice(visibleCostBasis)}</span> : null}
           {tradeSummary.total > 0 ? (

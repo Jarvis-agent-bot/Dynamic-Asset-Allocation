@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { getApiErrorMessage } from "@/src/daa/api/client";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { AssetKlineChart } from "@/app/daa/dashboard/_shared/AssetKlineChart";
+import { usePriceStream } from "@/app/daa/dashboard/_hooks/usePriceStream";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
@@ -150,6 +151,9 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   const sparklineSymbols = useMemo(() => row ? [row.yfinanceSymbol || row.symbol] : [], [row]);
   const sparklines = useSparklines(sparklineSymbols);
   const sparkData = row ? (sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null) : null;
+  const priceStreamAssetKeys = useMemo(() => row ? [row.assetKey] : [], [row]);
+  const priceStream = usePriceStream(priceStreamAssetKeys);
+  const livePrice = row ? priceStream.prices.get(row.assetKey) ?? null : null;
 
   // 成本价（单价）
   const costBasisPerShare = useMemo(() => {
@@ -267,6 +271,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
               className="min-h-[520px]"
               tradeMarkers={tradeMarkers}
               costBasisPerShare={costBasisPerShare}
+              livePrice={livePrice}
             />
           </div>
         </SectionErrorBoundary>

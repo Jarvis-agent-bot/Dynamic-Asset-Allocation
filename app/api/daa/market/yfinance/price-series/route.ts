@@ -23,6 +23,7 @@ function parseBooleanFlag(value: string | null, fallback = false): boolean {
 function parseInterval(value: string | null): PriceSeriesInterval | null {
   const text = String(value || "1d").trim();
   if (text === "1d") return "1d";
+  if (text === "1h") return "1h";
   return null;
 }
 
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
       const effectiveAdjusted = requireOhlcv ? false : useAdjustedClose;
       const interval = parseInterval(url.searchParams.get("interval"));
       if (!interval) {
-        return fail("VALIDATION_FAILED", "interval 当前仅支持 1d", { status: 400 });
+        return fail("VALIDATION_FAILED", "interval 当前仅支持 1d / 1h", { status: 400 });
       }
 
       if (start !== undefined) assertIsoDateString(start, "start");
@@ -88,7 +89,7 @@ export async function GET(req: Request) {
         });
       }
 
-      const normalized = normalizeYfinanceHistoricalQuotes(cacheResult.data, { start, end });
+      const normalized = normalizeYfinanceHistoricalQuotes(cacheResult.data, { start, end, interval });
       return ok({
         source: cacheResult.source,
         interval: cacheResult.interval,

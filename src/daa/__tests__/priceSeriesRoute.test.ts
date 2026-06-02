@@ -21,6 +21,7 @@ import { GET } from "@/app/api/daa/market/yfinance/price-series/route";
 describe("yfinance price-series route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fetchPriceSeriesWithCache.mockReset();
     mocks.fetchPriceSeriesWithCache.mockResolvedValue({
       symbol: "005930.KS",
       data: [{
@@ -40,13 +41,45 @@ describe("yfinance price-series route", () => {
     });
   });
 
-  it("拒绝当前未稳定支持的小时线 interval", async () => {
-    const response = await GET(new Request("http://localhost/api/daa/market/yfinance/price-series?symbol=005930.KS&interval=1h"));
+  it("放行小时线 interval 并保留小时级时间戳", async () => {
+    mocks.fetchPriceSeriesWithCache.mockResolvedValueOnce({
+      symbol: "AMD",
+      data: [{
+        date: "2026-06-01T14:00:00.000Z",
+        open: 505,
+        high: 511,
+        low: 501,
+        close: 510,
+        volume: 1234567,
+      }],
+      source: "yahoo",
+      interval: "1h",
+      priceMode: "close",
+      upstream: "yahoo_provider",
+      rowsCovered: 1,
+      rowsWritten: 1,
+    });
+
+    const response = await GET(new Request("http://localhost/api/daa/market/yfinance/price-series?symbol=AMD&market=US&start=2026-06-01&adjusted=0&requireOhlcv=1&interval=1h"));
     const json = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(json.error.code).toBe("VALIDATION_FAILED");
-    expect(mocks.fetchPriceSeriesWithCache).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.interval).toBe("1h");
+    expect(json.data.series).toEqual([{
+      date: "2026-06-01T14:00:00.000Z",
+      open: 505,
+      high: 511,
+      low: 501,
+      close: 510,
+      volume: 1234567,
+    }]);
+    expect(mocks.fetchPriceSeriesWithCache).toHaveBeenCalledWith("AMD", "2026-06-01", expect.objectContaining({
+      market: "US",
+      interval: "1h",
+      adjusted: false,
+      requireOhlcv: true,
+    }));
   });
 
   it("传递真实 OHLCV 日线请求参数", async () => {

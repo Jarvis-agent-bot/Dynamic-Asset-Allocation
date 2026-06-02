@@ -9,11 +9,14 @@
  */
 
 import { batchReadAssetPriceSnapshots, type AssetPriceSnapshot } from "@/src/daa/store/assetUniverseStore";
+import { appendDaaMarketPriceHistoryRows, upsertDaaMarketPriceSnapshots } from "@/src/daa/store/daaStorePg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { getYahooRealtimeQuoteHub, type YahooRealtimePriceUpdate } from "@/src/market/yahooRealtime";
 
 type PriceUpdateEvent = {
   type: "price_update";
-  data: Record<string, { price: number; ts: string; delta: number; currency: string }>;
+  data: Record<string, { price: number; ts: string; delta: number; currency: string; source?: string }>;
 };
 
 type HeartbeatEvent = {
@@ -21,9 +24,130 @@ type HeartbeatEvent = {
   ts: string;
 };
 
+export type RealtimePriceAsset = {
+  assetKey: string;
+  market: string;
+  symbol: string;
+  yfinanceSymbol: string;
+  currency: string;
+};
+
+export type RealtimePriceUpdate = {
+  assetKey: string;
+  price: number;
+  ts: string;
+  currency: string;
+  source: string;
+  change?: number;
+};
+
+export type RealtimePriceSubscription = (
+  assets: RealtimePriceAsset[],
+  onUpdate: (update: RealtimePriceUpdate) => void,
+) => () => void;
+
 // --- 全局连接限制 ---
 const MAX_GLOBAL_STREAMS = 10;
 let activeStreamCount = 0;
+
+function inferCurrency(market: string): string {
+  if (market === "HK") return "HKD";
+  if (market === "CN") return "CNY";
+  if (market === "KR") return "KRW";
+  if (market === "JP") return "JPY";
+  if (market === "TW") return "TWD";
+  if (market === "UK") return "GBP";
+  if (market === "EU") return "EUR";
+  return "USD";
+}
+
+function parseAssetKey(assetKey: string): { market: string; symbol: string } | null {
+  const text = String(assetKey || "").trim().toUpperCase();
+  const separator = text.indexOf("::");
+  if (separator <= 0 || separator >= text.length - 2) return null;
+  return {
+    market: text.slice(0, separator),
+    symbol: text.slice(separator + 2),
+  };
+}
+
+function buildRealtimeAssets(assetKeys: string[]): RealtimePriceAsset[] {
+  const seen = new Set<string>();
+  const assets: RealtimePriceAsset[] = [];
+  for (const assetKey of assetKeys) {
+    const parsed = parseAssetKey(assetKey);
+    if (!parsed) continue;
+    const yfinanceSymbol = toYfinanceSymbolByMarket(parsed.symbol, parsed.market);
+    if (!yfinanceSymbol) continue;
+    const normalizedKey = `${parsed.market}::${parsed.symbol}`;
+    if (seen.has(normalizedKey)) continue;
+    seen.add(normalizedKey);
+    assets.push({
+      assetKey: normalizedKey,
+      market: parsed.market,
+      symbol: parsed.symbol,
+      yfinanceSymbol,
+      currency: inferCurrency(parsed.market),
+    });
+  }
+  return assets;
+}
+
+async function persistRealtimePrice(asset: RealtimePriceAsset, update: YahooRealtimePriceUpdate): Promise<void> {
+  const currency = update.currency || asset.currency;
+  await upsertDaaMarketPriceSnapshots([{
+    provider: "yfinance",
+    market: asset.market,
+    symbol: asset.symbol,
+    normalizedSymbol: asset.yfinanceSymbol,
+    currency,
+    price: update.price,
+    status: "fresh",
+    priceUpdatedAt: update.ts,
+    source: "yahoo_streamer",
+    errorCode: null,
+    errorMessage: null,
+    rawRefId: null,
+  }]);
+  await appendDaaMarketPriceHistoryRows([{
+    provider: "yfinance",
+    market: asset.market,
+    symbol: asset.symbol,
+    ts: update.ts,
+    price: update.price,
+    currency,
+    source: "yahoo_streamer",
+    rawRefId: null,
+  }]);
+}
+
+function subscribeYahooRealtimePrices(
+  assets: RealtimePriceAsset[],
+  onUpdate: (update: RealtimePriceUpdate) => void,
+): () => void {
+  if (assets.length <= 0) return () => undefined;
+
+  const assetByYfinanceSymbol = new Map<string, RealtimePriceAsset>();
+  for (const asset of assets) {
+    assetByYfinanceSymbol.set(asset.yfinanceSymbol.toUpperCase(), asset);
+  }
+
+  return getYahooRealtimeQuoteHub().subscribe([...assetByYfinanceSymbol.keys()], (update) => {
+    const asset = assetByYfinanceSymbol.get(update.symbol.toUpperCase());
+    if (!asset) return;
+
+    onUpdate({
+      assetKey: asset.assetKey,
+      price: update.price,
+      ts: update.ts,
+      currency: update.currency || asset.currency,
+      source: update.source,
+      change: update.change,
+    });
+
+    void persistRealtimePrice(asset, update).catch((err) => logSwallowed("priceStream.persistRealtimePrice", err));
+  });
+}
 
 /**
  * 比较两次价格快照，返回有变化的资产 diff。
@@ -64,6 +188,7 @@ export function createPriceStream(
   assetKeys: string[],
   intervalMs = 3000,
   maxDurationMs = 5 * 60 * 1000,
+  opts: { realtimeSubscribe?: RealtimePriceSubscription } = {},
 ): ReadableStream<Uint8Array> | null {
   // 连接限制检查
   if (activeStreamCount >= MAX_GLOBAL_STREAMS) {
@@ -77,6 +202,35 @@ export function createPriceStream(
   let startedAt = 0;
   let cleaned = false;
   const prevSnapshots = new Map<string, AssetPriceSnapshot>();
+  let unsubscribeRealtime: (() => void) | null = null;
+
+  function enqueuePriceUpdate(
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    input: { assetKey: string; price: number; ts: string; currency: string; source?: string; fallbackDelta?: number },
+  ) {
+    const prev = prevSnapshots.get(input.assetKey);
+    const delta = prev ? input.price - prev.lastPrice : (input.fallbackDelta ?? 0);
+    const event: PriceUpdateEvent = {
+      type: "price_update",
+      data: {
+        [input.assetKey]: {
+          price: input.price,
+          ts: input.ts,
+          delta,
+          currency: input.currency,
+          source: input.source,
+        },
+      },
+    };
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+    prevSnapshots.set(input.assetKey, {
+      assetKey: input.assetKey,
+      symbol: parseAssetKey(input.assetKey)?.symbol ?? input.assetKey,
+      lastPrice: input.price,
+      priceUpdatedAt: input.ts,
+      currency: input.currency,
+    });
+  }
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -84,6 +238,27 @@ export function createPriceStream(
 
       const connectEvent = `event: connected\ndata: ${JSON.stringify({ assetCount: assetKeys.length, intervalMs })}\n\n`;
       controller.enqueue(encoder.encode(connectEvent));
+
+      const realtimeAssets = buildRealtimeAssets(assetKeys);
+      const realtimeSubscribe = opts.realtimeSubscribe ?? subscribeYahooRealtimePrices;
+      try {
+        unsubscribeRealtime = realtimeSubscribe(realtimeAssets, (update) => {
+          try {
+            enqueuePriceUpdate(controller, {
+              assetKey: update.assetKey,
+              price: update.price,
+              ts: update.ts,
+              currency: update.currency,
+              source: update.source,
+              fallbackDelta: update.change,
+            });
+          } catch {
+            cleanup(controller);
+          }
+        });
+      } catch (err) {
+        logSwallowed("priceStream.realtimeSubscribe", err);
+      }
 
       timer = setInterval(async () => {
         if (Date.now() - startedAt > maxDurationMs) {
@@ -130,6 +305,10 @@ export function createPriceStream(
     cleaned = true;
     if (timer) { clearInterval(timer); timer = null; }
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    if (unsubscribeRealtime) {
+      try { unsubscribeRealtime(); } catch { /* noop */ }
+      unsubscribeRealtime = null;
+    }
     activeStreamCount = Math.max(0, activeStreamCount - 1);
     try { controller?.close(); } catch { /* already closed */ }
   }
