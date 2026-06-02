@@ -387,47 +387,165 @@ interface BriefingBuckets {
   risks: ThesisFailureImpact[];
 }
 
+type PriorityReviewItem = {
+  key: string;
+  label: string;
+  tone: ActionTone;
+  title: React.ReactNode;
+  description: React.ReactNode;
+  score: number;
+  meta: string;
+  href?: string;
+};
+
+function buildPriorityItems(buckets: BriefingBuckets): PriorityReviewItem[] {
+  const surpriseItems = buckets.surprises.map((surprise, index) => {
+    const action = surpriseAction(surprise);
+    return {
+      key: `surprise-${index}`,
+      label: action.label,
+      tone: action.tone,
+      title: surprise.title,
+      description: surprise.suggestedAction || surprise.description,
+      score: surprise.severityScore * 10,
+      meta: `新变化 · 重要度 ${surprise.severityScore}`,
+    };
+  });
+
+  const gapItems = buckets.gaps.map((gap, index) => {
+    const action = gapAction(gap);
+    const weightPct = gap.portfolioWeight * 100;
+    return {
+      key: `gap-${gap.assetKey}-${index}`,
+      label: action.label,
+      tone: action.tone,
+      title: formatAssetLabelByKey(gap.assetKey),
+      description: gap.suggestedInvestigation || gap.uncertaintyReason,
+      score: weightPct * 4 + Math.min(gap.daysSinceLastInvestigation, 90),
+      meta: weightPct > 0
+        ? `仓位缺口 · 持仓 ${weightPct.toFixed(1)}% · ${gap.daysSinceLastInvestigation} 天未复核`
+        : `观察缺口 · ${gap.daysSinceLastInvestigation} 天未复核`,
+    };
+  });
+
+  const riskItems = buckets.risks.map((risk) => {
+    const action = riskAction(risk);
+    const riskBoost = risk.riskLevel === "critical" ? 80 : risk.riskLevel === "high" ? 55 : 25;
+    return {
+      key: `risk-${risk.threadId}`,
+      label: action.label,
+      tone: action.tone,
+      title: risk.thesisTitle,
+      description: `若论点失效，影响 ${risk.affectedAssets.slice(0, 3).map((a) => formatAssetLabelByKey(a.assetKey)).join("、")}`,
+      score: risk.totalExposurePct * 100 + risk.estimatedLossPct * 120 + riskBoost,
+      meta: `论点风险 · 暴露 ${(risk.totalExposurePct * 100).toFixed(1)}%`,
+      href: `/daa/dashboard/today/thesis/${risk.threadId}`,
+    };
+  });
+
+  const conflictItems = buckets.conflicts.map((conflict, index) => ({
+    key: `conflict-${index}`,
+    label: "对齐论点",
+    tone: "orange" as ActionTone,
+    title: conflict.overlappingAssets.length > 0
+      ? conflict.overlappingAssets.map((k) => formatAssetLabelByKey(k)).join("、")
+      : "同一资产论点冲突",
+    description: `${conflict.thesisA.title} / ${conflict.thesisB.title}`,
+    score: conflict.severity === "high" ? 72 : conflict.severity === "medium" ? 46 : 28,
+    meta: `论点冲突 · ${conflict.thesisA.conviction} vs ${conflict.thesisB.conviction}`,
+  }));
+
+  return [...surpriseItems, ...gapItems, ...riskItems, ...conflictItems]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+}
+
 function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
+  const priorityItems = buildPriorityItems(buckets);
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.08fr_1fr_1fr]">
-      <KanbanColumn
-        icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
-        title="新变化"
-        subtitle="市场或新闻和现有论点冲突的事项"
-        count={buckets.surprises.length}
-        emptyText="今天没有出现明显的认知冲击"
-      >
-        {buckets.surprises.slice(0, COLUMN_LIMIT).map((s, i) => (
-          <SurpriseCard key={`s-${i}`} surprise={s} />
-        ))}
-      </KanbanColumn>
+    <div className="space-y-4">
+      {priorityItems.length > 0 ? (
+        <section className="rounded-[var(--radius-lg)] border border-[var(--primary-border)] bg-[var(--primary-bg)]/55 px-4 py-3.5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-[var(--text)]">优先处理</div>
+              <div className="mt-0.5 text-xs leading-5 text-[var(--muted)]">按重要度、仓位暴露、未复核天数与论点风险综合排序。</div>
+            </div>
+            <span className="rounded-full border border-[var(--primary-border)] bg-[var(--surface)] px-2.5 py-1 font-[var(--font-mono)] text-xs text-[var(--primary)]">
+              Top {priorityItems.length}
+            </span>
+          </div>
+          <div className="grid gap-2 xl:grid-cols-5">
+            {priorityItems.map((item) => (
+              <PriorityReviewCard key={item.key} item={item} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-      <KanbanColumn
-        icon={<Search className="h-4 w-4 text-[var(--primary)]" />}
-        title="仓位缺口"
-        subtitle="重要持仓但近期没有调查"
-        count={buckets.gaps.length}
-        emptyText="所有重要持仓均在近期复核窗口内"
-      >
-        {buckets.gaps.slice(0, COLUMN_LIMIT).map((g, i) => (
-          <GapCard key={`g-${i}`} gap={g} />
-        ))}
-      </KanbanColumn>
+      <div className="grid gap-4 xl:grid-cols-[1.08fr_1fr_1fr]">
+        <KanbanColumn
+          icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
+          title="新变化"
+          subtitle="市场或新闻和现有论点冲突的事项"
+          count={buckets.surprises.length}
+          emptyText="今天没有出现明显的认知冲击"
+        >
+          {buckets.surprises.slice(0, COLUMN_LIMIT).map((s, i) => (
+            <SurpriseCard key={`s-${i}`} surprise={s} />
+          ))}
+        </KanbanColumn>
 
-      <KanbanColumn
-        icon={<Network className="h-4 w-4 text-orange-300" />}
-        title="论点冲突 · 风险"
-        subtitle="同资产矛盾论点 + 高暴露风险"
-        count={buckets.conflicts.length + buckets.risks.length}
-        emptyText="论点之间无冲突，风险暴露可控"
-      >
-        {buckets.conflicts.slice(0, 2).map((c, i) => (
-          <ConflictCard key={`c-${i}`} conflict={c} />
-        ))}
-        {buckets.risks.slice(0, COLUMN_LIMIT - Math.min(buckets.conflicts.length, 2)).map((r, i) => (
-          <RiskCard key={`r-${i}`} risk={r} />
-        ))}
-      </KanbanColumn>
+        <KanbanColumn
+          icon={<Search className="h-4 w-4 text-[var(--primary)]" />}
+          title="仓位缺口"
+          subtitle="重要持仓但近期没有调查"
+          count={buckets.gaps.length}
+          emptyText="所有重要持仓均在近期复核窗口内"
+        >
+          {buckets.gaps.slice(0, COLUMN_LIMIT).map((g, i) => (
+            <GapCard key={`g-${i}`} gap={g} />
+          ))}
+        </KanbanColumn>
+
+        <KanbanColumn
+          icon={<Network className="h-4 w-4 text-orange-300" />}
+          title="论点冲突 · 风险"
+          subtitle="同资产矛盾论点 + 高暴露风险"
+          count={buckets.conflicts.length + buckets.risks.length}
+          emptyText="论点之间无冲突，风险暴露可控"
+        >
+          {buckets.conflicts.slice(0, 2).map((c, i) => (
+            <ConflictCard key={`c-${i}`} conflict={c} />
+          ))}
+          {buckets.risks.slice(0, COLUMN_LIMIT - Math.min(buckets.conflicts.length, 2)).map((r, i) => (
+            <RiskCard key={`r-${i}`} risk={r} />
+          ))}
+        </KanbanColumn>
+      </div>
+    </div>
+  );
+}
+
+function PriorityReviewCard({ item }: { item: PriorityReviewItem }) {
+  const titleNode = item.href ? (
+    <Link href={item.href} className="line-clamp-2 text-sm font-semibold leading-5 text-[var(--text)] transition-colors hover:text-[var(--primary)]">
+      {item.title}
+    </Link>
+  ) : (
+    <div className="line-clamp-2 text-sm font-semibold leading-5 text-[var(--text)]">{item.title}</div>
+  );
+
+  return (
+    <div className="min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 shadow-[inset_0_1px_0_var(--surface)]">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <ActionBadge tone={item.tone}>{item.label}</ActionBadge>
+        <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">{Math.round(item.score)}</span>
+      </div>
+      {titleNode}
+      <div className="mt-1.5 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.description}</div>
+      <div className="mt-2 truncate text-[11px] text-[var(--faint)]">{item.meta}</div>
     </div>
   );
 }

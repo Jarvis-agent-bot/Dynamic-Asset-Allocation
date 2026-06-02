@@ -273,7 +273,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
   }
 
   return (
-    <div className={className}>
+    <div className={`min-w-0 ${className ?? ""}`}>
       {/* 时间范围选择器 + 收益率 */}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -347,8 +347,8 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
       </div>
 
       {/* 图表 */}
-      <div className="h-[240px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-[240px] min-h-[240px] w-full min-w-0">
+        <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={240}>
           <LineChart
             data={data}
             margin={{ top: 8, right: 8, left: 0, bottom: 0 }}

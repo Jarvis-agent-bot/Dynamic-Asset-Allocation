@@ -92,15 +92,15 @@ export default function FloatingAssistantChat() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed bottom-6 right-6 z-40 inline-flex h-12 items-center gap-2 rounded-full border border-indigo-400/30 bg-[var(--surface)] px-4 text-sm font-medium text-[var(--text)] shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur transition-all hover:border-indigo-300/55 hover:text-[var(--text)]",
+          "fixed right-5 top-[92px] z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-indigo-400/30 bg-[var(--surface)] text-[var(--text)] shadow-[0_12px_28px_rgba(15,23,42,0.18)] backdrop-blur transition-all hover:border-indigo-300/55 hover:text-[var(--text)]",
           open && "opacity-0 pointer-events-none",
         )}
         aria-label="打开 Agent 对话"
+        title="和 Agent 对话"
       >
         <Bot className="h-4 w-4 text-indigo-300" />
-        和 Agent 对话
         {hasMessages ? (
-          <span className="ml-1 inline-flex h-1.5 w-1.5 rounded-full bg-indigo-300" />
+          <span className="absolute right-2 top-2 inline-flex h-1.5 w-1.5 rounded-full bg-indigo-300" />
         ) : null}
       </button>
 
@@ -114,7 +114,7 @@ export default function FloatingAssistantChat() {
           <aside
             role="dialog"
             aria-label="Agent 对话"
-            className="fixed bottom-6 right-6 z-50 flex w-[min(420px,calc(100vw-3rem))] max-h-[min(720px,calc(100vh-3rem))] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] shadow-[0_30px_70px_rgba(0,0,0,0.5)]"
+            className="fixed right-6 top-[92px] z-50 flex w-[min(420px,calc(100vw-3rem))] max-h-[min(720px,calc(100vh-7rem))] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] shadow-[0_30px_70px_rgba(0,0,0,0.5)]"
           >
             <div className="absolute inset-x-0 top-0 h-1 bg-indigo-400/70" />
             <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">

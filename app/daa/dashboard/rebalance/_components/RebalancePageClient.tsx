@@ -9,6 +9,7 @@ import { Bot, Gauge, ListChecks, ShieldCheck, WalletCards } from "lucide-react";
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfacePanel, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { SkeletonChart } from "@/app/daa/dashboard/_components/SkeletonPatterns";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import type { PolicyDecision } from "@/src/daa/modules/policy-engine/policyTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
@@ -46,6 +47,35 @@ const LazyDriftBarChart = dynamic<DriftBarChartProps>(
     loading: () => <div className="h-32 rounded-[14px] bg-[var(--surface)]" />,
   },
 );
+
+function RebalanceLoadingState() {
+  return (
+    <div className="space-y-4">
+      <section className="rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] p-4 shadow-[0_18px_38px_rgba(15,23,42,0.08)]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.94fr)] xl:items-center">
+          <div className="space-y-3">
+            <div className="h-5 w-28 animate-pulse rounded-full bg-[var(--border)]" />
+            <div className="h-8 w-72 max-w-full animate-pulse rounded bg-[var(--border)]" />
+            <div className="h-4 w-[36rem] max-w-full animate-pulse rounded bg-[var(--border)]" />
+            <div className="h-11 w-full animate-pulse rounded-[12px] bg-[var(--surface)]" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="h-20 animate-pulse rounded-[var(--radius-lg)] bg-[var(--surface)]" />
+            ))}
+          </div>
+        </div>
+      </section>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.7fr)]">
+        <div className="h-72 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)]" />
+        <div className="h-72 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)]" />
+      </div>
+      <DaaSurfacePanel title="漂移概览" subtitle="正在同步当前持仓、目标权重与策略阈值。" accent="slate">
+        <SkeletonChart height={150} />
+      </DaaSurfacePanel>
+    </div>
+  );
+}
 
 function DecisionMetric(props: {
   label: string;
@@ -290,7 +320,9 @@ export default function RebalancePageClient() {
             </SectionErrorBoundary>
           ) : null}
         </>
-      ) : null}
+      ) : (
+        <RebalanceLoadingState />
+      )}
 
       <DashboardDialogs {...wbModel.dialogProps} />
     </div>

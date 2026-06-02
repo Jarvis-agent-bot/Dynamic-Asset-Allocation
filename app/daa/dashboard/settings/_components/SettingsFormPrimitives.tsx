@@ -172,7 +172,7 @@ export function FieldLabel({ children }: { children: ReactNode }) {
       style={{
         fontSize: 11,
         fontWeight: 600,
-        color: "var(--faint)",
+        color: "var(--muted)",
         marginBottom: 8,
         letterSpacing: "0.08em",
         textTransform: "uppercase",
@@ -204,8 +204,9 @@ export function CheckboxRow({
         gap: 8,
         cursor: disabled ? "not-allowed" : "pointer",
         fontSize: 13,
-        color: disabled ? "var(--faint)" : "var(--muted)",
+        color: disabled ? "var(--muted)" : "var(--text)",
         userSelect: "none",
+        opacity: disabled ? 0.72 : 1,
       }}
     >
       <input
@@ -237,16 +238,16 @@ export function SectionCard({
       style={{
         borderRadius: 18,
         border: "1px solid var(--border)",
-        background: "linear-gradient(180deg, rgba(17,23,38,0.94), var(--surface))",
+        background: "linear-gradient(180deg, var(--surface), var(--card))",
         overflow: "hidden",
-        boxShadow: "0 24px 60px rgba(0,0,0,0.22)",
+        boxShadow: "0 16px 34px rgba(15,23,42,0.08)",
       }}
     >
       <div
         style={{
           padding: "16px 18px",
           borderBottom: "1px solid var(--border)",
-          background: "linear-gradient(180deg, var(--elevated), rgba(255,255,255,0))",
+          background: "var(--elevated)",
         }}
       >
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", letterSpacing: "0.01em" }}>{title}</div>
