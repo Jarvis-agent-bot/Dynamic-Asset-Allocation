@@ -29,7 +29,22 @@ export function AssetInfoBar(props: {
   const riskLabel = row.priceStatus === "fresh" ? "正常" : row.priceStatus === "stale" ? "延迟" : "需确认";
   const targetPct = row.targetWeightPct ?? (row.targetWeightHint ?? 0) * 100;
   const gapPct = row.gapPct ?? (targetPct - (row.actualWeightPct ?? 0));
-  const gapTone = Math.abs(gapPct) >= 5 ? "text-[var(--danger)]" : Math.abs(gapPct) >= 2 ? "text-[var(--amber)]" : "text-[var(--success)]";
+  const absGapPct = Math.abs(gapPct);
+  const riskTone = row.priceStatus === "fresh"
+    ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]"
+    : row.priceStatus === "stale"
+      ? "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]"
+      : "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]";
+  const riskIconTone = row.priceStatus === "fresh"
+    ? "text-[var(--success)]"
+    : row.priceStatus === "stale"
+      ? "text-[var(--amber)]"
+      : "text-[var(--danger)]";
+  const gapPillTone = absGapPct >= 5
+    ? "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]"
+    : absGapPct >= 2
+      ? "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]"
+      : "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]";
 
   return (
     <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--card),var(--surface))] shadow-[0_16px_36px_rgba(15,23,42,0.08)]">
@@ -78,7 +93,7 @@ export function AssetInfoBar(props: {
           ) : null}
         </div>
 
-        <div className="ml-auto grid flex-1 grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-3 xl:grid-cols-6">
+        <div className="ml-auto grid flex-1 grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-3 xl:grid-cols-[repeat(5,minmax(92px,1fr))_minmax(170px,1.45fr)]">
           <div className="min-w-0">
             <div className="text-[11px] text-[var(--muted)]">市值</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
@@ -114,14 +129,20 @@ export function AssetInfoBar(props: {
                 : "--"}
             </div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 xl:min-w-[170px]">
             <div className="text-[11px] text-[var(--muted)]">状态</div>
-            <div className="mt-1 flex min-w-0 items-center gap-2">
-              <span className="inline-flex items-center gap-1 font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
-                <ShieldCheck className="h-3.5 w-3.5 text-[var(--success)]" />
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-[6px] border px-1.5 py-0.5 font-[var(--font-mono)] text-xs font-semibold",
+                riskTone,
+              )}>
+                <ShieldCheck className={cn("h-3.5 w-3.5", riskIconTone)} />
                 {riskLabel}
               </span>
-              <span className={cn("truncate font-[var(--font-mono)] text-xs font-semibold", gapTone)}>
+              <span className={cn(
+                "inline-flex max-w-full items-center rounded-[6px] border px-1.5 py-0.5 font-[var(--font-mono)] text-xs font-semibold whitespace-nowrap",
+                gapPillTone,
+              )}>
                 偏离 {gapPct >= 0 ? "+" : ""}{gapPct.toFixed(2)}%
               </span>
             </div>
