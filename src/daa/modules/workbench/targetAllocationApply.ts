@@ -2,6 +2,7 @@ import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 
 import { patchWorkbenchAsset, upsertWorkbenchAsset } from "./workbenchApi";
+import type { WorkbenchTargetWeightAuditContext } from "./workbenchApi";
 import type { AssetUniverseView } from "./workbenchTypes";
 
 type TargetWeightPatch = {
@@ -110,7 +111,13 @@ export function buildTargetWeightApplyPlan(input: {
   return { patches, upserts };
 }
 
-export async function applyWorkbenchTargetWeights(weightsPct: Record<string, number>): Promise<TargetWeightApplyPlan> {
+export async function applyWorkbenchTargetWeights(
+  weightsPct: Record<string, number>,
+  auditContext: WorkbenchTargetWeightAuditContext = {
+    source: "target_allocation_apply",
+    reason: "批量应用目标权重配置",
+  },
+): Promise<TargetWeightApplyPlan> {
   const model = await getWorkbenchReadModel({ syncPrices: false });
   const plan = buildTargetWeightApplyPlan({
     currentRows: model.bootstrap.assetUniverse.map((row) => ({
@@ -122,8 +129,28 @@ export async function applyWorkbenchTargetWeights(weightsPct: Record<string, num
   });
 
   await Promise.all([
-    ...plan.patches.map((item) => patchWorkbenchAsset(item.assetKey, item.patch)),
-    ...plan.upserts.map((item) => upsertWorkbenchAsset(item)),
+    ...plan.patches.map((item) => patchWorkbenchAsset(item.assetKey, {
+      ...item.patch,
+      targetWeightAudit: {
+        ...auditContext,
+        payload: {
+          ...(auditContext.payload || {}),
+          weightsPct,
+          operation: "patch",
+        },
+      },
+    })),
+    ...plan.upserts.map((item) => upsertWorkbenchAsset({
+      ...item,
+      targetWeightAudit: {
+        ...auditContext,
+        payload: {
+          ...(auditContext.payload || {}),
+          weightsPct,
+          operation: "upsert",
+        },
+      },
+    })),
   ]);
 
   return plan;

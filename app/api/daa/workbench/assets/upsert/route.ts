@@ -5,6 +5,7 @@ import { upsertDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import type { TargetWeightAuditSource } from "@/src/daa/store/targetWeightAuditStore";
 
 export const runtime = "nodejs";
 
@@ -24,12 +25,48 @@ type Body = {
   targetWeightHint?: unknown;
   notes?: unknown;
   lastPrice?: unknown;
+  targetWeightAudit?: unknown;
 };
+
+const TARGET_WEIGHT_AUDIT_SOURCES = new Set<TargetWeightAuditSource>([
+  "manual_asset_patch",
+  "asset_upsert",
+  "agent_target_weight_pool",
+  "rebalance_execution",
+  "target_allocation_apply",
+  "portfolio_template_apply",
+  "strategy_lab_apply",
+  "candidate_assets_replace",
+  "system",
+]);
 
 function toOptionalText(value: unknown): string | undefined {
   if (value == null) return undefined;
   const text = String(value).trim();
   return text ? text : undefined;
+}
+
+function readTargetWeightAudit(value: unknown): {
+  source?: TargetWeightAuditSource;
+  reason?: string | null;
+  actor?: string | null;
+  agentRunId?: string | null;
+  cycleId?: string | null;
+  payload?: Record<string, unknown> | null;
+} | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const sourceRaw = String(raw.source || "").trim() as TargetWeightAuditSource;
+  return {
+    source: TARGET_WEIGHT_AUDIT_SOURCES.has(sourceRaw) ? sourceRaw : undefined,
+    reason: raw.reason == null ? undefined : String(raw.reason),
+    actor: raw.actor == null ? undefined : String(raw.actor),
+    agentRunId: raw.agentRunId == null ? undefined : String(raw.agentRunId),
+    cycleId: raw.cycleId == null ? undefined : String(raw.cycleId),
+    payload: raw.payload && typeof raw.payload === "object" && !Array.isArray(raw.payload)
+      ? raw.payload as Record<string, unknown>
+      : undefined,
+  };
 }
 
 export async function POST(req: Request) {
@@ -60,6 +97,7 @@ export async function POST(req: Request) {
       targetWeightHint: Number(body?.targetWeightHint || 0),
       notes: body?.notes == null ? null : String(body.notes),
       lastPrice: Number(body?.lastPrice || 0),
+      targetWeightAudit: readTargetWeightAudit(body?.targetWeightAudit),
     });
 
     const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });

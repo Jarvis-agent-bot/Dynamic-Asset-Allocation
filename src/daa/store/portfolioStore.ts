@@ -15,6 +15,7 @@ import {
   upsertAssetMasterInTx, upsertWatchlistEntryInTx,
   upsertTargetAllocationInTx, deleteOrphanedAssetsInTx,
 } from "./assetMasterStore";
+import { recordTargetWeightAuditInTx } from "./targetWeightAuditStore";
 
 function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeCurrencyAlias(value, fallback);
@@ -173,6 +174,18 @@ export async function replaceDaaCandidateAssets(
     const txQuery = query;
     await txQuery("BEGIN");
     try {
+      const currentTargetRows = await txQuery(
+        "SELECT asset_key, target_weight_hint FROM daa_target_allocations WHERE owner_account_id = $1",
+        [ownerAccountId],
+      );
+      const previousTargets = new Map(
+        currentTargetRows.rows.map((row) => [
+          normalizeText((row as Record<string, unknown>).asset_key).toUpperCase(),
+          Math.max(0, toFiniteNumber((row as Record<string, unknown>).target_weight_hint)),
+        ] as const),
+      );
+      const desiredTargets = new Map<string, { symbol: string; targetWeightHint: number }>();
+
       // 清除所有观察列表标记
       await txQuery(
         "UPDATE daa_watchlist_entries SET watch_enabled = FALSE, watch_tags = '{}'::TEXT[], notes = NULL, updated_at = NOW() WHERE owner_account_id = $1",
@@ -198,6 +211,28 @@ export async function replaceDaaCandidateAssets(
           assetKey, watchEnabled: enabled, watchTags: tags, notes: notes || null,
         });
         await upsertTargetAllocationInTx(txQuery, assetKey, targetWeightHint);
+        desiredTargets.set(assetKey.toUpperCase(), { symbol, targetWeightHint });
+      }
+
+      const auditKeys = new Set([...previousTargets.keys(), ...desiredTargets.keys()]);
+      for (const assetKey of auditKeys) {
+        const desired = desiredTargets.get(assetKey);
+        const previous = previousTargets.has(assetKey) ? previousTargets.get(assetKey)! : null;
+        const next = desired?.targetWeightHint ?? 0;
+        await recordTargetWeightAuditInTx(txQuery, {
+          assetKey,
+          symbol: desired?.symbol ?? assetKey.split("::").pop() ?? assetKey,
+          previousTargetWeightHint: previous,
+          nextTargetWeightHint: next,
+          source: "candidate_assets_replace",
+          reason: desired
+            ? "候选资产列表替换设置目标权重"
+            : "候选资产列表替换清零目标权重",
+          actor: "candidate_assets_route",
+          payload: {
+            operation: desired ? "replace_set" : "replace_clear",
+          },
+        });
       }
       // 清理无持仓且未关注的孤儿资产
       await deleteOrphanedAssetsInTx(txQuery);

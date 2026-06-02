@@ -11,6 +11,7 @@ import { Loader2, Save, Target, TrendingUp, TrendingDown } from "lucide-react";
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { TargetWeightAuditRecord } from "@/src/daa/store/targetWeightAuditStore";
 
 function priceStatusMeta(status: AssetUniverseView["priceStatus"]) {
   if (status === "fresh") return {
@@ -42,14 +43,35 @@ function formatPriceAge(seconds: number | null | undefined): string {
   return `${(seconds / 3600).toFixed(seconds < 36_000 ? 1 : 0)}h`;
 }
 
+function formatTargetPct(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "--";
+  return `${value.toFixed(2)}%`;
+}
+
+function targetAuditSourceLabel(source: TargetWeightAuditRecord["source"]): string {
+  return {
+    manual_asset_patch: "手动",
+    asset_upsert: "资产新增",
+    agent_target_weight_pool: "Agent",
+    rebalance_execution: "成交同步",
+    target_allocation_apply: "批量应用",
+    portfolio_template_apply: "模板",
+    strategy_lab_apply: "策略实验室",
+    candidate_assets_replace: "候选替换",
+    system: "系统",
+  }[source] || "系统";
+}
+
 export function AssetPositionPanel({
   row,
   baseCurrency = "USD",
+  targetWeightAudits = [],
   onUpdateTargetWeight,
   updating = false,
 }: {
   row: AssetUniverseView;
   baseCurrency?: string;
+  targetWeightAudits?: TargetWeightAuditRecord[];
   onUpdateTargetWeight?: (targetWeightPct: number) => Promise<void> | void;
   updating?: boolean;
 }) {
@@ -247,6 +269,43 @@ export function AssetPositionPanel({
             ) : null}
           </div>
         ) : null}
+
+        <div className="border-t border-[var(--border)] pt-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-xs font-semibold text-[var(--text)]">目标权重记录</div>
+            <div className="font-[var(--font-mono)] text-[10px] text-[var(--faint)]">
+              {targetWeightAudits.length > 0 ? `${targetWeightAudits.length} 条` : "暂无"}
+            </div>
+          </div>
+          {targetWeightAudits.length > 0 ? (
+            <div className="divide-y divide-[var(--border)]">
+              {targetWeightAudits.slice(0, 5).map((audit) => (
+                <div key={audit.id} className="py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded-[6px] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
+                      {targetAuditSourceLabel(audit.source)}
+                    </span>
+                    <span className="font-[var(--font-mono)] text-[10px] text-[var(--faint)]">
+                      {formatDateTime(audit.createdAt)}
+                    </span>
+                  </div>
+                  <div className="mt-1 font-[var(--font-mono)] text-xs font-semibold text-[var(--text)]">
+                    {formatTargetPct(audit.previousTargetWeightPct)} → {formatTargetPct(audit.nextTargetWeightPct)}
+                  </div>
+                  {audit.reason ? (
+                    <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-[var(--muted)]">
+                      {audit.reason}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[11px] leading-5 text-[var(--muted)]">
+              暂无历史记录。之后手动、Agent、策略实验室或模板修改目标权重时，会在这里留下复盘线索。
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

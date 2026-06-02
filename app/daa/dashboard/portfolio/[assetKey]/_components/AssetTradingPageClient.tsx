@@ -192,6 +192,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
             <AssetPositionPanel
               row={row}
               baseCurrency={baseCurrency}
+              targetWeightAudits={detail?.targetWeightAudits ?? []}
               onUpdateTargetWeight={handleUpdateTargetWeight}
               updating={targetUpdating}
             />

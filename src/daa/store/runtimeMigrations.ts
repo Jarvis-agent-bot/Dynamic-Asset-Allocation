@@ -1415,6 +1415,34 @@ const MIGRATIONS_: Migration[] = [
       await query("CREATE INDEX IF NOT EXISTS idx_daa_agent_decision_audit_owner_kind_created ON daa_agent_decision_audit(owner_account_id, decision_kind, created_at DESC)");
     },
   },
+  {
+    id: "20260602_target_weight_audit",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_target_weight_audit (
+          owner_account_id TEXT NOT NULL DEFAULT '${DEFAULT_DAA_ACCOUNT_SCOPE_ID}',
+          id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          asset_key TEXT NOT NULL,
+          symbol TEXT,
+          previous_target_weight_hint NUMERIC,
+          next_target_weight_hint NUMERIC NOT NULL,
+          source TEXT NOT NULL,
+          reason TEXT,
+          actor TEXT,
+          agent_run_id TEXT,
+          cycle_id TEXT,
+          payload JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_target_weight_audit_owner_asset_created ON daa_target_weight_audit(owner_account_id, asset_key, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_target_weight_audit_owner_source_created ON daa_target_weight_audit(owner_account_id, source, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_target_weight_audit_owner_run_created ON daa_target_weight_audit(owner_account_id, agent_run_id, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_target_weight_audit_owner_cycle_created ON daa_target_weight_audit(owner_account_id, cycle_id, created_at DESC)");
+      await addCheckConstraintIfMissing(query, "daa_target_weight_audit", "daa_target_weight_audit_next_weight_check", "next_target_weight_hint >= 0");
+      await addCheckConstraintIfMissing(query, "daa_target_weight_audit", "daa_target_weight_audit_prev_weight_check", "previous_target_weight_hint IS NULL OR previous_target_weight_hint >= 0");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

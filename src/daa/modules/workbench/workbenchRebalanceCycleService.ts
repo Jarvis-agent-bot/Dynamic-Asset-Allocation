@@ -204,11 +204,24 @@ async function persistExecutedTargetWeights(input: {
   const patches = buildExecutedTargetWeightPatches(input);
   if (patches.length === 0) return 0;
 
-  const results = await Promise.allSettled(patches.map(({ assetKey, targetWeightHint }) =>
+  const results = await Promise.allSettled(patches.map(({ assetKey, targetWeightHint, reason }) =>
     patchDaaAssetUniverseRow({
       assetKey,
       watchEnabled: true,
       targetWeightHint,
+      targetWeightAudit: {
+        source: "rebalance_execution",
+        reason: reason === "agent_target"
+          ? "成交后同步 Agent 目标权重"
+          : "成交后同步买入提案目标权重",
+        actor: "rebalance_execution",
+        cycleId: input.cycle.cycleId,
+        payload: {
+          patchReason: reason,
+          cycleId: input.cycle.cycleId,
+          triggerSource: input.cycle.triggerSource,
+        },
+      },
     }),
   ));
   for (const result of results) {

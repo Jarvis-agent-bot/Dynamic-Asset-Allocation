@@ -70,7 +70,15 @@ export function PortfolioTemplateDialog(props: {
     if (!tpl) return;
     setApplying(true);
     try {
-      await applyWorkbenchTargetWeights(tpl.weights);
+      await applyWorkbenchTargetWeights(tpl.weights, {
+        source: "portfolio_template_apply",
+        reason: `应用「${tpl.name}」模板为目标权重`,
+        payload: {
+          templateId: tpl.id,
+          templateName: tpl.name,
+          weights: tpl.weights,
+        },
+      });
       await props.onApplied?.();
       toast.success(`已应用「${tpl.name}」模板为目标权重`);
       props.onOpenChange(false);

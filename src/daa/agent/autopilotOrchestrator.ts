@@ -268,6 +268,9 @@ async function maybePersistAgentTargetWeightPool(input: {
 
   const persisted = await persistAgentTargetWeightPool({
     targetWeights: input.targetPlan.targetWeights,
+    agentRunId: input.targetPlan.agentRunId,
+    summary: input.targetPlan.summary,
+    intentReasons: input.targetPlan.intentReasons,
   });
   return {
     ...base,

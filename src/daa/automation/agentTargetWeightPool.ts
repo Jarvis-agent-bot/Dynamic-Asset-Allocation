@@ -53,6 +53,15 @@ export function buildAgentTargetWeightPoolPatches(input: {
 
 export async function persistAgentTargetWeightPool(input: {
   targetWeights: Record<string, number> | null | undefined;
+  agentRunId?: string | null;
+  summary?: string | null;
+  intentReasons?: Record<string, {
+    symbol?: string;
+    proposedTargetWeightPct?: number;
+    baselineTargetWeightPct?: number;
+    confidence?: number;
+    reasoning?: string;
+  }> | null;
 }): Promise<PersistAgentTargetWeightPoolResult> {
   const patches = buildAgentTargetWeightPoolPatches(input);
   if (patches.length === 0) {
@@ -60,10 +69,22 @@ export async function persistAgentTargetWeightPool(input: {
   }
 
   const results = await Promise.allSettled(patches.map(async (patch) => {
+    const intentReason = input.intentReasons?.[patch.assetKey] ?? input.intentReasons?.[patch.assetKey.toUpperCase()];
     await patchDaaAssetUniverseRow({
       assetKey: patch.assetKey,
       watchEnabled: true,
       targetWeightHint: patch.targetWeightHint,
+      targetWeightAudit: {
+        source: "agent_target_weight_pool",
+        reason: intentReason?.reasoning || input.summary || "Agent 目标权重池写入",
+        actor: "cognitive_agent",
+        agentRunId: input.agentRunId ?? null,
+        payload: {
+          summary: input.summary ?? null,
+          intentReason: intentReason ?? null,
+          targetWeights: input.targetWeights ?? {},
+        },
+      },
     });
     return patch;
   }));

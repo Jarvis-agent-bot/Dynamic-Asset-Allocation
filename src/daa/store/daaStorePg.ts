@@ -14,5 +14,6 @@ export * from "./tradeTicketStore";
 export * from "./notificationStore";
 export * from "./marketCacheStore";
 export * from "./jobStore";
+export * from "./targetWeightAuditStore";
 export * from "./storeSchema";
 export * from "./marketIndicatorNormalizers";

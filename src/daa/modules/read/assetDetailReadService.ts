@@ -1,5 +1,5 @@
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
-import { getDaaLedgerStartTs, listDaaTradeTickets, type DaaStoreTradeTicket } from "@/src/daa/store/daaStorePg";
+import { getDaaLedgerStartTs, listDaaTradeTickets, listTargetWeightAudits, type DaaStoreTradeTicket } from "@/src/daa/store/daaStorePg";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 
 import type { AssetDetailReadModel, AssetDetailTradeMarker } from "./readModels";
@@ -37,12 +37,13 @@ async function buildAssetDetailReadModelUncached(assetKeyRaw: string): Promise<A
   const row = bootstrap.assetUniverse.find((item) => normalizeKey(item.assetKey) === assetKey) ?? null;
   const symbol = row?.symbol ? normalizeKey(row.symbol) : assetKey.split("::").pop() || "";
 
-  const [tickets, ledgerStartTs] = symbol
+  const [tickets, ledgerStartTs, targetWeightAudits] = symbol
     ? await Promise.all([
       listDaaTradeTickets({ symbol, limit: 80 }),
       getDaaLedgerStartTs(),
+      listTargetWeightAudits({ assetKey, limit: 12 }),
     ])
-    : [[], await getDaaLedgerStartTs()] as const;
+    : [[], await getDaaLedgerStartTs(), []];
 
   const tradeMarkers = tickets
     .filter((ticket) => isWithinCurrentLedger(ticket.createdAt, ledgerStartTs))
@@ -67,6 +68,7 @@ async function buildAssetDetailReadModelUncached(assetKeyRaw: string): Promise<A
       minNotional: bootstrap.execution.minNotional,
     },
     tradeMarkers,
+    targetWeightAudits,
     loadedAt: new Date().toISOString(),
   };
 }

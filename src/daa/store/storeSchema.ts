@@ -203,6 +203,7 @@ async function ensureOwnerColumnsBeforeSchema(query: SchemaQueryFn): Promise<voi
     "daa_agent_runs",
     "daa_agent_memory",
     "daa_agent_decision_audit",
+    "daa_target_weight_audit",
   ];
 
   for (const tableName of scopedTables) {

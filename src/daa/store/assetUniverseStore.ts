@@ -20,6 +20,7 @@ import {
   upsertAssetMasterInTx, upsertWatchlistEntryInTx,
   upsertTargetAllocationInTx, updateMarketPriceSnapshotInTx,
 } from "./assetMasterStore";
+import { recordTargetWeightAuditInTx, type TargetWeightAuditContext } from "./targetWeightAuditStore";
 
 function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeCurrencyAlias(value, fallback);
@@ -240,6 +241,7 @@ export async function upsertDaaAssetUniverseRow(input: {
   notes?: string | null;
   lastPrice?: number;
   priceUpdatedAt?: string | null;
+  targetWeightAudit?: Partial<TargetWeightAuditContext>;
 }): Promise<DaaStoreAssetUniverseRow> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
@@ -263,6 +265,13 @@ export async function upsertDaaAssetUniverseRow(input: {
     const priceUpdatedAt = lastPrice > 0 ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null;
 
     const txQuery = query;
+    const previousTargetRes = await txQuery(
+      "SELECT target_weight_hint FROM daa_target_allocations WHERE owner_account_id = $1 AND asset_key = $2 LIMIT 1",
+      [getDaaAccountScopeId(), assetKey],
+    );
+    const previousTargetWeightHint = previousTargetRes.rows.length > 0
+      ? toFiniteNumber((previousTargetRes.rows[0] as Record<string, unknown>).target_weight_hint)
+      : null;
     await upsertAssetMasterInTx(txQuery, {
       assetKey, symbol, name, displayNameZh, market, currency, assetClass, region, exchange, instrumentType, marketGroup,
     });
@@ -270,6 +279,18 @@ export async function upsertDaaAssetUniverseRow(input: {
       assetKey, watchEnabled, watchTags, notes,
     });
     await upsertTargetAllocationInTx(txQuery, assetKey, targetWeightHint);
+    await recordTargetWeightAuditInTx(txQuery, {
+      assetKey,
+      symbol,
+      previousTargetWeightHint,
+      nextTargetWeightHint: targetWeightHint,
+      source: input.targetWeightAudit?.source ?? "asset_upsert",
+      reason: input.targetWeightAudit?.reason ?? "新增或更新资产目标权重",
+      actor: input.targetWeightAudit?.actor ?? null,
+      agentRunId: input.targetWeightAudit?.agentRunId ?? null,
+      cycleId: input.targetWeightAudit?.cycleId ?? null,
+      payload: input.targetWeightAudit?.payload ?? null,
+    });
     if (lastPrice > 0) {
       await updateMarketPriceSnapshotInTx(txQuery, assetKey, lastPrice, priceUpdatedAt || new Date().toISOString());
     }
@@ -297,6 +318,7 @@ export async function patchDaaAssetUniverseRow(input: {
   notes?: string | null;
   lastPrice?: number;
   priceUpdatedAt?: string | null;
+  targetWeightAudit?: Partial<TargetWeightAuditContext>;
 }): Promise<DaaStoreAssetUniverseRow> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
@@ -350,6 +372,20 @@ export async function patchDaaAssetUniverseRow(input: {
         assetKey, watchEnabled: next.watchEnabled, watchTags: next.watchTags, notes: next.notes,
       });
       await upsertTargetAllocationInTx(txQuery, assetKey, next.targetWeightHint);
+      if (input.targetWeightHint != null) {
+        await recordTargetWeightAuditInTx(txQuery, {
+          assetKey,
+          symbol: next.symbol,
+          previousTargetWeightHint: current.targetWeightHint,
+          nextTargetWeightHint: next.targetWeightHint,
+          source: input.targetWeightAudit?.source ?? "manual_asset_patch",
+          reason: input.targetWeightAudit?.reason ?? "手动更新目标权重",
+          actor: input.targetWeightAudit?.actor ?? null,
+          agentRunId: input.targetWeightAudit?.agentRunId ?? null,
+          cycleId: input.targetWeightAudit?.cycleId ?? null,
+          payload: input.targetWeightAudit?.payload ?? null,
+        });
+      }
       if (next.lastPrice > 0 && next.priceUpdatedAt) {
         await updateMarketPriceSnapshotInTx(txQuery, assetKey, next.lastPrice, next.priceUpdatedAt);
       }

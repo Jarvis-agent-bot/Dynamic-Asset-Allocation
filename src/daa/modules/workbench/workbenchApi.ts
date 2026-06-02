@@ -17,6 +17,19 @@ import type {
   WorkbenchSearchAssetResult,
 } from "./workbenchTypes";
 
+export type WorkbenchTargetWeightAuditContext = {
+  source:
+    | "manual_asset_patch"
+    | "asset_upsert"
+    | "target_allocation_apply"
+    | "portfolio_template_apply"
+    | "strategy_lab_apply"
+    | "system";
+  reason?: string | null;
+  actor?: string | null;
+  payload?: Record<string, unknown> | null;
+};
+
 export async function previewWorkbenchExecution(input: {
   assetKey: string;
   side: "BUY" | "SELL";
@@ -102,6 +115,7 @@ export async function upsertWorkbenchAsset(input: {
   targetWeightHint?: number;
   notes?: string;
   lastPrice?: number;
+  targetWeightAudit?: WorkbenchTargetWeightAuditContext;
 }): Promise<AssetUniverseView> {
   const data = await requestData<{ row: AssetUniverseView }>("/api/daa/workbench/assets/upsert", {
     method: "POST",
@@ -127,6 +141,7 @@ export async function patchWorkbenchAsset(assetKey: string, input: {
   instrumentType?: string;
   marketGroup?: string;
   lastPrice?: number;
+  targetWeightAudit?: WorkbenchTargetWeightAuditContext;
 }): Promise<AssetUniverseView> {
   const encoded = encodeURIComponent(assetKey);
   const data = await requestData<{ row: AssetUniverseView }>(`/api/daa/workbench/assets/${encoded}`, {

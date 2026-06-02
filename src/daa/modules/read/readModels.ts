@@ -11,6 +11,7 @@ import type {
   WorkbenchRebalanceCycleReport,
   WorkbenchTradeRecords,
 } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { TargetWeightAuditRecord } from "@/src/daa/store/targetWeightAuditStore";
 
 export type WorkbenchReadModel = {
   bootstrap: WorkbenchBootstrap;
@@ -48,6 +49,7 @@ export type AssetDetailReadModel = {
   account: Pick<WorkbenchBootstrap["account"], "cash" | "investableCash" | "frozenCash" | "totalEquity" | "valuation">;
   execution: Pick<WorkbenchBootstrap["execution"], "feeRateBps" | "slippageBps" | "minNotional">;
   tradeMarkers: AssetDetailTradeMarker[];
+  targetWeightAudits: TargetWeightAuditRecord[];
   loadedAt: string;
 };
 

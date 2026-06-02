@@ -228,7 +228,14 @@ export function useStrategyLab(
     }
     setApplying(true);
     try {
-      await applyWorkbenchTargetWeights(result.targetWeights);
+      await applyWorkbenchTargetWeights(result.targetWeights, {
+        source: "strategy_lab_apply",
+        reason: "应用策略实验室回测结果为目标权重",
+        payload: {
+          targetWeights: result.targetWeights,
+          warnings: result.warnings || [],
+        },
+      });
       const nextModel = await getWorkbenchReadModel({ syncPrices: false });
       setAssets(nextModel.bootstrap.assetUniverse);
       toast.success("已将回测权重应用为目标配置");
