@@ -10,105 +10,15 @@ import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErr
 import { AssetKlineChart } from "@/app/daa/dashboard/_shared/AssetKlineChart";
 import { usePriceStream } from "@/app/daa/dashboard/_hooks/usePriceStream";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
-import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { buildManualExecutionInput } from "@/app/daa/dashboard/_hooks/dashboard/assetActionCommands";
-import { cn } from "@/lib/utils";
 import { getAssetDetailReadModel } from "@/src/daa/modules/read/readApi";
 import { executeWorkbenchOrder, patchWorkbenchAsset, previewWorkbenchExecution } from "@/src/daa/modules/workbench/workbenchApi";
 import type { AssetDetailReadModel } from "@/src/daa/modules/read/readModels";
-import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { AssetInfoBar } from "./AssetInfoBar";
 import { AssetDetailTabs } from "./AssetDetailTabs";
 import { InlineTradePanel } from "./InlineTradePanel";
 import { AssetPositionPanel } from "./AssetPositionPanel";
-
-function priceStatusTone(status: string) {
-  if (status === "fresh") return "green" as const;
-  if (status === "stale") return "amber" as const;
-  if (status === "missing" || status === "unsupported") return "red" as const;
-  return "slate" as const;
-}
-
-function priceStatusLabel(status: string) {
-  if (status === "fresh") return "实时";
-  if (status === "stale") return "延迟";
-  if (status === "missing") return "缺失";
-  if (status === "unsupported") return "不支持";
-  return "未知";
-}
-
-function AssetTradeContextPanel(props: {
-  row: AssetUniverseView;
-  baseCurrency: string;
-}) {
-  const { row, baseCurrency } = props;
-  const targetPct = row.targetWeightPct ?? (row.targetWeightHint ?? 0) * 100;
-  const gapPct = row.gapPct ?? 0;
-  const absGap = Math.abs(gapPct);
-  const gapTone = absGap >= 5 ? "text-[var(--danger)]" : absGap >= 2 ? "text-[var(--amber)]" : "text-[var(--success)]";
-  const actualBarWidth = `${Math.min(100, Math.max(0, row.actualWeightPct ?? 0))}%`;
-  const targetBarLeft = `${Math.min(100, Math.max(0, targetPct))}%`;
-  const rows = [
-    { label: "价格时间", value: formatDateTime(row.priceUpdatedAt) },
-    { label: "市值", value: formatCurrency(row.valuationBase ?? 0, baseCurrency) },
-    { label: "当前 / 目标", value: `${row.actualWeightPct.toFixed(2)}% / ${targetPct.toFixed(2)}%` },
-    { label: "价格源", value: row.priceSource || "--" },
-    { label: "FX", value: row.fxMissing ? "缺失" : row.fxRateToBase ? row.fxRateToBase.toFixed(6) : "--" },
-  ];
-
-  return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2.5">
-        <h3 className="text-sm font-semibold text-[var(--text)]">市场摘要</h3>
-        <DaaSurfaceStatusPill tone={priceStatusTone(row.priceStatus)} className="rounded-[6px] px-2 py-0.5 text-[10px] normal-case tracking-normal">
-          {priceStatusLabel(row.priceStatus)}
-        </DaaSurfaceStatusPill>
-      </div>
-      <div className="p-3">
-        <div className="mb-3 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3">
-          <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="text-[var(--muted)]">组合权重</span>
-            <span className={cn("font-[var(--font-mono)]", gapTone)}>偏离 {gapPct.toFixed(2)}%</span>
-          </div>
-          <div className="relative h-2 overflow-hidden rounded-full bg-[var(--elevated)]">
-            <div className="absolute inset-y-0 left-0 bg-[var(--primary)]" style={{ width: actualBarWidth }} />
-            <div
-              className="absolute inset-y-[-3px] w-px bg-[var(--text)]"
-              style={{ left: targetBarLeft }}
-              title={`目标 ${targetPct.toFixed(2)}%`}
-            />
-          </div>
-          <div className="mt-1.5 flex items-center justify-between font-[var(--font-mono)] text-[10px] text-[var(--faint)]">
-            <span>当前 {row.actualWeightPct.toFixed(2)}%</span>
-            <span>目标 {targetPct.toFixed(2)}%</span>
-          </div>
-        </div>
-        <div className="divide-y divide-[var(--border)] text-xs">
-          {rows.map((item) => (
-            <div key={item.label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 py-2">
-              <span className="text-[var(--muted)]">{item.label}</span>
-              <span className="truncate text-right font-[var(--font-mono)] text-[var(--text)]">{item.value}</span>
-            </div>
-          ))}
-          <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 py-2">
-            <span className="text-[var(--muted)]">漂移状态</span>
-            <span className={cn("text-right font-[var(--font-mono)]", gapTone)}>
-              {absGap >= 5 ? "显著偏离" : absGap >= 2 ? "中度偏离" : "贴近目标"}
-            </span>
-          </div>
-          <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 py-2">
-            <span className="text-[var(--muted)]">价格年龄</span>
-            <span className="text-right font-[var(--font-mono)] text-[var(--text)]">
-              {row.priceAgeSec == null ? "--" : `${Math.round(row.priceAgeSec / 60)}m`}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function AssetTradingPageClient(props: { assetKey: string }) {
   const router = useRouter();
@@ -281,6 +191,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
           <SectionErrorBoundary sectionName="持仓状态">
             <AssetPositionPanel
               row={row}
+              baseCurrency={baseCurrency}
               onUpdateTargetWeight={handleUpdateTargetWeight}
               updating={targetUpdating}
             />
@@ -295,10 +206,6 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
               callbacks={tradeCallbacks}
               onOrderCompleted={() => void loadDetail(true)}
             />
-          </SectionErrorBoundary>
-
-          <SectionErrorBoundary sectionName="交易上下文">
-            <AssetTradeContextPanel row={row} baseCurrency={baseCurrency} />
           </SectionErrorBoundary>
         </div>
       </div>

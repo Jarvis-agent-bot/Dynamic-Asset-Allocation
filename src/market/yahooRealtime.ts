@@ -97,6 +97,14 @@ function finitePositive(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+function normalizeYahooEpochMs(value: number): number | null {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  // Yahoo streamer 在不同字段版本里可能给秒级或毫秒级 epoch。
+  // 1e10 秒约等于 2286 年；超过这个量级基本可以判定为毫秒。
+  const ms = value > 10_000_000_000 ? value : value * 1000;
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
 /**
  * 解码 Yahoo streamer 返回的 PricingData。
  *
@@ -161,11 +169,13 @@ export function decodeYahooPricingDataMessage(message: string | Buffer): YahooRe
   const price = fields.price;
   const time = fields.time;
   if (!symbol || !finitePositive(price) || typeof time !== "number" || !Number.isFinite(time) || time <= 0) return null;
+  const timeMs = normalizeYahooEpochMs(time);
+  if (timeMs == null) return null;
 
   return {
     symbol,
     price,
-    ts: new Date(time * 1000).toISOString(),
+    ts: new Date(timeMs).toISOString(),
     currency: typeof fields.currency === "string" && fields.currency.trim() ? fields.currency.trim().toUpperCase() : "USD",
     change: typeof fields.change === "number" && Number.isFinite(fields.change) ? fields.change : undefined,
     changePercent: typeof fields.changePercent === "number" && Number.isFinite(fields.changePercent) ? fields.changePercent : undefined,

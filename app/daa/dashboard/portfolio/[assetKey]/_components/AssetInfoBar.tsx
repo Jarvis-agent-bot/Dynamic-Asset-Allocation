@@ -18,6 +18,14 @@ export function AssetInfoBar(props: {
 
   const priceChange = deriveAssetPriceChange(row, sparkData);
   const priceChangePercent = priceChange?.changePct ?? null;
+  const priceChangeTone = priceChangePercent == null || Math.abs(priceChangePercent) < 0.005
+    ? "text-[var(--muted)]"
+    : priceChangePercent > 0
+      ? "text-[var(--success)]"
+      : "text-[var(--danger)]";
+  const priceChangeText = priceChangePercent == null
+    ? null
+    : `${priceChangePercent > 0 ? "+" : ""}${priceChangePercent.toFixed(2)}%`;
   const displayName = row.displayNameZh || row.name || row.symbol;
 
   // 成本与盈亏 — 优先使用 DB 侧预计算的基准货币成本
@@ -83,12 +91,12 @@ export function AssetInfoBar(props: {
           <span className="font-[var(--font-mono)] text-2xl font-bold leading-none text-[var(--text)]">
             {formatCurrency(row.lastPrice, row.currency)}
           </span>
-          {priceChangePercent != null ? (
+          {priceChangeText != null ? (
             <span className={cn(
               "mt-1 font-[var(--font-mono)] text-sm font-semibold",
-              priceChangePercent >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]",
+              priceChangeTone,
             )}>
-              {priceChangePercent >= 0 ? "+" : ""}{priceChangePercent.toFixed(2)}%
+              {priceChangeText}
             </span>
           ) : null}
         </div>

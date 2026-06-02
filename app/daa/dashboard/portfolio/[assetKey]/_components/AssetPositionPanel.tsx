@@ -8,15 +8,48 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Save, Target, TrendingUp, TrendingDown } from "lucide-react";
 
+import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
+function priceStatusMeta(status: AssetUniverseView["priceStatus"]) {
+  if (status === "fresh") return {
+    label: "实时",
+    className: "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]",
+  };
+  if (status === "stale") return {
+    label: "延迟",
+    className: "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]",
+  };
+  if (status === "missing") return {
+    label: "缺失",
+    className: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
+  };
+  if (status === "unsupported") return {
+    label: "不支持",
+    className: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
+  };
+  return {
+    label: "未知",
+    className: "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]",
+  };
+}
+
+function formatPriceAge(seconds: number | null | undefined): string {
+  if (seconds == null) return "--";
+  if (seconds < 90) return `${Math.max(0, Math.round(seconds))}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  return `${(seconds / 3600).toFixed(seconds < 36_000 ? 1 : 0)}h`;
+}
+
 export function AssetPositionPanel({
   row,
+  baseCurrency = "USD",
   onUpdateTargetWeight,
   updating = false,
 }: {
   row: AssetUniverseView;
+  baseCurrency?: string;
   onUpdateTargetWeight?: (targetWeightPct: number) => Promise<void> | void;
   updating?: boolean;
 }) {
@@ -51,6 +84,8 @@ export function AssetPositionPanel({
   const parsedDraft = Number(draft);
   const validDraft = Number.isFinite(parsedDraft) && parsedDraft >= 0 && parsedDraft <= 100;
   const dirty = validDraft && Math.abs(parsedDraft - targetPct) >= 0.005;
+  const priceStatus = priceStatusMeta(row.priceStatus);
+  const targetZeroWithHolding = targetPct <= 0.005 && actualPct > 0.005;
 
   useEffect(() => {
     setDraft(targetPct.toFixed(2));
@@ -78,40 +113,79 @@ export function AssetPositionPanel({
         {/* 权重对比条 */}
         <div>
           <div className="mb-1.5 flex items-baseline justify-between text-xs">
-            <span className="text-slate-500">当前权重</span>
-            <span className="font-[var(--font-mono)] text-sm font-semibold text-slate-800">
+            <span className="text-[var(--muted)]">当前权重</span>
+            <span className="font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
               {actualPct.toFixed(2)}%
             </span>
           </div>
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-[var(--elevated)]">
             <div
               className="absolute inset-y-0 left-0 bg-[var(--primary)]"
               style={{ width: `${Math.min(100, Math.max(0, actualPct))}%` }}
             />
             {hasTarget && (
               <div
-                className="absolute inset-y-[-3px] w-px bg-slate-900"
+                className="absolute inset-y-[-3px] w-px bg-[var(--text)]"
                 style={{ left: `${Math.min(100, Math.max(0, targetPct))}%` }}
                 title={`目标权重 ${targetPct.toFixed(2)}%`}
               />
             )}
           </div>
-          {hasTarget && (
-            <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-              <span>目标 {targetPct.toFixed(2)}%</span>
-              <span className={cn("flex items-center gap-1 font-medium", gapColor)}>
-                {displayGap > 0.05 ? <TrendingUp className="h-3 w-3" /> : displayGap < -0.05 ? <TrendingDown className="h-3 w-3" /> : null}
-                {gapLabel} · {gapDirectionLabel} {Math.abs(displayGap).toFixed(2)}%
-              </span>
-            </div>
-          )}
+          <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--faint)]">
+            <span>目标 {targetPct.toFixed(2)}%</span>
+            <span className={cn("flex items-center gap-1 font-medium", gapColor)}>
+              {displayGap > 0.05 ? <TrendingUp className="h-3 w-3" /> : displayGap < -0.05 ? <TrendingDown className="h-3 w-3" /> : null}
+              {gapLabel} · {gapDirectionLabel} {Math.abs(displayGap).toFixed(2)}%
+            </span>
+          </div>
         </div>
 
-        {!hasTarget && (
-          <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+            <div className="text-[10px] text-[var(--muted)]">市值</div>
+            <div className="mt-1 truncate font-[var(--font-mono)] text-xs font-semibold text-[var(--text)]">
+              {formatCurrency(row.valuationBase ?? 0, baseCurrency)}
+            </div>
+          </div>
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+            <div className="text-[10px] text-[var(--muted)]">最新价</div>
+            <div className="mt-1 truncate font-[var(--font-mono)] text-xs font-semibold text-[var(--text)]">
+              {formatCurrency(row.lastPrice, row.currency)}
+            </div>
+          </div>
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+            <div className="text-[10px] text-[var(--muted)]">更新时间</div>
+            <div className="mt-1 truncate font-[var(--font-mono)] text-xs font-semibold text-[var(--text)]">
+              {formatDateTime(row.priceUpdatedAt)}
+            </div>
+          </div>
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+            <div className="text-[10px] text-[var(--muted)]">价格状态</div>
+            <div className="mt-1 flex items-center gap-1.5">
+              <span className={cn("inline-flex rounded-[6px] border px-1.5 py-0.5 font-[var(--font-mono)] text-[10px] font-semibold", priceStatus.className)}>
+                {priceStatus.label}
+              </span>
+              <span className="font-[var(--font-mono)] text-[10px] text-[var(--faint)]">{formatPriceAge(row.priceAgeSec)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px]">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[var(--muted)]">数据源</span>
+            <span className="truncate text-right font-[var(--font-mono)] text-[var(--text)]">{row.priceSource || "--"}</span>
+          </div>
+        </div>
+
+        {targetZeroWithHolding ? (
+          <div className="rounded-[8px] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2 text-[11px] leading-5 text-[var(--amber)]">
+            当前仍有持仓，但目标权重为 0。系统会把它视为减仓候选；若要保留 SGOV，请手动设置目标权重。
+          </div>
+        ) : !hasTarget ? (
+          <div className="rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--muted)]">
             尚未设置目标权重。保存后会写入目标配置，并参与调仓偏离计算。
           </div>
-        )}
+        ) : null}
 
         {onUpdateTargetWeight ? (
           <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3">

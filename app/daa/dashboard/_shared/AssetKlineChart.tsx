@@ -15,6 +15,7 @@ import {
   type LineData,
   type IPriceLine,
   type Time,
+  type UTCTimestamp,
   ColorType,
   CrosshairMode,
 } from "lightweight-charts";
@@ -34,6 +35,7 @@ type IndicatorKey = "ma" | "ema" | "boll" | "volume" | "macd" | "kdj";
 
 type CrosshairSnapshot = {
   date: string;
+  time: Time;
   open: number;
   high: number;
   low: number;
@@ -178,34 +180,70 @@ function hasCompleteOhlcv(bar: PriceBar): boolean {
   return hasCompleteOhlc(bar) && finiteNumber(bar.volume) && bar.volume >= 0;
 }
 
+function toChartTime(value: string): Time | null {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const ms = Date.parse(text);
+  if (!Number.isFinite(ms)) return null;
+  return Math.floor(ms / 1000) as UTCTimestamp;
+}
+
+function barChartTime(bar: PriceBar): Time | null {
+  return toChartTime(bar.date);
+}
+
+function timeKey(value: Time): string {
+  if (typeof value === "object") return `${value.year}-${value.month}-${value.day}`;
+  return String(value);
+}
+
+function chartTimeToDateText(value: Time, interval: PriceSeriesInterval): string {
+  if (typeof value === "number") {
+    const date = new Date(value * 1000);
+    return interval === "1h" ? date.toISOString() : date.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string") return value;
+  return `${value.year}-${String(value.month).padStart(2, "0")}-${String(value.day).padStart(2, "0")}`;
+}
+
 function toCandlestickData(bars: PriceBar[]): CandlestickData[] {
   return bars
     .filter(hasCompleteOhlc)
-    .map((bar) => ({
-      time: bar.date as Time,
-      open: bar.open!,
-      high: bar.high!,
-      low: bar.low!,
-      close: bar.close,
-    }));
+    .flatMap((bar) => {
+      const time = barChartTime(bar);
+      if (time == null) return [];
+      return [{
+        time,
+        open: bar.open!,
+        high: bar.high!,
+        low: bar.low!,
+        close: bar.close,
+      }];
+    });
 }
 
 function toVolumeData(bars: PriceBar[]): HistogramData[] {
   return bars
     .filter((bar) => finiteNumber(bar.volume) && bar.volume >= 0)
-    .map((bar) => ({
-      time: bar.date as Time,
-      value: bar.volume ?? 0,
-      color: bar.close >= barOpen(bar) ? COLORS.volumeUp : COLORS.volumeDown,
-    }));
+    .flatMap((bar) => {
+      const time = barChartTime(bar);
+      if (time == null) return [];
+      return [{
+        time,
+        value: bar.volume ?? 0,
+        color: bar.close >= barOpen(bar) ? COLORS.volumeUp : COLORS.volumeDown,
+      }];
+    });
 }
 
 function computeMA(bars: PriceBar[], period: number): LineData[] {
   const result: LineData[] = [];
   for (let i = period - 1; i < bars.length; i += 1) {
+    const time = barChartTime(bars[i]);
+    if (time == null) continue;
     let sum = 0;
     for (let j = i - period + 1; j <= i; j += 1) sum += bars[j].close;
-    result.push({ time: bars[i].date as Time, value: round(sum / period) });
+    result.push({ time, value: round(sum / period) });
   }
   return result;
 }
@@ -228,9 +266,12 @@ function computeEmaValues(bars: PriceBar[], period: number): Array<number | null
 }
 
 function computeEMA(bars: PriceBar[], period: number): LineData[] {
-  return computeEmaValues(bars, period).flatMap((value, index) => (
-    value == null ? [] : [{ time: bars[index].date as Time, value: round(value) }]
-  ));
+  return computeEmaValues(bars, period).flatMap((value, index) => {
+    if (value == null) return [];
+    const time = barChartTime(bars[index]);
+    if (time == null) return [];
+    return [{ time, value: round(value) }];
+  });
 }
 
 function computeBoll(bars: PriceBar[], period = 20, deviation = 2): BollBundle {
@@ -243,7 +284,8 @@ function computeBoll(bars: PriceBar[], period = 20, deviation = 2): BollBundle {
     const mean = closes.reduce((sum, value) => sum + value, 0) / period;
     const variance = closes.reduce((sum, value) => sum + (value - mean) ** 2, 0) / period;
     const std = Math.sqrt(variance);
-    const time = bars[i].date as Time;
+    const time = barChartTime(bars[i]);
+    if (time == null) continue;
     upper.push({ time, value: round(mean + deviation * std) });
     mid.push({ time, value: round(mean) });
     lower.push({ time, value: round(mean - deviation * std) });
@@ -283,7 +325,8 @@ function computeMACD(bars: PriceBar[], fast = 12, slow = 26, signal = 9): MacdBu
   const histogram: HistogramData[] = [];
 
   for (let i = 0; i < bars.length; i += 1) {
-    const time = bars[i].date as Time;
+    const time = barChartTime(bars[i]);
+    if (time == null) continue;
     const difValue = difValues[i];
     const deaValue = deaValues[i];
     if (difValue != null) dif.push({ time, value: round(difValue) });
@@ -318,7 +361,8 @@ function computeKDJ(bars: PriceBar[], period = 9): KdjBundle {
     const kValue = (2 / 3) * previousK + (1 / 3) * rsv;
     const dValue = (2 / 3) * previousD + (1 / 3) * kValue;
     const jValue = 3 * kValue - 2 * dValue;
-    const time = bars[i].date as Time;
+    const time = barChartTime(bars[i]);
+    if (time == null) continue;
 
     k.push({ time, value: round(kValue, 2) });
     d.push({ time, value: round(dValue, 2) });
@@ -462,12 +506,14 @@ function resolveMarkerTime(markerDate: string, bars: PriceBar[]): string | null 
   return bars.find((bar) => bar.date.startsWith(markerDate))?.date ?? null;
 }
 
-function seriesValueAt(series: LineData[], date: string): number | undefined {
-  return series.find((point) => String(point.time) === date)?.value;
+function seriesValueAt(series: LineData[], time: Time): number | undefined {
+  const key = timeKey(time);
+  return series.find((point) => timeKey(point.time) === key)?.value;
 }
 
-function histogramValueAt(series: HistogramData[], date: string): number | undefined {
-  return series.find((point) => String(point.time) === date)?.value;
+function histogramValueAt(series: HistogramData[], time: Time): number | undefined {
+  const key = timeKey(time);
+  return series.find((point) => timeKey(point.time) === key)?.value;
 }
 
 function applyPaneHeights(chart: IChartApi, visibility: Record<IndicatorKey, boolean>) {
@@ -505,7 +551,7 @@ function setPaddedVisibleRange(chart: IChartApi, candles: CandlestickData[]) {
   if (candles.length <= 0) return;
   const leftPadding = Math.min(8, Math.max(2, Math.round(candles.length * 0.03)));
   const rightPadding = Math.min(10, Math.max(4, Math.round(candles.length * 0.05)));
-  const minVisibleBars = 80;
+  const minVisibleBars = candles.length < 45 ? 45 : 80;
   const visibleBars = candles.length + leftPadding + rightPadding;
   const extraPadding = Math.max(0, minVisibleBars - visibleBars);
   chart.timeScale().setVisibleLogicalRange({
@@ -544,6 +590,7 @@ export function AssetKlineChart({
   const bollSeriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const costLineRef = useRef<IPriceLine | null>(null);
+  const intervalRef = useRef<PriceSeriesInterval>("1d");
 
   const [range, setRange] = useState<RangeKey>("1M");
   const [bars, setBars] = useState<PriceBar[]>([]);
@@ -562,6 +609,10 @@ export function AssetKlineChart({
 
   const rangeConfig = useMemo(() => getRangeConfig(range), [range]);
   const currentInterval = rangeConfig.interval;
+
+  useEffect(() => {
+    intervalRef.current = currentInterval;
+  }, [currentInterval]);
 
   const startDate = useMemo(() => {
     const days = rangeConfig.days;
@@ -640,11 +691,14 @@ export function AssetKlineChart({
   const latestPrice = useMemo(() => {
     if (chartBars.length <= 0) return null;
     const last = chartBars[chartBars.length - 1];
+    const time = barChartTime(last);
+    if (time == null) return null;
     const previous = chartBars.length >= 2 ? chartBars[chartBars.length - 2] : null;
     const change = previous ? last.close - previous.close : 0;
     const changePct = previous && previous.close > 0 ? (change / previous.close) * 100 : 0;
     return {
       date: last.date,
+      time,
       open: barOpen(last),
       high: barHigh(last),
       low: barLow(last),
@@ -658,23 +712,23 @@ export function AssetKlineChart({
   const displayData = crosshairData ?? latestPrice;
   const displayIndicators = useMemo<IndicatorSnapshot>(() => {
     if (!displayData) return {};
-    const date = displayData.date;
+    const time = displayData.time;
     return {
-      ma5: seriesValueAt(indicatorData.ma[0]?.data ?? [], date),
-      ma10: seriesValueAt(indicatorData.ma[1]?.data ?? [], date),
-      ma20: seriesValueAt(indicatorData.ma[2]?.data ?? [], date),
-      ma60: seriesValueAt(indicatorData.ma[3]?.data ?? [], date),
-      ema12: seriesValueAt(indicatorData.ema12, date),
-      ema26: seriesValueAt(indicatorData.ema26, date),
-      bollUpper: seriesValueAt(indicatorData.boll.upper, date),
-      bollMid: seriesValueAt(indicatorData.boll.mid, date),
-      bollLower: seriesValueAt(indicatorData.boll.lower, date),
-      macdDif: seriesValueAt(indicatorData.macd.dif, date),
-      macdDea: seriesValueAt(indicatorData.macd.dea, date),
-      macdHist: histogramValueAt(indicatorData.macd.histogram, date),
-      kdjK: seriesValueAt(indicatorData.kdj.k, date),
-      kdjD: seriesValueAt(indicatorData.kdj.d, date),
-      kdjJ: seriesValueAt(indicatorData.kdj.j, date),
+      ma5: seriesValueAt(indicatorData.ma[0]?.data ?? [], time),
+      ma10: seriesValueAt(indicatorData.ma[1]?.data ?? [], time),
+      ma20: seriesValueAt(indicatorData.ma[2]?.data ?? [], time),
+      ma60: seriesValueAt(indicatorData.ma[3]?.data ?? [], time),
+      ema12: seriesValueAt(indicatorData.ema12, time),
+      ema26: seriesValueAt(indicatorData.ema26, time),
+      bollUpper: seriesValueAt(indicatorData.boll.upper, time),
+      bollMid: seriesValueAt(indicatorData.boll.mid, time),
+      bollLower: seriesValueAt(indicatorData.boll.lower, time),
+      macdDif: seriesValueAt(indicatorData.macd.dif, time),
+      macdDea: seriesValueAt(indicatorData.macd.dea, time),
+      macdHist: histogramValueAt(indicatorData.macd.histogram, time),
+      kdjK: seriesValueAt(indicatorData.kdj.k, time),
+      kdjD: seriesValueAt(indicatorData.kdj.d, time),
+      kdjJ: seriesValueAt(indicatorData.kdj.j, time),
     };
   }, [displayData, indicatorData]);
 
@@ -901,7 +955,8 @@ export function AssetKlineChart({
       const change = candleData.close - candleData.open;
       const changePct = candleData.open > 0 ? (change / candleData.open) * 100 : 0;
       setCrosshairData({
-        date: String(param.time),
+        date: chartTimeToDateText(param.time as Time, intervalRef.current),
+        time: param.time as Time,
         open: candleData.open,
         high: candleData.high,
         low: candleData.low,
@@ -1012,6 +1067,8 @@ export function AssetKlineChart({
       const markerData = [...dayMap.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
         .flatMap(([date, aggregate]) => {
+          const time = toChartTime(date);
+          if (time == null) return [];
           const items: Array<{
             time: Time;
             position: "belowBar" | "aboveBar";
@@ -1022,7 +1079,7 @@ export function AssetKlineChart({
           }> = [];
           if (aggregate.buys > 0) {
             items.push({
-              time: date as Time,
+              time,
               position: "belowBar",
               color: COLORS.up,
               shape: "arrowUp",
@@ -1032,7 +1089,7 @@ export function AssetKlineChart({
           }
           if (aggregate.sells > 0) {
             items.push({
-              time: date as Time,
+              time,
               position: "aboveBar",
               color: COLORS.down,
               shape: "arrowDown",
