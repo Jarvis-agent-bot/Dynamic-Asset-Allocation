@@ -87,7 +87,9 @@ export function ActiveTabPanel(props: {
           <WatchlistItemList
             rows={model.tableProps.rows}
             onRemoveFromWatchlist={model.tableProps.onRemoveFromWatchlist}
+            onUpdateTargetWeight={model.tableProps.onUpdateTargetWeight}
             actioningAssetKey={model.tableProps.actioningAssetKey}
+            updatingTarget={model.tableProps.updatingTarget}
             disabled={model.tableProps.disabled}
           />
         </div>

@@ -5,14 +5,23 @@
  * 集中展示资产的权重状态：当前权重、目标权重、漂移值、漂移方向。
  */
 
-import { Target, TrendingUp, TrendingDown } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Save, Target, TrendingUp, TrendingDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
-export function AssetPositionPanel({ row }: { row: AssetUniverseView }) {
+export function AssetPositionPanel({
+  row,
+  onUpdateTargetWeight,
+  updating = false,
+}: {
+  row: AssetUniverseView;
+  onUpdateTargetWeight?: (targetWeightPct: number) => Promise<void> | void;
+  updating?: boolean;
+}) {
   const actualPct = row.actualWeightPct ?? 0;
-  const targetPct = row.targetWeightPct ?? row.targetWeightHint ?? 0;
+  const targetPct = row.targetWeightPct ?? (row.targetWeightHint ?? 0) * 100;
   const gap = row.gapPct ?? (targetPct - actualPct);
   const hasTarget = targetPct > 0;
   const displayGap = -gap;
@@ -38,12 +47,31 @@ export function AssetPositionPanel({ row }: { row: AssetUniverseView }) {
     significant: "显著偏离",
   }[gapState];
   const gapDirectionLabel = displayGap > 0 ? "高于目标" : displayGap < 0 ? "低于目标" : "贴近目标";
+  const [draft, setDraft] = useState(() => targetPct.toFixed(2));
+  const parsedDraft = Number(draft);
+  const validDraft = Number.isFinite(parsedDraft) && parsedDraft >= 0 && parsedDraft <= 100;
+  const dirty = validDraft && Math.abs(parsedDraft - targetPct) >= 0.005;
+
+  useEffect(() => {
+    setDraft(targetPct.toFixed(2));
+  }, [row.assetKey, targetPct]);
+
+  const quickTargets = useMemo(() => {
+    const base = [0, 2, 5, 10];
+    if (targetPct > 10) base.push(Number(targetPct.toFixed(2)));
+    return [...new Set(base)].sort((a, b) => a - b);
+  }, [targetPct]);
+
+  async function handleSubmit() {
+    if (!onUpdateTargetWeight || !validDraft || updating) return;
+    await onUpdateTargetWeight(parsedDraft);
+  }
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
       <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2.5">
-        <Target className="h-4 w-4 text-slate-500" />
-        <h3 className="text-sm font-semibold text-slate-900">持仓状态</h3>
+        <Target className="h-4 w-4 text-[var(--primary)]" />
+        <h3 className="text-sm font-semibold text-[var(--text)]">持仓与目标</h3>
       </div>
 
       <div className="space-y-3 p-3">
@@ -81,9 +109,70 @@ export function AssetPositionPanel({ row }: { row: AssetUniverseView }) {
 
         {!hasTarget && (
           <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-            尚未设置目标权重，可在调仓页设置
+            尚未设置目标权重。保存后会写入目标配置，并参与调仓偏离计算。
           </div>
         )}
+
+        {onUpdateTargetWeight ? (
+          <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-semibold text-[var(--text)]">手动目标权重</div>
+                <div className="mt-0.5 text-[11px] leading-4 text-[var(--muted)]">
+                  直接覆盖该资产 targetWeightHint，不必等待 AI 输出。
+                </div>
+              </div>
+              <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">0-100%</span>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex h-10 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--card)] px-3 focus-within:border-[var(--primary)] focus-within:ring-2 focus-within:ring-[var(--primary-bg)]">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void handleSubmit();
+                  }}
+                  className="min-w-0 flex-1 bg-transparent font-[var(--font-mono)] text-sm text-[var(--text)] outline-none"
+                  aria-label="手动目标权重"
+                />
+                <span className="ml-2 text-xs text-[var(--muted)]">%</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={!dirty || updating}
+                className={cn(
+                  "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[8px] border px-3 text-xs font-semibold transition-colors",
+                  dirty && !updating
+                    ? "border-[var(--primary-border)] bg-[var(--primary)] text-white hover:opacity-90"
+                    : "cursor-not-allowed border-[var(--border)] bg-[var(--elevated)] text-[var(--faint)]",
+                )}
+              >
+                {updating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                保存
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {quickTargets.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDraft(value.toFixed(2))}
+                  className="h-7 rounded-[7px] border border-[var(--border)] bg-[var(--card)] px-2 font-[var(--font-mono)] text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--primary-border)] hover:text-[var(--primary)]"
+                >
+                  {value.toFixed(value % 1 === 0 ? 0 : 2)}%
+                </button>
+              ))}
+            </div>
+            {!validDraft ? (
+              <div className="mt-2 text-[11px] text-[var(--danger)]">请输入 0 到 100 之间的百分比。</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

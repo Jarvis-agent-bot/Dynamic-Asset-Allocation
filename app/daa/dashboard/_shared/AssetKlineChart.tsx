@@ -995,7 +995,7 @@ export function AssetKlineChart({
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <div className="pointer-events-none absolute left-3 top-3 z-[5] max-w-[calc(100%-1.5rem)] space-y-1 rounded-[6px] bg-[var(--surface)] px-2 py-1.5 font-[var(--font-mono)] text-[11px] leading-tight backdrop-blur-sm">
+        <div className="pointer-events-none absolute left-3 top-3 z-[5] max-w-[calc(100%-1.5rem)] space-y-1 rounded-[8px] border border-[#1a222a] bg-[#090d10]/95 px-2.5 py-2 font-[var(--font-mono)] text-[11px] leading-tight shadow-[0_10px_24px_rgba(0,0,0,0.32)] backdrop-blur-sm">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span className="font-semibold text-[#d6dde5]">{symbol} · 1D · {market || "MARKET"}</span>
             <span className="text-[#8a939f]">开 <b className="font-normal text-[#b8c0ca]">{formatPrice(displayData?.open)}</b></span>
@@ -1032,7 +1032,7 @@ export function AssetKlineChart({
           ) : null}
         </div>
 
-        <div className="absolute right-3 top-3 z-[5] hidden items-center gap-2 rounded-[6px] bg-[var(--surface)] px-2 py-1.5 font-[var(--font-mono)] text-[10px] text-[#8a939f] backdrop-blur-sm lg:flex">
+        <div className="absolute right-3 top-3 z-[5] hidden items-center gap-2 rounded-[8px] border border-[#1a222a] bg-[#090d10]/95 px-2 py-1.5 font-[var(--font-mono)] text-[10px] text-[#8a939f] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm lg:flex">
           <span title={dataSource ? `${dataSource.source} · ${dataSource.upstream}` : undefined}>
             OHLCV {dataSource ? `${dataSource.rawCount}` : ""}
           </span>
@@ -1045,12 +1045,12 @@ export function AssetKlineChart({
         </div>
 
         {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--surface)]">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#050607]/92">
             <span className="font-[var(--font-mono)] text-xs text-[#8a939f]">加载行情数据...</span>
           </div>
         )}
         {error && !loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--surface)]">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#050607]/92">
             <span className="text-sm text-[#8a939f]">{error}</span>
           </div>
         )}

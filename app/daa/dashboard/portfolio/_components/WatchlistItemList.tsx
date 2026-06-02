@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
@@ -94,7 +94,9 @@ function WatchlistRow(props: {
   technicalSignal?: DaaTechnicalSignal;
   onClick: () => void;
   onRemove?: (row: AssetUniverseView) => Promise<void> | void;
+  onUpdateTargetWeight?: (row: AssetUniverseView, targetWeightPct: number) => Promise<void> | void;
   removing?: boolean;
+  updatingTarget?: boolean;
   disabled?: boolean;
 }) {
   const { row, sparkData } = props;
@@ -239,6 +241,13 @@ function WatchlistRow(props: {
         </span>
       </div>
 
+      <TargetWeightQuickEdit
+        row={row}
+        disabled={props.disabled}
+        updating={props.updatingTarget}
+        onUpdate={props.onUpdateTargetWeight}
+      />
+
       <button
         type="button"
         title="移出观察列表"
@@ -262,6 +271,79 @@ function WatchlistRow(props: {
   );
 }
 
+function TargetWeightQuickEdit(props: {
+  row: AssetUniverseView;
+  disabled?: boolean;
+  updating?: boolean;
+  onUpdate?: (row: AssetUniverseView, targetWeightPct: number) => Promise<void> | void;
+}) {
+  const targetPct = (props.row.targetWeightHint ?? 0) * 100;
+  const [draft, setDraft] = useState(() => targetPct > 0 ? targetPct.toFixed(2) : "");
+  const parsed = Number(draft);
+  const valid = draft.trim() !== "" && Number.isFinite(parsed) && parsed >= 0 && parsed <= 100;
+  const dirty = valid && Math.abs(parsed - targetPct) >= 0.005;
+
+  useEffect(() => {
+    setDraft(targetPct > 0 ? targetPct.toFixed(2) : "");
+  }, [props.row.assetKey, targetPct]);
+
+  if (!props.onUpdate) {
+    return null;
+  }
+
+  async function submit() {
+    if (!props.onUpdate || !dirty || !valid || props.disabled || props.updating) return;
+    await props.onUpdate(props.row, parsed);
+  }
+
+  return (
+    <div
+      className="hidden w-[136px] shrink-0 xl:block"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.stopPropagation();
+          void submit();
+        }
+      }}
+    >
+      <div className="mb-1 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">目标权重</div>
+      <div className="flex h-8 items-center rounded-[8px] border border-[var(--border)] bg-[var(--card)] px-2 focus-within:border-[var(--primary)] focus-within:ring-2 focus-within:ring-[var(--primary-bg)]">
+        <input
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          disabled={props.disabled || props.updating}
+          placeholder="0"
+          className="min-w-0 flex-1 bg-transparent text-right font-[var(--font-mono)] text-xs text-[var(--text)] outline-none placeholder:text-[var(--faint)] disabled:cursor-not-allowed"
+          aria-label={`${props.row.symbol} 目标权重`}
+        />
+        <span className="ml-1 text-[10px] text-[var(--muted)]">%</span>
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={!dirty || !valid || props.disabled || props.updating}
+          className={cn(
+            "ml-1 inline-flex h-5 w-5 items-center justify-center rounded-[5px] transition-colors",
+            dirty && valid && !props.disabled && !props.updating
+              ? "bg-[var(--primary)] text-white"
+              : "cursor-not-allowed bg-[var(--elevated)] text-[var(--faint)]",
+          )}
+          aria-label={`保存 ${props.row.symbol} 目标权重`}
+        >
+          {props.updating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+        </button>
+      </div>
+      {!valid && draft.trim() !== "" ? (
+        <div className="mt-1 text-right text-[10px] text-[var(--danger)]">0-100%</div>
+      ) : null}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  主组件                                                             */
 /* ------------------------------------------------------------------ */
@@ -269,7 +351,9 @@ function WatchlistRow(props: {
 export function WatchlistItemList(props: {
   rows: AssetUniverseView[];
   onRemoveFromWatchlist?: (row: AssetUniverseView) => Promise<void> | void;
+  onUpdateTargetWeight?: (row: AssetUniverseView, targetWeightPct: number) => Promise<void> | void;
   actioningAssetKey?: string | null;
+  updatingTarget?: boolean;
   disabled?: boolean;
 }) {
   const router = useRouter();
@@ -377,7 +461,9 @@ export function WatchlistItemList(props: {
             technicalSignal={technicalSignals[(row.yfinanceSymbol || row.symbol).toUpperCase()] ?? technicalSignals[row.symbol.toUpperCase()]}
             onClick={() => handleRowClick(row)}
             onRemove={props.onRemoveFromWatchlist}
+            onUpdateTargetWeight={props.onUpdateTargetWeight}
             removing={props.actioningAssetKey === row.assetKey}
+            updatingTarget={props.updatingTarget}
             disabled={props.disabled}
           />
         ))}
