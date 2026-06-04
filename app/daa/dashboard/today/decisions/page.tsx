@@ -1,21 +1,18 @@
 import { Suspense } from "react";
-import AgentBriefingView from "./_components/AgentBriefingView";
-import FloatingAssistantChat from "./_components/FloatingAssistantChat";
+
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { AgentSectionTabs } from "@/app/daa/dashboard/today/_components/AgentSectionTabs";
+import AgentDecisionJournalClient from "./_components/AgentDecisionJournalClient";
 
-/** Agent 日报 — Cognitive Agent OS 的主入口 */
-export default function TodayPage() {
+/** Agent 决策记录 — 展示目标权重与推理审计 */
+export default function AgentDecisionsPage() {
   return (
     <div className="w-full min-w-0">
       <AgentSectionTabs />
-      <SectionErrorBoundary sectionName="今日待办">
+      <SectionErrorBoundary sectionName="Agent 决策记录">
         <Suspense fallback={<div className="py-20 text-center text-sm text-[var(--muted)]">加载中...</div>}>
-          <AgentBriefingView />
+          <AgentDecisionJournalClient />
         </Suspense>
-      </SectionErrorBoundary>
-      <SectionErrorBoundary sectionName="Agent 对话">
-        <FloatingAssistantChat />
       </SectionErrorBoundary>
     </div>
   );
