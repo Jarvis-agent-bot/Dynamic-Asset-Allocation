@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * 今日决策队列 — 把 Agent 内部 briefing 翻译成投资者今天要处理的事项。
+ * 今日结论 — 把 Agent 内部 briefing 翻译成投资者可以授权的结论。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Bot, CheckCircle2, Clock3, Loader2, Network, RefreshCw, RotateCcw, Search, Zap } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, Clock3, Loader2, Network, RefreshCw, RotateCcw, Search, ShieldCheck, Zap } from "lucide-react";
 
 import {
   DaaSurfaceActionButton,
@@ -112,6 +112,7 @@ type ActionTone = "red" | "amber" | "blue" | "orange" | "slate";
 type ReviewIntent = "decide" | "confirm" | "investigate" | "monitor";
 type ThesisQueueReviewAction = "decided" | "snoozed" | "request_investigation";
 type ReviewActionState = { pending?: boolean; label?: string; error?: string };
+type DecisionPosture = "act" | "confirm" | "wait" | "clear";
 
 const COLUMN_LIMIT = 6;
 
@@ -341,9 +342,9 @@ export default function AgentBriefingView() {
         body: JSON.stringify({ threadIds, action }),
       });
       if (!res.ok) throw new Error(`review action failed: ${res.status}`);
-      const label = action === "decided" ? "已记录判断"
-        : action === "snoozed" ? "3 天后再看"
-        : "已排入调查";
+      const label = action === "decided" ? "已同意当前处理"
+        : action === "snoozed" ? "已暂不处理"
+        : "已要求深查";
       setReviewActions((prev) => ({
         ...prev,
         [item.key]: { label },
@@ -375,7 +376,7 @@ export default function AgentBriefingView() {
 
   if (loading) {
     return (
-      <DaaSurfacePanel accent="cyan" title="今日决策队列">
+      <DaaSurfacePanel accent="cyan" title="今日结论">
         <div className="flex items-center justify-center py-16 text-[var(--muted)]">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           加载 Agent 状态...
@@ -387,8 +388,8 @@ export default function AgentBriefingView() {
   return (
     <DaaSurfacePanel
       accent="cyan"
-      title="今日决策队列"
-      subtitle="只展示今天需要人判断的事项；后台关系和内部诊断放到明细里。"
+      title="今日结论"
+      subtitle="先给可授权结论，再展开 Agent 已经做的后台调查和诊断。"
       className="w-full"
       bodyClassName="px-5 py-5 sm:px-6 xl:px-7"
       action={(
@@ -418,17 +419,10 @@ export default function AgentBriefingView() {
       )}
     >
       <div className="space-y-6">
-        <div className="grid gap-3 border-b border-[var(--border)] pb-5 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryStat label="今天要不要动" value={reviewQueue.decisionCount} hint={reviewQueue.decisionCount > 0 ? "需要确认仓位或目标权重" : "暂无必须决策"} />
-          <SummaryStat label="需要确认" value={reviewQueue.confirmCount} hint={reviewQueue.confirmCount > 0 ? "有变化，但未必马上交易" : "暂无新变化"} />
-          <SummaryStat label="等 Agent 调查" value={reviewQueue.investigateCount} hint={reviewQueue.importantInvestigationCount > 0 ? `${reviewQueue.importantInvestigationCount} 个重要持仓` : "低优先级后台排队"} />
-          <SummaryStat label="最近运行" value={formatLatestRun(status?.latestRun?.createdAt)} hint={formatSchedule(status?.schedule ?? null)} />
-        </div>
-
         {!hasTheses ? (
           <DaaSurfaceEmptyState
             title="Agent 尚未初始化"
-            description="先基于持仓生成初始判断，之后这里会只显示今天需要你判断的事项。"
+            description="先基于持仓生成初始判断，之后这里会直接给今天的投资结论。"
             action={(
               <DaaSurfaceActionButton tone="primary" onClick={triggerBootstrap} disabled={running}>
                 {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
@@ -440,13 +434,15 @@ export default function AgentBriefingView() {
           <DecisionQueueView
             queue={reviewQueue}
             buckets={sortedBuckets}
+            latestRunAt={status?.latestRun?.createdAt}
+            schedule={status?.schedule ?? null}
             actionStates={reviewActions}
             onReviewAction={markReviewAction}
           />
         ) : (
           <DaaSurfaceEmptyState
-            title="还没有今日决策队列"
-            description="刷新一次后，页面会汇总今天最值得你判断的持仓变化。"
+            title="还没有今日结论"
+            description="刷新一次后，Agent 会汇总持仓变化，并给出今天是否需要行动的结论。"
             action={(
               <DaaSurfaceActionButton tone="primary" onClick={triggerRun} disabled={running}>
                 {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -487,16 +483,6 @@ export default function AgentBriefingView() {
         ) : null}
       </div>
     </DaaSurfacePanel>
-  );
-}
-
-function SummaryStat({ label, value, hint }: { label: string; value: string | number; hint: string }) {
-  return (
-    <div className="min-w-0 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">{label}</div>
-      <div className="mt-1.5 truncate font-[var(--font-mono)] text-xl leading-7 text-[var(--text)]">{value}</div>
-      <div className="mt-1 truncate text-xs leading-5 text-[var(--muted)]">{hint}</div>
-    </div>
   );
 }
 
@@ -596,80 +582,244 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
 function DecisionQueueView({
   queue,
   buckets,
+  latestRunAt,
+  schedule,
   actionStates,
   onReviewAction,
 }: {
   queue: ReviewQueue;
   buckets: BriefingBuckets;
+  latestRunAt?: string;
+  schedule: AgentStatus["schedule"];
   actionStates: Record<string, ReviewActionState>;
   onReviewAction: (item: HumanReviewItem, action: ThesisQueueReviewAction) => Promise<void>;
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const decisionText = queue.decisionCount > 0
-    ? `${queue.decisionCount} 条需要你判断是否调整仓位`
-    : "今天没有必须动仓位的事项";
-  const detailCount = queue.items.length;
+  const [workOpen, setWorkOpen] = useState(false);
+  const authorizationItems = queue.items
+    .filter((item) => item.intent === "decide" || item.intent === "confirm")
+    .slice(0, 5);
+  const investigationItems = queue.items
+    .filter((item) => item.intent === "investigate" || item.intent === "monitor")
+    .slice(0, 5);
+  const backgroundCount = buckets.surprises.length + buckets.gaps.length + buckets.risks.length + buckets.conflicts.length;
+  const conclusion = buildDecisionConclusion(queue);
 
   return (
-    <div className="space-y-4">
-      {queue.topItems.length > 0 ? (
-        <section className="rounded-[var(--radius-lg)] border border-[var(--primary-border)] bg-[var(--primary-bg)]/55 px-4 py-3.5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-[var(--text)]">今天先处理</div>
-              <div className="mt-0.5 text-xs leading-5 text-[var(--muted)]">{decisionText}；其余交给 Agent 排队。</div>
-            </div>
-            <span className="rounded-full border border-[var(--primary-border)] bg-[var(--surface)] px-2.5 py-1 font-[var(--font-mono)] text-xs text-[var(--primary)]">
-              Top {queue.topItems.length}
-            </span>
-          </div>
+    <div className="space-y-5">
+      <DecisionConclusionPanel
+        conclusion={conclusion}
+        queue={queue}
+        latestRunAt={latestRunAt}
+        schedule={schedule}
+      />
+
+      <section className="space-y-3">
+        <SectionHeader
+          icon={<ShieldCheck className="h-4 w-4 text-[var(--primary)]" />}
+          title="需要你授权"
+          subtitle={authorizationItems.length > 0 ? "这些事项可能影响仓位、目标权重或风险预算。" : "今天没有需要你亲自授权的交易动作。"}
+          count={authorizationItems.length}
+        />
+        {authorizationItems.length > 0 ? (
           <div className="grid gap-3 xl:grid-cols-5">
-            {queue.topItems.map((item) => (
+            {authorizationItems.map((item) => (
               <HumanReviewCard
                 key={item.key}
                 item={item}
+                mode="authorization"
                 actionState={actionStates[item.key]}
                 onReviewAction={onReviewAction}
               />
             ))}
           </div>
-        </section>
-      ) : (
-        <DaaSurfaceEmptyState
-          title="今天没有需要人处理的事项"
-          description="Agent 没有发现需要你确认、决策或要求重新调查的重要持仓。"
-        />
-      )}
+        ) : (
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-sm text-[var(--muted)]">
+            Agent 当前没有提出需要批准的调仓或风险预算调整；后台仍会继续监控新闻、价格和旧判断。
+          </div>
+        )}
+      </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SectionHeader
+            icon={<Bot className="h-4 w-4 text-amber-300" />}
+            title="Agent 后台工作"
+            subtitle="调查、旧判断复核和判断关系诊断都放在这里，不再作为人的主待办。"
+            count={backgroundCount}
+          />
+          <button
+            type="button"
+            onClick={() => setWorkOpen((value) => !value)}
+            className="rounded-full border border-[var(--border)] bg-[var(--elevated)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+          >
+            {workOpen ? "收起后台工作" : `查看后台工作 ${backgroundCount}`}
+          </button>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <BackgroundWorkStat label="新变化" value={buckets.surprises.length} hint="新闻、市场数据、价格异常" />
+          <BackgroundWorkStat label="排队调查" value={queue.investigateCount} hint={queue.importantInvestigationCount > 0 ? `${queue.importantInvestigationCount} 个重要持仓` : "低优先级自动排队"} />
+          <BackgroundWorkStat label="后台诊断" value={queue.diagnosticsCount + buckets.risks.length} hint="高暴露风险和判断关系" />
+        </div>
+
+        {investigationItems.length > 0 ? (
+          <div className="grid gap-3 xl:grid-cols-5">
+            {investigationItems.map((item) => (
+              <HumanReviewCard
+                key={item.key}
+                item={item}
+                mode="background"
+                actionState={actionStates[item.key]}
+                onReviewAction={onReviewAction}
+              />
+            ))}
+          </div>
+        ) : null}
+
         <ReviewLogicDisclosure />
-        <div className="flex flex-wrap items-center gap-3">
-          {queue.diagnosticsCount > 0 ? (
-            <span className="text-xs text-[var(--faint)]">后台诊断 {queue.diagnosticsCount} 条判断关系</span>
-          ) : null}
-          {detailCount + queue.diagnosticsCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => setDetailsOpen((value) => !value)}
-              className="rounded-full border border-[var(--border)] bg-[var(--elevated)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-            >
-              {detailsOpen ? "收起明细" : detailCount > 0 ? `查看 ${detailCount} 条队列明细` : "查看后台诊断"}
-            </button>
-          ) : null}
+        {workOpen ? <BriefingDetailColumns buckets={buckets} /> : null}
+      </section>
+    </div>
+  );
+}
+
+function buildDecisionConclusion(queue: ReviewQueue): {
+  posture: DecisionPosture;
+  label: string;
+  title: string;
+  description: string;
+  tone: ActionTone;
+} {
+  if (queue.decisionCount > 0) {
+    return {
+      posture: "act",
+      label: "需要授权",
+      title: "今天有仓位级事项需要你确认",
+      description: `${queue.decisionCount} 条会影响仓位或目标权重；Agent 已把证据和建议放到授权区。`,
+      tone: "red",
+    };
+  }
+  if (queue.confirmCount > 0) {
+    return {
+      posture: "confirm",
+      label: "先确认",
+      title: "暂不必马上交易，但有假设需要确认",
+      description: `${queue.confirmCount} 条变化可能影响后续配置，建议先确认是否接受当前处理。`,
+      tone: "amber",
+    };
+  }
+  if (queue.investigateCount > 0) {
+    return {
+      posture: "wait",
+      label: "等待调查",
+      title: "今天不建议直接交易，Agent 正在补证据",
+      description: `${queue.investigateCount} 条判断需要后台调查；它们不是你的主待办，除非你想要求深查。`,
+      tone: "blue",
+    };
+  }
+  return {
+    posture: "clear",
+    label: "无需动作",
+    title: "今天不建议交易",
+    description: "Agent 没有发现需要授权、确认或升级调查的事项；保持当前组合并继续监控。",
+    tone: "slate",
+  };
+}
+
+function DecisionConclusionPanel({
+  conclusion,
+  queue,
+  latestRunAt,
+  schedule,
+}: {
+  conclusion: ReturnType<typeof buildDecisionConclusion>;
+  queue: ReviewQueue;
+  latestRunAt?: string;
+  schedule: AgentStatus["schedule"];
+}) {
+  const postureClasses = conclusion.posture === "act"
+    ? "border-red-400/25 bg-red-500/10"
+    : conclusion.posture === "confirm"
+      ? "border-amber-400/25 bg-amber-500/10"
+      : conclusion.posture === "wait"
+        ? "border-[var(--primary-border)] bg-[var(--primary-bg)]"
+        : "border-[var(--border)] bg-[var(--surface)]";
+
+  return (
+    <section className={`rounded-[var(--radius-lg)] border px-4 py-4 sm:px-5 ${postureClasses}`}>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionBadge tone={conclusion.tone}>{conclusion.label}</ActionBadge>
+            <span className="text-xs text-[var(--muted)]">最近运行 {formatLatestRun(latestRunAt)}</span>
+          </div>
+          <h2 className="mt-3 text-xl font-semibold leading-7 text-[var(--text)] sm:text-2xl">
+            {conclusion.title}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
+            {conclusion.description}
+          </p>
+        </div>
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3 xl:w-[520px]">
+          <ConclusionMetric label="授权" value={queue.decisionCount + queue.confirmCount} />
+          <ConclusionMetric label="后台调查" value={queue.investigateCount} />
+          <ConclusionMetric label="下次运行" value={formatSchedule(schedule)} wide />
         </div>
       </div>
+    </section>
+  );
+}
 
-      {detailsOpen ? <BriefingDetailColumns buckets={buckets} /> : null}
+function ConclusionMetric({ label, value, wide }: { label: string; value: string | number; wide?: boolean }) {
+  return (
+    <div className={`min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]/75 px-3 py-2 ${wide ? "sm:col-span-1" : ""}`}>
+      <div className="text-[11px] font-medium text-[var(--muted)]">{label}</div>
+      <div className="mt-1 truncate font-[var(--font-mono)] text-sm leading-5 text-[var(--text)]">{value}</div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+  count,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  count: number;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+        {icon}
+        {title}
+        <span className="rounded-full bg-[var(--elevated)] px-1.5 py-0.5 font-[var(--font-mono)] text-[11px] text-[var(--muted)]">{count}</span>
+      </div>
+      <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{subtitle}</div>
+    </div>
+  );
+}
+
+function BackgroundWorkStat({ label, value, hint }: { label: string; value: number; hint: string }) {
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">{label}</div>
+      <div className="mt-1.5 font-[var(--font-mono)] text-lg leading-6 text-[var(--text)]">{value}</div>
+      <div className="mt-1 truncate text-xs leading-5 text-[var(--muted)]">{hint}</div>
     </div>
   );
 }
 
 function HumanReviewCard({
   item,
+  mode,
   actionState,
   onReviewAction,
 }: {
   item: HumanReviewItem;
+  mode: "authorization" | "background";
   actionState?: ReviewActionState;
   onReviewAction: (item: HumanReviewItem, action: ThesisQueueReviewAction) => Promise<void>;
 }) {
@@ -702,6 +852,7 @@ function HumanReviewCard({
       {item.sourceThreadIds.length > 0 ? (
         <ReviewActionButtons
           item={item}
+          mode={mode}
           actionState={actionState}
           onReviewAction={onReviewAction}
         />
@@ -712,10 +863,12 @@ function HumanReviewCard({
 
 function ReviewActionButtons({
   item,
+  mode,
   actionState,
   onReviewAction,
 }: {
   item: HumanReviewItem;
+  mode: "authorization" | "background";
   actionState?: ReviewActionState;
   onReviewAction: (item: HumanReviewItem, action: ThesisQueueReviewAction) => Promise<void>;
 }) {
@@ -732,31 +885,46 @@ function ReviewActionButtons({
   }
 
   const disabled = actionState?.pending === true;
+  if (mode === "background") {
+    return (
+      <div className="mt-3 border-t border-[var(--border)] pt-2">
+        <QueueActionButton
+          title="让下一次 Agent 运行优先深查这条判断"
+          disabled={disabled}
+          onClick={() => onReviewAction(item, "request_investigation")}
+        >
+          {disabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
+          要求深查
+        </QueueActionButton>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--border)] pt-2">
       <QueueActionButton
-        title="我已经形成判断"
+        title="接受 Agent 对这件事的当前处理"
         disabled={disabled}
         onClick={() => onReviewAction(item, "decided")}
       >
         {disabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-        已判断
+        同意当前处理
       </QueueActionButton>
       <QueueActionButton
-        title="先从今天队列移开，3 天后再看"
+        title="这件事今天不处理，3 天后再让 Agent 放回视野"
         disabled={disabled}
         onClick={() => onReviewAction(item, "snoozed")}
       >
         <Clock3 className="h-3.5 w-3.5" />
-        稍后
+        暂不处理
       </QueueActionButton>
       <QueueActionButton
-        title="下次 Agent 运行时优先调查"
+        title="下次 Agent 运行时优先深查"
         disabled={disabled}
         onClick={() => onReviewAction(item, "request_investigation")}
       >
         <Bot className="h-3.5 w-3.5" />
-        Agent 查
+        要求深查
       </QueueActionButton>
     </div>
   );
@@ -796,7 +964,7 @@ function ReviewLogicDisclosure() {
       </summary>
       <div className="mt-1">
         它不是你有没有打开页面，而是 Agent 最近有没有对该持仓相关判断完成有效调查。
-        重要持仓超过 7 天没有新证据，或判断仍不明确，就会进入队列；下次调查到有效证据后会自动重置。
+        重要持仓超过 7 天没有新证据，或判断仍不明确，就会进入后台调查计划；下次调查到有效证据后会自动重置。
       </div>
     </details>
   );
