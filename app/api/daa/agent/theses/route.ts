@@ -13,6 +13,7 @@ import {
 } from "@/src/daa/agent/store/thesisStore";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { countMemories } from "@/src/daa/agent/store/memoryStore";
+import { buildDailyDecisionBriefFromBriefing, type DailyDecisionBriefingInput } from "@/src/daa/agent/dailyDecisionBrief";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { deriveCognitiveAgentScheduleTimesUtc } from "@/src/daa/config/systemConfig";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -70,6 +71,7 @@ export async function GET(req: Request) {
         thesesUpdated: latestRun.reasoningTraces.filter(t => t.node === "investigate").length,
         totalTokens: latestRun.totalTokens,
         briefing: latestRun.briefing ?? null,
+        dailyBrief: buildDailyDecisionBriefFromBriefing(latestRun.briefing as DailyDecisionBriefingInput),
       } : null,
       memoryCount,
       schedule,

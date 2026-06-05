@@ -23,11 +23,15 @@ import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { isDaaPgEnabled, withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { findRecentJobExecutionByIdempotencyKey } from "@/src/daa/store/jobExecutionLogRepo";
 import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
+import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
+import { resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
 import { deriveCognitiveAgentScheduleTimesUtc } from "@/src/daa/config/systemConfig";
 import { countThreads } from "@/src/daa/agent/store/thesisStore";
 import { countMemories } from "@/src/daa/agent/store/memoryStore";
 import { getDaaSystemConfig } from "@/src/daa/store/accountStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+
+type CognitiveAgentCronResult = Awaited<ReturnType<typeof runAutopilotLoop>>;
 
 function findScheduledWindow(nowUtc: Date, times: string[]): { time: string; scheduledAt: Date } | null {
   let best: { time: string; scheduledAt: Date; diffMinutes: number } | null = null;
@@ -88,6 +92,124 @@ async function withJobIdempotencyLock<T>(
     logSwallowed("cognitiveAgent.cron.idempotencyLock", e);
     return { acquired: true, result: await run() };
   }
+}
+
+function buildOperatorResearchOnlyResult(input: {
+  brainMode: string;
+  run: Awaited<ReturnType<typeof runCognitiveAgentCycle>>;
+}): CognitiveAgentCronResult {
+  return {
+    skipped: false,
+    reason: null,
+    source: "cron_cognitive_agent",
+    brainMode: input.brainMode,
+    bootstrapped: { attempted: false, created: 0, errors: [] },
+    cognitiveRun: {
+      attempted: true,
+      runId: input.run.runId,
+      thesesUpdated: input.run.thesesUpdated,
+      surprisesCount: input.run.surprises.length,
+      totalTokens: input.run.totalTokens,
+      durationMs: input.run.durationMs,
+      errors: input.run.errors,
+    },
+    rebalance: {
+      attempted: false,
+      created: false,
+      cycleId: null,
+      proposalCount: 0,
+      autoExecute: {
+        attempted: false,
+        executed: false,
+        ordersCount: 0,
+        blockedReason: null,
+        error: null,
+      },
+      reason: "操作员模式只运行定时复核，不创建调仓周期。",
+    },
+    targetWeightPool: {
+      attempted: false,
+      enabled: false,
+      targetPlanAvailable: false,
+      acceptedCount: 0,
+      skippedCount: 0,
+      attemptedCount: 0,
+      persistedCount: 0,
+      failedCount: 0,
+      minConfidence: 0,
+      reason: "操作员模式不写入 AI 目标权重池。",
+    },
+  };
+}
+
+function buildBrainModeSkippedResult(input: {
+  brainMode: string;
+  reason: string;
+}): CognitiveAgentCronResult {
+  return {
+    skipped: true,
+    reason: input.reason,
+    source: "cron_cognitive_agent",
+    brainMode: input.brainMode,
+    bootstrapped: { attempted: false, created: 0, errors: [] },
+    cognitiveRun: {
+      attempted: false,
+      runId: null,
+      thesesUpdated: 0,
+      surprisesCount: 0,
+      totalTokens: 0,
+      durationMs: 0,
+      errors: [],
+    },
+    rebalance: {
+      attempted: false,
+      created: false,
+      cycleId: null,
+      proposalCount: 0,
+      autoExecute: {
+        attempted: false,
+        executed: false,
+        ordersCount: 0,
+        blockedReason: null,
+        error: null,
+      },
+      reason: null,
+    },
+    targetWeightPool: {
+      attempted: false,
+      enabled: false,
+      targetPlanAvailable: false,
+      acceptedCount: 0,
+      skippedCount: 0,
+      attemptedCount: 0,
+      persistedCount: 0,
+      failedCount: 0,
+      minConfidence: 0,
+      reason: null,
+    },
+  };
+}
+
+async function runScheduledCognitiveAgent(): Promise<CognitiveAgentCronResult> {
+  const row = await getDaaSystemConfig();
+  const brain = resolveBrainConfig(row.config.brain);
+
+  if (brain.mode === "autopilot") {
+    return await runAutopilotLoop({
+      source: "cron_cognitive_agent",
+      reason: "scheduled cognitive tick",
+    });
+  }
+
+  if (brain.mode === "operator") {
+    const run = await runCognitiveAgentCycle("scheduled");
+    return buildOperatorResearchOnlyResult({ brainMode: brain.mode, run });
+  }
+
+  return buildBrainModeSkippedResult({
+    brainMode: brain.mode,
+    reason: "顾问模式不运行定时复核；需要手动查看建议。",
+  });
 }
 
 export async function POST(req: Request) {
@@ -176,10 +298,7 @@ async function runCognitiveAgentJob(req: Request, scope: DaaActiveAccountScope):
           errorsCount: result.cognitiveRun.errors.length,
         }),
         handler: async () => {
-          return await runAutopilotLoop({
-            source: "cron_cognitive_agent",
-            reason: "scheduled cognitive tick",
-          });
+          return await runScheduledCognitiveAgent();
         },
       }),
     );

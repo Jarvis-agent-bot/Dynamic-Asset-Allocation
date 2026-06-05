@@ -25,6 +25,7 @@ function readDecisionKind(value: string | null): AgentDecisionKind | null {
     || value === "strategy_regime_override"
     || value === "strategy_plan_summary"
     || value === "thesis_review"
+    || value === "human_daily_decision"
   ) {
     return value;
   }

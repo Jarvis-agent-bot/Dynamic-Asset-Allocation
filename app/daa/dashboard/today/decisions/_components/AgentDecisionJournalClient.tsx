@@ -30,7 +30,8 @@ type DecisionKind =
   | "strategy_target_allocation"
   | "strategy_regime_override"
   | "strategy_plan_summary"
-  | "thesis_review";
+  | "thesis_review"
+  | "human_daily_decision";
 
 type TargetIntent = {
   assetKey: string;
@@ -107,6 +108,7 @@ const KIND_FILTERS: Array<{ value: KindFilter; label: string }> = [
   { value: "strategy_plan_summary", label: "计划摘要" },
   { value: "strategy_regime_override", label: "市场状态" },
   { value: "thesis_review", label: "论点复盘" },
+  { value: "human_daily_decision", label: "人的拍板" },
 ];
 
 function normalizeText(value: unknown): string {
@@ -133,6 +135,7 @@ function formatDecisionKind(kind: DecisionKind): string {
   if (kind === "strategy_regime_override") return "市场状态";
   if (kind === "strategy_plan_summary") return "计划摘要";
   if (kind === "thesis_review") return "论点复盘";
+  if (kind === "human_daily_decision") return "人的拍板";
   return kind;
 }
 

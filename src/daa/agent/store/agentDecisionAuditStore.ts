@@ -13,7 +13,8 @@ export type AgentDecisionKind =
   | "strategy_target_allocation"
   | "strategy_regime_override"
   | "strategy_plan_summary"
-  | "thesis_review";
+  | "thesis_review"
+  | "human_daily_decision";
 
 export type AgentDecisionAuditInput = {
   agentRunId?: string | null;

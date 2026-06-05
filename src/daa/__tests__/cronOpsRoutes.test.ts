@@ -23,6 +23,30 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
   upsertDaaFxRates: vi.fn(),
 }));
 
+vi.mock("@/src/daa/store/accountStore", () => ({
+  getDaaSystemConfig: vi.fn(),
+}));
+
+vi.mock("@/src/daa/account/accountScope", () => ({
+  DEFAULT_DAA_ACCOUNT_SCOPE_ID: "default",
+  getDaaAccountScopeId: vi.fn(() => "default"),
+  listActiveDaaAccountScopes: vi.fn(async () => [{
+    authAccountId: "default",
+    username: "default",
+    scopeId: "default",
+    isPrimary: true,
+  }]),
+  withDaaAccountScope: vi.fn(async (_scopeId: string, run: () => Promise<unknown>) => run()),
+}));
+
+vi.mock("@/src/daa/pg/daaPg", () => ({
+  daaPgPool: vi.fn(() => ({
+    query: vi.fn(async () => ({ rows: [] })),
+  })),
+  isDaaPgEnabled: vi.fn(() => false),
+  withDaaPgClient: vi.fn(),
+}));
+
 vi.mock("@/src/daa/signals/newsSignal", () => ({
   buildNewsSignals: vi.fn(),
 }));
@@ -90,10 +114,24 @@ vi.mock("@/src/daa/agent/autopilotOrchestrator", () => ({
   runAutopilotLoop: vi.fn(),
 }));
 
+vi.mock("@/src/daa/agent/cognitiveGraph", () => ({
+  runCognitiveAgentCycle: vi.fn(),
+}));
+
+vi.mock("@/src/daa/agent/store/thesisStore", () => ({
+  countThreads: vi.fn().mockResolvedValue(3),
+}));
+
+vi.mock("@/src/daa/agent/store/memoryStore", () => ({
+  countMemories: vi.fn().mockResolvedValue(5),
+}));
+
+import { POST as cognitiveAgentPost } from "@/app/api/daa/cron/cognitive-agent/route";
 import { POST as dailyAnalysisPost } from "@/app/api/daa/cron/daily-analysis/route";
 import { POST as fxRefreshPost } from "@/app/api/daa/cron/fx-refresh/route";
 import { POST as newsRefreshPost } from "@/app/api/daa/cron/news-refresh/route";
 import { requireCronAuth } from "@/src/daa/cron/auth";
+import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
@@ -102,6 +140,7 @@ import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSignal";
 import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
+import { getDaaSystemConfig as getScopedDaaSystemConfig } from "@/src/daa/store/accountStore";
 import {
   type DaaStoreExternalPayloadRaw,
   type DaaStoreFxRate,
@@ -116,6 +155,7 @@ import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 
 function buildSystemConfig(input?: {
   baseCurrency?: CurrencyCode;
+  brainMode?: "advisor" | "operator" | "autopilot";
   newsFeed?: {
     enabled?: boolean;
     symbols?: string[];
@@ -136,6 +176,9 @@ function buildSystemConfig(input?: {
   const baseCurrency: CurrencyCode = input?.baseCurrency || "USD";
   const scheduledTimeUtc = `${String(new Date().getUTCHours()).padStart(2, "0")}:00`;
   return buildSystemConfigRow({
+    brain: {
+      mode: input?.brainMode ?? "autopilot",
+    },
     cognitiveAgent: {
       // 默认关闭，以便 daily_report 作为 fallback 能被测试验证
       enabled: input?.cognitiveAgentEnabled ?? false,
@@ -293,12 +336,33 @@ function buildAutopilotLoopResult(): Awaited<ReturnType<typeof runAutopilotLoop>
   };
 }
 
+function buildCognitiveAgentCycleResult(): Awaited<ReturnType<typeof runCognitiveAgentCycle>> {
+  return {
+    runId: "agent-cycle-operator-1",
+    thesesUpdated: 2,
+    surprises: [{
+      title: "风险变化",
+      description: "测试用风险变化",
+      relatedThesisId: "thread-1",
+      severityScore: 5,
+      suggestedAction: "复核",
+    }],
+    totalTokens: 1234,
+    errors: [],
+    durationMs: 456,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 
   vi.mocked(requireCronAuth).mockResolvedValue(null);
   vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig());
+  vi.mocked(getScopedDaaSystemConfig).mockResolvedValue(buildSystemConfig({
+    brainMode: "autopilot",
+    cognitiveAgentEnabled: true,
+  }));
   vi.mocked(listDaaAssetUniverse).mockResolvedValue([]);
   vi.mocked(listDaaFxRates).mockResolvedValue([]);
   vi.mocked(appendDaaExternalPayloadRaw).mockResolvedValue(buildExternalPayloadRawFixture());
@@ -335,6 +399,7 @@ beforeEach(() => {
   vi.mocked(sendTelegramByEnv).mockResolvedValue(false);
   vi.mocked(hasRecentMajorEventNotification).mockResolvedValue(false);
   vi.mocked(runAutopilotLoop).mockResolvedValue(buildAutopilotLoopResult());
+  vi.mocked(runCognitiveAgentCycle).mockResolvedValue(buildCognitiveAgentCycleResult());
 });
 
 afterEach(() => {
@@ -489,6 +554,77 @@ describe("cron-ops-routes-v1", () => {
     ]));
     // fx-refresh 现在使用 runLoggedJob，job 日志通过 jobService 记录
     expect(json.data.jobId).toBeTruthy();
+  });
+
+  it("cognitive-agent 在自动驾驶模式下继续走自动驾驶链路", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-19T21:05:00.000Z"));
+    vi.mocked(getScopedDaaSystemConfig).mockResolvedValue(buildSystemConfig({
+      brainMode: "autopilot",
+      cognitiveAgentEnabled: true,
+    }));
+
+    const response = await cognitiveAgentPost(new Request("http://localhost/api/daa/cron/cognitive-agent", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.skipped).toBe(false);
+    expect(vi.mocked(runAutopilotLoop)).toHaveBeenCalledWith(expect.objectContaining({
+      source: "cron_cognitive_agent",
+      reason: "scheduled cognitive tick",
+    }));
+    expect(vi.mocked(runCognitiveAgentCycle)).not.toHaveBeenCalled();
+  });
+
+  it("cognitive-agent 在操作员模式下只运行定时复核，不创建调仓周期", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-19T21:05:00.000Z"));
+    vi.mocked(getScopedDaaSystemConfig).mockResolvedValue(buildSystemConfig({
+      brainMode: "operator",
+      cognitiveAgentEnabled: true,
+    }));
+
+    const response = await cognitiveAgentPost(new Request("http://localhost/api/daa/cron/cognitive-agent", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.skipped).toBe(false);
+    expect(json.data.brainMode).toBe("operator");
+    expect(json.data.cognitiveRun.runId).toBe("agent-cycle-operator-1");
+    expect(json.data.rebalance).toMatchObject({
+      attempted: false,
+      created: false,
+      cycleId: null,
+      reason: "操作员模式只运行定时复核，不创建调仓周期。",
+    });
+    expect(json.data.targetWeightPool).toMatchObject({
+      attempted: false,
+      reason: "操作员模式不写入 AI 目标权重池。",
+    });
+    expect(vi.mocked(runCognitiveAgentCycle)).toHaveBeenCalledWith("scheduled");
+    expect(vi.mocked(runAutopilotLoop)).not.toHaveBeenCalled();
+  });
+
+  it("cognitive-agent 在顾问模式下清晰跳过定时复核", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-19T21:05:00.000Z"));
+    vi.mocked(getScopedDaaSystemConfig).mockResolvedValue(buildSystemConfig({
+      brainMode: "advisor",
+      cognitiveAgentEnabled: true,
+    }));
+
+    const response = await cognitiveAgentPost(new Request("http://localhost/api/daa/cron/cognitive-agent", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.skipped).toBe(true);
+    expect(json.data.brainMode).toBe("advisor");
+    expect(json.data.reason).toBe("顾问模式不运行定时复核；需要手动查看建议。");
+    expect(vi.mocked(runCognitiveAgentCycle)).not.toHaveBeenCalled();
+    expect(vi.mocked(runAutopilotLoop)).not.toHaveBeenCalled();
   });
 
   it("daily-analysis 在关闭自动生成时跳过生成但仍可发送每日报告", async () => {

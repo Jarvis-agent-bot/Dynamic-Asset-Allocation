@@ -13,6 +13,11 @@ import {
   DaaSurfaceEmptyState,
   DaaSurfacePanel,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import {
+  buildDailyDecisionBrief,
+  type DailyDecisionBrief,
+  type StrategyOverlay,
+} from "@/app/daa/dashboard/today/_components/dailyDecisionBrief";
 import { formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -81,6 +86,7 @@ interface DailyBriefing {
   mindChangeConditions: MindChangeCondition[];
   thesisFailureImpacts?: ThesisFailureImpact[];
   thesisConflicts?: ThesisConflict[];
+  strategyOverlay?: StrategyOverlay;
   thesesUpdated: number;
   memoriesCreated: number;
   totalTokens: number;
@@ -95,6 +101,7 @@ interface AgentStatus {
     createdAt: string;
     totalTokens: number;
     briefing: DailyBriefing | null;
+    dailyBrief?: DailyDecisionBrief | null;
   } | null;
   memoryCount: number;
   schedule: { mode: string; timesUtc: string[] } | null;
@@ -109,10 +116,10 @@ type RunResultSummary = {
 };
 
 type ActionTone = "red" | "amber" | "blue" | "orange" | "slate";
-type ReviewIntent = "decide" | "confirm" | "investigate" | "monitor";
+type ReviewIntent = "approve" | "decide" | "confirm" | "investigate" | "monitor";
 type ThesisQueueReviewAction = "decided" | "snoozed" | "request_investigation";
+type DailyDecisionAction = "approve_plan" | "reject_plan" | "hold_current";
 type ReviewActionState = { pending?: boolean; label?: string; error?: string };
-type DecisionPosture = "act" | "confirm" | "wait" | "clear";
 
 const COLUMN_LIMIT = 6;
 
@@ -187,6 +194,7 @@ function riskAction(r: ThesisFailureImpact): { label: string; tone: ActionTone }
 }
 
 function intentTone(intent: ReviewIntent): ActionTone {
+  if (intent === "approve") return "red";
   if (intent === "decide") return "red";
   if (intent === "confirm") return "amber";
   if (intent === "investigate") return "blue";
@@ -194,6 +202,7 @@ function intentTone(intent: ReviewIntent): ActionTone {
 }
 
 function intentLabel(intent: ReviewIntent): string {
+  if (intent === "approve") return "待批准";
   if (intent === "decide") return "今天要决定";
   if (intent === "confirm") return "需要确认";
   if (intent === "investigate") return "重新调查";
@@ -434,6 +443,8 @@ export default function AgentBriefingView() {
           <DecisionQueueView
             queue={reviewQueue}
             buckets={sortedBuckets}
+            briefing={briefing}
+            dailyBrief={status?.latestRun?.dailyBrief ?? null}
             latestRunAt={status?.latestRun?.createdAt}
             schedule={status?.schedule ?? null}
             actionStates={reviewActions}
@@ -582,6 +593,8 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
 function DecisionQueueView({
   queue,
   buckets,
+  briefing,
+  dailyBrief: apiDailyBrief,
   latestRunAt,
   schedule,
   actionStates,
@@ -589,26 +602,56 @@ function DecisionQueueView({
 }: {
   queue: ReviewQueue;
   buckets: BriefingBuckets;
+  briefing: DailyBriefing;
+  dailyBrief: DailyDecisionBrief | null;
   latestRunAt?: string;
   schedule: AgentStatus["schedule"];
   actionStates: Record<string, ReviewActionState>;
   onReviewAction: (item: HumanReviewItem, action: ThesisQueueReviewAction) => Promise<void>;
 }) {
   const [workOpen, setWorkOpen] = useState(false);
-  const authorizationItems = queue.items
-    .filter((item) => item.intent === "decide" || item.intent === "confirm")
-    .slice(0, 5);
-  const investigationItems = queue.items
-    .filter((item) => item.intent === "investigate" || item.intent === "monitor")
-    .slice(0, 5);
+  const [dailyDecisionState, setDailyDecisionState] = useState<ReviewActionState>({});
   const backgroundCount = buckets.surprises.length + buckets.gaps.length + buckets.risks.length + buckets.conflicts.length;
-  const conclusion = buildDecisionConclusion(queue);
+  const dailyBrief = apiDailyBrief ?? buildDailyDecisionBrief({
+    queue,
+    backgroundCount,
+    strategyOverlay: briefing.strategyOverlay ?? null,
+  });
+  const authorizationItems = dailyBrief.approvals.slice(0, 5).map((approval) => ({
+    key: approval.key,
+    intent: "approve" as const,
+    sourceThreadIds: [],
+    title: approval.title,
+    why: approval.reason,
+    nextStep: "查看完整目标权重方案，确认后再进入调仓处理。",
+    evidence: approval.confidencePct == null ? "目标权重方案" : `目标权重方案 · 置信度 ${approval.confidencePct}%`,
+    score: approval.confidencePct ?? 100,
+    href: "/daa/dashboard/today/decisions",
+  }));
+  const investigationItems = queue.items.slice(0, 5);
+  const recordDailyDecision = useCallback(async (action: DailyDecisionAction) => {
+    setDailyDecisionState({ pending: true });
+    try {
+      const res = await fetch("/api/daa/agent/daily-decision/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) throw new Error(`daily decision action failed: ${res.status}`);
+      const label = action === "approve_plan" ? "已记录：批准方案"
+        : action === "reject_plan" ? "已记录：拒绝方案"
+        : "已记录：保持当前";
+      setDailyDecisionState({ label });
+    } catch (error) {
+      logSwallowed("today.agentBriefing.dailyDecisionAction", error);
+      setDailyDecisionState({ error: "记录失败" });
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
       <DecisionConclusionPanel
-        conclusion={conclusion}
-        queue={queue}
+        dailyBrief={dailyBrief}
         latestRunAt={latestRunAt}
         schedule={schedule}
       />
@@ -616,25 +659,42 @@ function DecisionQueueView({
       <section className="space-y-3">
         <SectionHeader
           icon={<ShieldCheck className="h-4 w-4 text-[var(--primary)]" />}
-          title="需要你授权"
-          subtitle={authorizationItems.length > 0 ? "这些事项可能影响仓位、目标权重或风险预算。" : "今天没有需要你亲自授权的交易动作。"}
+          title="需要你拍板"
+          subtitle={authorizationItems.length > 0 ? "这里只放会改变目标权重或调仓方案的动作。" : "今天没有需要你批准的组合动作。"}
           count={authorizationItems.length}
         />
         {authorizationItems.length > 0 ? (
-          <div className="grid gap-3 xl:grid-cols-5">
-            {authorizationItems.map((item) => (
-              <HumanReviewCard
-                key={item.key}
-                item={item}
-                mode="authorization"
-                actionState={actionStates[item.key]}
-                onReviewAction={onReviewAction}
-              />
-            ))}
+          <div className="space-y-3">
+            <DailyDecisionActionBar
+              dailyBrief={dailyBrief}
+              state={dailyDecisionState}
+              onAction={recordDailyDecision}
+            />
+            <div className="grid gap-3 xl:grid-cols-5">
+              {authorizationItems.map((item) => (
+                <HumanReviewCard
+                  key={item.key}
+                  item={item}
+                  mode="authorization"
+                  actionState={actionStates[item.key]}
+                  onReviewAction={onReviewAction}
+                />
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-sm text-[var(--muted)]">
-            Agent 当前没有提出需要批准的调仓或风险预算调整；后台仍会继续监控新闻、价格和旧判断。
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-4">
+            <div className="text-sm text-[var(--muted)]">
+              Agent 当前没有提出目标权重变化；风险、新闻和旧判断复核都放在后台继续处理。
+            </div>
+            <div className="mt-3">
+              <DailyDecisionActionBar
+                dailyBrief={dailyBrief}
+                state={dailyDecisionState}
+                onAction={recordDailyDecision}
+                compact
+              />
+            </div>
           </div>
         )}
       </section>
@@ -652,7 +712,7 @@ function DecisionQueueView({
             onClick={() => setWorkOpen((value) => !value)}
             className="rounded-full border border-[var(--border)] bg-[var(--elevated)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
           >
-            {workOpen ? "收起后台工作" : `查看后台工作 ${backgroundCount}`}
+            {workOpen ? "收起 Agent 细节" : `查看 Agent 细节 ${backgroundCount}`}
           </button>
         </div>
 
@@ -662,86 +722,51 @@ function DecisionQueueView({
           <BackgroundWorkStat label="后台诊断" value={queue.diagnosticsCount + buckets.risks.length} hint="高暴露风险和判断关系" />
         </div>
 
-        {investigationItems.length > 0 ? (
-          <div className="grid gap-3 xl:grid-cols-5">
-            {investigationItems.map((item) => (
-              <HumanReviewCard
-                key={item.key}
-                item={item}
-                mode="background"
-                actionState={actionStates[item.key]}
-                onReviewAction={onReviewAction}
-              />
-            ))}
+        <ReviewLogicDisclosure />
+        {workOpen ? (
+          <div className="space-y-4">
+            {investigationItems.length > 0 ? (
+              <div className="grid gap-3 xl:grid-cols-5">
+                {investigationItems.map((item) => (
+                  <HumanReviewCard
+                    key={item.key}
+                    item={item}
+                    mode="background"
+                    actionState={actionStates[item.key]}
+                    onReviewAction={onReviewAction}
+                  />
+                ))}
+              </div>
+            ) : null}
+            <BriefingDetailColumns buckets={buckets} />
           </div>
         ) : null}
-
-        <ReviewLogicDisclosure />
-        {workOpen ? <BriefingDetailColumns buckets={buckets} /> : null}
       </section>
     </div>
   );
 }
 
-function buildDecisionConclusion(queue: ReviewQueue): {
-  posture: DecisionPosture;
-  label: string;
-  title: string;
-  description: string;
-  tone: ActionTone;
-} {
-  if (queue.decisionCount > 0) {
-    return {
-      posture: "act",
-      label: "需要授权",
-      title: "今天有仓位级事项需要你确认",
-      description: `${queue.decisionCount} 条会影响仓位或目标权重；Agent 已把证据和建议放到授权区。`,
-      tone: "red",
-    };
-  }
-  if (queue.confirmCount > 0) {
-    return {
-      posture: "confirm",
-      label: "先确认",
-      title: "暂不必马上交易，但有假设需要确认",
-      description: `${queue.confirmCount} 条变化可能影响后续配置，建议先确认是否接受当前处理。`,
-      tone: "amber",
-    };
-  }
-  if (queue.investigateCount > 0) {
-    return {
-      posture: "wait",
-      label: "等待调查",
-      title: "今天不建议直接交易，Agent 正在补证据",
-      description: `${queue.investigateCount} 条判断需要后台调查；它们不是你的主待办，除非你想要求深查。`,
-      tone: "blue",
-    };
-  }
-  return {
-    posture: "clear",
-    label: "无需动作",
-    title: "今天不建议交易",
-    description: "Agent 没有发现需要授权、确认或升级调查的事项；保持当前组合并继续监控。",
-    tone: "slate",
-  };
+function decisionTone(posture: DailyDecisionBrief["posture"]): ActionTone {
+  if (posture === "approve_required") return "red";
+  if (posture === "risk_watch") return "amber";
+  if (posture === "investigating") return "blue";
+  return "slate";
 }
 
 function DecisionConclusionPanel({
-  conclusion,
-  queue,
+  dailyBrief,
   latestRunAt,
   schedule,
 }: {
-  conclusion: ReturnType<typeof buildDecisionConclusion>;
-  queue: ReviewQueue;
+  dailyBrief: DailyDecisionBrief;
   latestRunAt?: string;
   schedule: AgentStatus["schedule"];
 }) {
-  const postureClasses = conclusion.posture === "act"
+  const postureClasses = dailyBrief.posture === "approve_required"
     ? "border-red-400/25 bg-red-500/10"
-    : conclusion.posture === "confirm"
+    : dailyBrief.posture === "risk_watch"
       ? "border-amber-400/25 bg-amber-500/10"
-      : conclusion.posture === "wait"
+      : dailyBrief.posture === "investigating"
         ? "border-[var(--primary-border)] bg-[var(--primary-bg)]"
         : "border-[var(--border)] bg-[var(--surface)]";
 
@@ -750,19 +775,19 @@ function DecisionConclusionPanel({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <ActionBadge tone={conclusion.tone}>{conclusion.label}</ActionBadge>
+            <ActionBadge tone={decisionTone(dailyBrief.posture)}>{dailyBrief.label}</ActionBadge>
             <span className="text-xs text-[var(--muted)]">最近运行 {formatLatestRun(latestRunAt)}</span>
           </div>
           <h2 className="mt-3 text-xl font-semibold leading-7 text-[var(--text)] sm:text-2xl">
-            {conclusion.title}
+            {dailyBrief.title}
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            {conclusion.description}
+            {dailyBrief.description}
           </p>
         </div>
         <div className="grid min-w-0 gap-2 sm:grid-cols-3 xl:w-[520px]">
-          <ConclusionMetric label="授权" value={queue.decisionCount + queue.confirmCount} />
-          <ConclusionMetric label="后台调查" value={queue.investigateCount} />
+          <ConclusionMetric label="待批准" value={dailyBrief.metrics.approvalCount} />
+          <ConclusionMetric label="后台任务" value={dailyBrief.metrics.backgroundCount} />
           <ConclusionMetric label="下次运行" value={formatSchedule(schedule)} wide />
         </div>
       </div>
@@ -775,6 +800,82 @@ function ConclusionMetric({ label, value, wide }: { label: string; value: string
     <div className={`min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]/75 px-3 py-2 ${wide ? "sm:col-span-1" : ""}`}>
       <div className="text-[11px] font-medium text-[var(--muted)]">{label}</div>
       <div className="mt-1 truncate font-[var(--font-mono)] text-sm leading-5 text-[var(--text)]">{value}</div>
+    </div>
+  );
+}
+
+function DailyDecisionActionBar({
+  dailyBrief,
+  state,
+  onAction,
+  compact,
+}: {
+  dailyBrief: DailyDecisionBrief;
+  state: ReviewActionState;
+  onAction: (action: DailyDecisionAction) => Promise<void>;
+  compact?: boolean;
+}) {
+  if (state.label || state.error) {
+    return (
+      <div className={`rounded-[var(--radius-sm)] border px-3 py-2 text-xs leading-5 ${
+        state.error
+          ? "border-red-400/25 bg-red-500/10 text-red-200"
+          : "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]"
+      }`}>
+        {state.error ?? state.label}
+      </div>
+    );
+  }
+
+  const disabled = state.pending === true;
+  const hasPlan = dailyBrief.approvals.length > 0;
+  return (
+    <div className={`flex flex-wrap items-center gap-2 ${compact ? "" : "rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-3 py-3"}`}>
+      {hasPlan ? (
+        <>
+          <DaaSurfaceActionButton
+            tone="primary"
+            className="min-h-8 px-3 py-1.5 text-xs"
+            disabled={disabled}
+            onClick={() => void onAction("approve_plan")}
+          >
+            {disabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            批准方案
+          </DaaSurfaceActionButton>
+          <DaaSurfaceActionButton
+            tone="slate"
+            className="min-h-8 px-3 py-1.5 text-xs"
+            disabled={disabled}
+            onClick={() => void onAction("hold_current")}
+          >
+            <Clock3 className="h-3.5 w-3.5" />
+            保持当前
+          </DaaSurfaceActionButton>
+          <DaaSurfaceActionButton
+            tone="slate"
+            className="min-h-8 px-3 py-1.5 text-xs"
+            disabled={disabled}
+            onClick={() => void onAction("reject_plan")}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            拒绝方案
+          </DaaSurfaceActionButton>
+          <span className="text-xs leading-5 text-[var(--muted)]">动作会写入决策记录；交易仍走调仓页风控。</span>
+        </>
+      ) : (
+        <>
+          <DaaSurfaceActionButton
+            tone="slate"
+            className="min-h-8 px-3 py-1.5 text-xs"
+            disabled={disabled}
+            onClick={() => void onAction("hold_current")}
+          >
+            {disabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            记录保持当前
+          </DaaSurfaceActionButton>
+          <span className="text-xs leading-5 text-[var(--muted)]">只记录今天的人工结论，不影响后台调查。</span>
+        </>
+      )}
     </div>
   );
 }
@@ -856,6 +957,15 @@ function HumanReviewCard({
           actionState={actionState}
           onReviewAction={onReviewAction}
         />
+      ) : mode === "authorization" && item.href ? (
+        <div className="mt-3 border-t border-[var(--border)] pt-2">
+          <Link
+            href={item.href}
+            className="inline-flex h-7 items-center rounded-[var(--radius-sm)] border border-[var(--primary-border)] bg-[var(--primary-bg)] px-2 text-[11px] font-medium text-[var(--primary)] transition-colors hover:border-[var(--primary)]"
+          >
+            查看调仓方案
+          </Link>
+        </div>
       ) : null}
     </div>
   );
