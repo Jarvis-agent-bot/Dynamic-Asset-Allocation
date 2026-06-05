@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Agent Briefing 视图 — 把 Agent 内部 briefing 翻译成投资者今天要处理的待办。
+ * 今日决策队列 — 把 Agent 内部 briefing 翻译成投资者今天要处理的事项。
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -99,6 +99,7 @@ type RunResultSummary = {
 };
 
 type ActionTone = "red" | "amber" | "blue" | "orange" | "slate";
+type ReviewIntent = "decide" | "confirm" | "investigate" | "monitor";
 
 const COLUMN_LIMIT = 6;
 
@@ -170,6 +171,20 @@ function riskAction(r: ThesisFailureImpact): { label: string; tone: ActionTone }
   if (r.riskLevel === "critical") return { label: "需要决策", tone: "red" };
   if (r.riskLevel === "high") return { label: "检查仓位", tone: "amber" };
   return { label: "持续观察", tone: "slate" };
+}
+
+function intentTone(intent: ReviewIntent): ActionTone {
+  if (intent === "decide") return "red";
+  if (intent === "confirm") return "amber";
+  if (intent === "investigate") return "blue";
+  return "slate";
+}
+
+function intentLabel(intent: ReviewIntent): string {
+  if (intent === "decide") return "今天要决定";
+  if (intent === "confirm") return "需要确认";
+  if (intent === "investigate") return "重新调查";
+  return "后台观察";
 }
 
 function toneClasses(tone: ActionTone): string {
@@ -276,7 +291,7 @@ export default function AgentBriefingView() {
   const hasTheses = theses.length > 0;
   const briefing = status?.latestRun?.briefing ?? null;
 
-  const sortedBuckets = useMemo(() => {
+  const sortedBuckets = useMemo<BriefingBuckets>(() => {
     if (!briefing) {
       return { surprises: [] as Surprise[], gaps: [] as CognitionGap[], conflicts: [] as ThesisConflict[], risks: [] as ThesisFailureImpact[] };
     }
@@ -294,9 +309,11 @@ export default function AgentBriefingView() {
     };
   }, [briefing]);
 
+  const reviewQueue = useMemo(() => buildReviewQueue(sortedBuckets), [sortedBuckets]);
+
   if (loading) {
     return (
-      <DaaSurfacePanel accent="cyan" title="今日待办">
+      <DaaSurfacePanel accent="cyan" title="今日决策队列">
         <div className="flex items-center justify-center py-16 text-[var(--muted)]">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           加载 Agent 状态...
@@ -305,14 +322,11 @@ export default function AgentBriefingView() {
     );
   }
 
-  const actionItemsCount = humanActionCount(sortedBuckets);
-  const decisionsCount = decisionCount(sortedBuckets);
-
   return (
     <DaaSurfacePanel
       accent="cyan"
-      title="今日待办"
-      subtitle="先判断今天要不要动，再看影响哪些持仓，以及下一步该做什么。"
+      title="今日决策队列"
+      subtitle="只展示今天需要人判断的事项；后台关系和内部诊断放到明细里。"
       className="w-full"
       bodyClassName="px-5 py-5 sm:px-6 xl:px-7"
       action={(
@@ -343,16 +357,16 @@ export default function AgentBriefingView() {
     >
       <div className="space-y-6">
         <div className="grid gap-3 border-b border-[var(--border)] pb-5 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryStat label="今天优先看" value={actionItemsCount > 0 ? Math.min(actionItemsCount, 5) : 0} hint={hasTheses ? (actionItemsCount > 5 ? `其余 ${actionItemsCount - 5} 条交给 Agent 排队` : "没有积压事项") : "Agent 未初始化"} />
-          <SummaryStat label="需要你决策" value={decisionsCount} hint={decisionsCount > 0 ? "可能影响仓位或目标权重" : "暂无必须处理"} />
-          <SummaryStat label="太久没看" value={sortedBuckets.gaps.length} hint={sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length > 0 ? `${sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length} 个重要持仓` : "Agent 会自动排队调查"} />
+          <SummaryStat label="今天要不要动" value={reviewQueue.decisionCount} hint={reviewQueue.decisionCount > 0 ? "需要确认仓位或目标权重" : "暂无必须决策"} />
+          <SummaryStat label="需要确认" value={reviewQueue.confirmCount} hint={reviewQueue.confirmCount > 0 ? "有变化，但未必马上交易" : "暂无新变化"} />
+          <SummaryStat label="等 Agent 调查" value={reviewQueue.investigateCount} hint={reviewQueue.importantInvestigationCount > 0 ? `${reviewQueue.importantInvestigationCount} 个重要持仓` : "低优先级后台排队"} />
           <SummaryStat label="最近运行" value={formatLatestRun(status?.latestRun?.createdAt)} hint={formatSchedule(status?.schedule ?? null)} />
         </div>
 
         {!hasTheses ? (
           <DaaSurfaceEmptyState
             title="Agent 尚未初始化"
-            description="先基于持仓生成初始判断，之后这里会只显示今天需要你看的事项。"
+            description="先基于持仓生成初始判断，之后这里会只显示今天需要你判断的事项。"
             action={(
               <DaaSurfaceActionButton tone="primary" onClick={triggerBootstrap} disabled={running}>
                 {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
@@ -361,11 +375,11 @@ export default function AgentBriefingView() {
             )}
           />
         ) : briefing ? (
-          <BriefingKanban buckets={sortedBuckets} />
+          <DecisionQueueView queue={reviewQueue} buckets={sortedBuckets} />
         ) : (
           <DaaSurfaceEmptyState
-            title="还没有今日待办"
-            description="刷新一次后，页面会汇总今天最值得你看的持仓变化和待办。"
+            title="还没有今日决策队列"
+            description="刷新一次后，页面会汇总今天最值得你判断的持仓变化。"
             action={(
               <DaaSurfaceActionButton tone="primary" onClick={triggerRun} disabled={running}>
                 {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -426,122 +440,134 @@ interface BriefingBuckets {
   risks: ThesisFailureImpact[];
 }
 
-function humanActionCount(buckets: BriefingBuckets): number {
-  return buckets.surprises.length + buckets.gaps.length + buckets.risks.length;
-}
-
-function decisionCount(buckets: BriefingBuckets): number {
-  return buckets.surprises.filter((s) => s.severityScore >= 8).length
-    + buckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length
-    + buckets.risks.filter((r) => r.riskLevel === "critical" || r.riskLevel === "high").length;
-}
-
-type PriorityReviewItem = {
+type HumanReviewItem = {
   key: string;
-  label: string;
-  tone: ActionTone;
+  intent: ReviewIntent;
   title: React.ReactNode;
-  description: React.ReactNode;
+  why: React.ReactNode;
+  nextStep: React.ReactNode;
+  evidence: string;
   score: number;
-  meta: string;
   href?: string;
 };
 
-function buildPriorityItems(buckets: BriefingBuckets): PriorityReviewItem[] {
-  const surpriseItems = buckets.surprises.map((surprise, index) => {
-    const action = surpriseAction(surprise);
+type ReviewQueue = {
+  items: HumanReviewItem[];
+  topItems: HumanReviewItem[];
+  decisionCount: number;
+  confirmCount: number;
+  investigateCount: number;
+  monitorCount: number;
+  importantInvestigationCount: number;
+  diagnosticsCount: number;
+};
+
+function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
+  const surpriseItems: HumanReviewItem[] = buckets.surprises.map((surprise, index) => {
+    const intent: ReviewIntent = surprise.severityScore >= 8 ? "decide" : surprise.severityScore >= 5 ? "confirm" : "monitor";
     return {
       key: `surprise-${index}`,
-      label: action.label,
-      tone: action.tone,
+      intent,
       title: surprise.title,
-      description: surprise.suggestedAction || surprise.description,
-      score: surprise.severityScore * 10,
-      meta: `可能影响持仓 · 重要度 ${surprise.severityScore}`,
+      why: surprise.description,
+      nextStep: surprise.suggestedAction || "继续观察，等 Agent 收集更多证据。",
+      evidence: `新变化 · 重要度 ${surprise.severityScore}`,
+      score: surprise.severityScore * 12,
     };
   });
 
-  const gapItems = buckets.gaps.map((gap, index) => {
-    const action = gapAction(gap);
+  const gapItems: HumanReviewItem[] = buckets.gaps.map((gap, index) => {
     const weightPct = gap.portfolioWeight * 100;
+    const isImportant = gap.portfolioWeight >= 0.05;
     return {
       key: `gap-${gap.assetKey}-${index}`,
-      label: action.label,
-      tone: action.tone,
+      intent: isImportant ? "investigate" : "monitor",
       title: formatAssetLabelByKey(gap.assetKey),
-      description: gap.suggestedInvestigation || gap.uncertaintyReason,
+      why: gap.uncertaintyReason,
+      nextStep: gap.suggestedInvestigation || "让 Agent 排队补做一次轻量调查。",
+      evidence: weightPct > 0
+        ? `持仓 ${weightPct.toFixed(1)}% · 上次有效调查 ${gap.daysSinceLastInvestigation} 天前`
+        : `观察名单 · 上次有效调查 ${gap.daysSinceLastInvestigation} 天前`,
       score: weightPct * 4 + Math.min(gap.daysSinceLastInvestigation, 90),
-      meta: weightPct > 0
-        ? `重要持仓太久没看 · 持仓 ${weightPct.toFixed(1)}% · ${gap.daysSinceLastInvestigation} 天未调查`
-        : `观察名单太久没看 · ${gap.daysSinceLastInvestigation} 天未调查`,
     };
   });
 
-  const riskItems = buckets.risks.map((risk) => {
-    const action = riskAction(risk);
+  const riskItems: HumanReviewItem[] = buckets.risks.map((risk) => {
     const riskBoost = risk.riskLevel === "critical" ? 80 : risk.riskLevel === "high" ? 55 : 25;
+    const affectedAssets = risk.affectedAssets.slice(0, 3).map((a) => formatAssetLabelByKey(a.assetKey)).join("、");
     return {
       key: `risk-${risk.threadId}`,
-      label: action.label,
-      tone: action.tone,
+      intent: risk.riskLevel === "critical" || risk.riskLevel === "high" ? "decide" : "confirm",
       title: risk.thesisTitle,
-      description: `如果这个判断错了，会影响 ${risk.affectedAssets.slice(0, 3).map((a) => formatAssetLabelByKey(a.assetKey)).join("、")}`,
+      why: `如果这个判断错了，会影响 ${affectedAssets}`,
+      nextStep: risk.riskLevel === "critical" || risk.riskLevel === "high"
+        ? "确认是否需要调整目标权重、减少集中暴露，或要求 Agent 做深度复核。"
+        : "保持观察；如果相关资产继续扩大偏离，再升级为决策事项。",
+      evidence: `判断风险 · 暴露 ${(risk.totalExposurePct * 100).toFixed(1)}% · 情景损失 ${(risk.estimatedLossPct * 100).toFixed(1)}%`,
       score: risk.totalExposurePct * 100 + risk.estimatedLossPct * 120 + riskBoost,
-      meta: `判断风险 · 暴露 ${(risk.totalExposurePct * 100).toFixed(1)}%`,
       href: `/daa/dashboard/today/thesis/${risk.threadId}`,
     };
   });
 
-  return [...surpriseItems, ...gapItems, ...riskItems]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  const items = [...surpriseItems, ...gapItems, ...riskItems].sort((a, b) => b.score - a.score);
+  return {
+    items,
+    topItems: items.slice(0, 5),
+    decisionCount: items.filter((item) => item.intent === "decide").length,
+    confirmCount: items.filter((item) => item.intent === "confirm").length,
+    investigateCount: items.filter((item) => item.intent === "investigate").length,
+    monitorCount: items.filter((item) => item.intent === "monitor").length,
+    importantInvestigationCount: buckets.gaps.filter((gap) => gap.portfolioWeight >= 0.05).length,
+    diagnosticsCount: buckets.conflicts.length,
+  };
 }
 
-function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
-  const priorityItems = buildPriorityItems(buckets);
+function DecisionQueueView({ queue, buckets }: { queue: ReviewQueue; buckets: BriefingBuckets }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const primaryDetailCount = humanActionCount(buckets);
-  const conflictCount = buckets.conflicts.length;
+  const decisionText = queue.decisionCount > 0
+    ? `${queue.decisionCount} 条需要你判断是否调整仓位`
+    : "今天没有必须动仓位的事项";
+  const detailCount = queue.items.length;
 
   return (
     <div className="space-y-4">
-      {priorityItems.length > 0 ? (
+      {queue.topItems.length > 0 ? (
         <section className="rounded-[var(--radius-lg)] border border-[var(--primary-border)] bg-[var(--primary-bg)]/55 px-4 py-3.5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-[var(--text)]">今天先看这些</div>
-              <div className="mt-0.5 text-xs leading-5 text-[var(--muted)]">按是否影响持仓、是否需要决策、距离上次有效调查的时间排序。</div>
+              <div className="text-sm font-semibold text-[var(--text)]">今天先处理</div>
+              <div className="mt-0.5 text-xs leading-5 text-[var(--muted)]">{decisionText}；其余交给 Agent 排队。</div>
             </div>
             <span className="rounded-full border border-[var(--primary-border)] bg-[var(--surface)] px-2.5 py-1 font-[var(--font-mono)] text-xs text-[var(--primary)]">
-              Top {priorityItems.length}
+              Top {queue.topItems.length}
             </span>
           </div>
-          <div className="grid gap-2 xl:grid-cols-5">
-            {priorityItems.map((item) => (
-              <PriorityReviewCard key={item.key} item={item} />
+          <div className="grid gap-3 xl:grid-cols-5">
+            {queue.topItems.map((item) => (
+              <HumanReviewCard key={item.key} item={item} />
             ))}
           </div>
         </section>
       ) : (
         <DaaSurfaceEmptyState
-          title="今天没有必须处理的事项"
-          description="Agent 没有发现需要你立即确认或决策的持仓变化。"
+          title="今天没有需要人处理的事项"
+          description="Agent 没有发现需要你确认、决策或要求重新调查的重要持仓。"
         />
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
         <ReviewLogicDisclosure />
         <div className="flex flex-wrap items-center gap-3">
-          {conflictCount > 0 ? (
-            <span className="text-xs text-[var(--faint)]">后台还有 {conflictCount} 条判断关系</span>
+          {queue.diagnosticsCount > 0 ? (
+            <span className="text-xs text-[var(--faint)]">后台诊断 {queue.diagnosticsCount} 条判断关系</span>
           ) : null}
-          {primaryDetailCount + conflictCount > 0 ? (
+          {detailCount + queue.diagnosticsCount > 0 ? (
             <button
               type="button"
               onClick={() => setDetailsOpen((value) => !value)}
               className="rounded-full border border-[var(--border)] bg-[var(--elevated)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
             >
-              {detailsOpen ? "收起明细" : primaryDetailCount > 0 ? `查看 ${primaryDetailCount} 条待办明细` : "查看判断关系"}
+              {detailsOpen ? "收起明细" : detailCount > 0 ? `查看 ${detailCount} 条队列明细` : "查看后台诊断"}
             </button>
           ) : null}
         </div>
@@ -552,7 +578,7 @@ function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
   );
 }
 
-function PriorityReviewCard({ item }: { item: PriorityReviewItem }) {
+function HumanReviewCard({ item }: { item: HumanReviewItem }) {
   const titleNode = item.href ? (
     <Link href={item.href} className="line-clamp-2 text-sm font-semibold leading-5 text-[var(--text)] transition-colors hover:text-[var(--primary)]">
       {item.title}
@@ -562,14 +588,23 @@ function PriorityReviewCard({ item }: { item: PriorityReviewItem }) {
   );
 
   return (
-    <div className="min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 shadow-[inset_0_1px_0_var(--surface)]">
+    <div className="flex min-w-0 flex-col rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 shadow-[inset_0_1px_0_var(--surface)]">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <ActionBadge tone={item.tone}>{item.label}</ActionBadge>
+        <ActionBadge tone={intentTone(item.intent)}>{intentLabel(item.intent)}</ActionBadge>
         <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">{Math.round(item.score)}</span>
       </div>
       {titleNode}
-      <div className="mt-1.5 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.description}</div>
-      <div className="mt-2 truncate text-[11px] text-[var(--faint)]">{item.meta}</div>
+      <div className="mt-2 space-y-2 text-xs leading-5">
+        <div>
+          <div className="font-medium text-[var(--text)]">为什么出现</div>
+          <div className="line-clamp-2 text-[var(--muted)]">{item.why}</div>
+        </div>
+        <div>
+          <div className="font-medium text-[var(--text)]">建议下一步</div>
+          <div className="line-clamp-2 text-[var(--muted)]">{item.nextStep}</div>
+        </div>
+      </div>
+      <div className="mt-auto pt-2 text-[11px] text-[var(--faint)]">{item.evidence}</div>
     </div>
   );
 }
@@ -578,13 +613,13 @@ function ReviewLogicDisclosure() {
   return (
     <details className="group max-w-3xl text-xs leading-5 text-[var(--muted)]">
       <summary className="cursor-pointer list-none font-medium text-[var(--text)] transition-colors hover:text-[var(--primary)]">
-        “太久没看”怎么算？
+        “等 Agent 调查”怎么算？
         <span className="ml-2 text-[var(--faint)] group-open:hidden">展开</span>
         <span className="ml-2 hidden text-[var(--faint)] group-open:inline">收起</span>
       </summary>
       <div className="mt-1">
-        它不是你有没有打开页面，而是 Agent 最近有没有对该持仓相关的投资判断完成有效调查。
-        重要持仓超过 7 天没有新证据，或判断仍不明确，就会进入待办；下次调查到有效证据后会自动重置。
+        它不是你有没有打开页面，而是 Agent 最近有没有对该持仓相关判断完成有效调查。
+        重要持仓超过 7 天没有新证据，或判断仍不明确，就会进入队列；下次调查到有效证据后会自动重置。
       </div>
     </details>
   );
@@ -595,8 +630,8 @@ function BriefingDetailColumns({ buckets }: { buckets: BriefingBuckets }) {
     <div className="grid gap-4 xl:grid-cols-[1.08fr_1fr_1fr]">
       <KanbanColumn
         icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
-        title="可能影响持仓"
-        subtitle="新闻、市场数据或价格变化让原判断需要确认"
+        title="需要确认的新变化"
+        subtitle="新闻、市场数据或价格变化让原判断需要人确认"
         count={buckets.surprises.length}
         emptyText="今天没有明显影响持仓的新变化"
       >
@@ -607,8 +642,8 @@ function BriefingDetailColumns({ buckets }: { buckets: BriefingBuckets }) {
 
       <KanbanColumn
         icon={<Search className="h-4 w-4 text-[var(--primary)]" />}
-        title="重要持仓太久没看"
-        subtitle="Agent 最近没有为这些持仓留下有效新证据"
+        title="等待 Agent 调查"
+        subtitle="这些持仓最近没有留下有效新证据"
         count={buckets.gaps.length}
         emptyText="重要持仓近期都调查过"
       >
@@ -619,10 +654,10 @@ function BriefingDetailColumns({ buckets }: { buckets: BriefingBuckets }) {
 
       <KanbanColumn
         icon={<Network className="h-4 w-4 text-orange-300" />}
-        title="判断需要对齐"
-        subtitle="同一资产判断打架，或某个判断错了会影响较大"
+        title="后台诊断"
+        subtitle="判断关系和高暴露风险，不直接等同于人的待办"
         count={buckets.conflicts.length + buckets.risks.length}
-        emptyText="当前没有需要你对齐的判断"
+        emptyText="当前没有后台诊断事项"
       >
         {buckets.conflicts.slice(0, 2).map((c, i) => (
           <ConflictCard key={`c-${i}`} conflict={c} />
