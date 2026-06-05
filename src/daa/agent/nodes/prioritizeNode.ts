@@ -100,16 +100,23 @@ function buildRotationTargets(state: CognitiveState, stalenessDays: number, focu
       const maxHoldingWeight = Math.max(0, ...t.assetKeys.map(k => holdingWeights.get(k) ?? 0));
       const inWatchlist = t.assetKeys.some(k => watchlistKeys.has(k));
       const reviewDue = t.reviewAt ? Date.parse(t.reviewAt) <= now : false;
+      const snoozedUntilFuture = t.reviewStatus === "snoozed" && t.reviewAt ? Date.parse(t.reviewAt) > now : false;
       const stale = days >= stalenessDays;
       const focusEvent = t.assetKeys.some(k => assetKeyMatchesFocus(k, focusSymbols));
+      const humanRequestedInvestigation = t.reviewStatus === "investigating";
       const staleDirectional = (t.conviction === "medium" || t.conviction === "high") && stale;
       const uncertainHolding = t.conviction === "uncertain" && maxHoldingWeight > 0;
       const staleHighWeightHolding = maxHoldingWeight > 0.05 && stale;
       const watchlistNeedsReview = inWatchlist && (t.conviction === "uncertain" || stale);
 
+      if (snoozedUntilFuture) return null;
+
       let priority = 0;
       let reason = "";
-      if (focusEvent) {
+      if (humanRequestedInvestigation) {
+        priority = 1250 + maxHoldingWeight * 100 + days;
+        reason = `人手动要求 Agent 调查：该论点已被放入优先队列，距离上次有效调查 ${days} 天`;
+      } else if (focusEvent) {
         priority = 1100 + days;
         reason = `事件触发复核：相关资产出现在本轮新闻/外部事件中，距离上次有效调查 ${days} 天`;
       } else if (uncertainHolding) {

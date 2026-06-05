@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Loader2, Network, RefreshCw, RotateCcw, Search, Zap } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, Clock3, Loader2, Network, RefreshCw, RotateCcw, Search, Zap } from "lucide-react";
 
 import {
   DaaSurfaceActionButton,
@@ -110,6 +110,8 @@ type RunResultSummary = {
 
 type ActionTone = "red" | "amber" | "blue" | "orange" | "slate";
 type ReviewIntent = "decide" | "confirm" | "investigate" | "monitor";
+type ThesisQueueReviewAction = "decided" | "snoozed" | "request_investigation";
+type ReviewActionState = { pending?: boolean; label?: string; error?: string };
 
 const COLUMN_LIMIT = 6;
 
@@ -251,6 +253,7 @@ export default function AgentBriefingView() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<RunResultSummary | null>(null);
+  const [reviewActions, setReviewActions] = useState<Record<string, ReviewActionState>>({});
   const seenKeyRef = useRef("");
 
   const loadStatus = useCallback(async () => {
@@ -321,6 +324,39 @@ export default function AgentBriefingView() {
   }, [briefing]);
 
   const reviewQueue = useMemo(() => buildReviewQueue(sortedBuckets), [sortedBuckets]);
+
+  const markReviewAction = useCallback(async (item: HumanReviewItem, action: ThesisQueueReviewAction) => {
+    const threadIds = Array.from(new Set(item.sourceThreadIds.filter(Boolean)));
+    if (threadIds.length === 0) return;
+
+    setReviewActions((prev) => ({
+      ...prev,
+      [item.key]: { pending: true },
+    }));
+
+    try {
+      const res = await fetch("/api/daa/agent/theses/review-action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ threadIds, action }),
+      });
+      if (!res.ok) throw new Error(`review action failed: ${res.status}`);
+      const label = action === "decided" ? "已记录判断"
+        : action === "snoozed" ? "3 天后再看"
+        : "已排入调查";
+      setReviewActions((prev) => ({
+        ...prev,
+        [item.key]: { label },
+      }));
+      await loadStatus();
+    } catch (error) {
+      logSwallowed("today.agentBriefing.reviewAction", error);
+      setReviewActions((prev) => ({
+        ...prev,
+        [item.key]: { error: "记录失败" },
+      }));
+    }
+  }, [loadStatus]);
 
   useEffect(() => {
     const threadIds = Array.from(new Set(
@@ -401,7 +437,12 @@ export default function AgentBriefingView() {
             )}
           />
         ) : briefing ? (
-          <DecisionQueueView queue={reviewQueue} buckets={sortedBuckets} />
+          <DecisionQueueView
+            queue={reviewQueue}
+            buckets={sortedBuckets}
+            actionStates={reviewActions}
+            onReviewAction={markReviewAction}
+          />
         ) : (
           <DaaSurfaceEmptyState
             title="还没有今日决策队列"
@@ -552,7 +593,17 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
   };
 }
 
-function DecisionQueueView({ queue, buckets }: { queue: ReviewQueue; buckets: BriefingBuckets }) {
+function DecisionQueueView({
+  queue,
+  buckets,
+  actionStates,
+  onReviewAction,
+}: {
+  queue: ReviewQueue;
+  buckets: BriefingBuckets;
+  actionStates: Record<string, ReviewActionState>;
+  onReviewAction: (item: HumanReviewItem, action: ThesisQueueReviewAction) => Promise<void>;
+}) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const decisionText = queue.decisionCount > 0
     ? `${queue.decisionCount} 条需要你判断是否调整仓位`
@@ -574,7 +625,12 @@ function DecisionQueueView({ queue, buckets }: { queue: ReviewQueue; buckets: Br
           </div>
           <div className="grid gap-3 xl:grid-cols-5">
             {queue.topItems.map((item) => (
-              <HumanReviewCard key={item.key} item={item} />
+              <HumanReviewCard
+                key={item.key}
+                item={item}
+                actionState={actionStates[item.key]}
+                onReviewAction={onReviewAction}
+              />
             ))}
           </div>
         </section>
@@ -608,7 +664,15 @@ function DecisionQueueView({ queue, buckets }: { queue: ReviewQueue; buckets: Br
   );
 }
 
-function HumanReviewCard({ item }: { item: HumanReviewItem }) {
+function HumanReviewCard({
+  item,
+  actionState,
+  onReviewAction,
+}: {
+  item: HumanReviewItem;
+  actionState?: ReviewActionState;
+  onReviewAction: (item: HumanReviewItem, action: ThesisQueueReviewAction) => Promise<void>;
+}) {
   const titleNode = item.href ? (
     <Link href={item.href} className="line-clamp-2 text-sm font-semibold leading-5 text-[var(--text)] transition-colors hover:text-[var(--primary)]">
       {item.title}
@@ -635,7 +699,90 @@ function HumanReviewCard({ item }: { item: HumanReviewItem }) {
         </div>
       </div>
       <div className="mt-auto pt-2 text-[11px] text-[var(--faint)]">{item.evidence}</div>
+      {item.sourceThreadIds.length > 0 ? (
+        <ReviewActionButtons
+          item={item}
+          actionState={actionState}
+          onReviewAction={onReviewAction}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function ReviewActionButtons({
+  item,
+  actionState,
+  onReviewAction,
+}: {
+  item: HumanReviewItem;
+  actionState?: ReviewActionState;
+  onReviewAction: (item: HumanReviewItem, action: ThesisQueueReviewAction) => Promise<void>;
+}) {
+  if (actionState?.label || actionState?.error) {
+    return (
+      <div className={`mt-3 rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[11px] leading-4 ${
+        actionState.error
+          ? "border-red-400/25 bg-red-500/10 text-red-200"
+          : "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]"
+      }`}>
+        {actionState.error ?? actionState.label}
+      </div>
+    );
+  }
+
+  const disabled = actionState?.pending === true;
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--border)] pt-2">
+      <QueueActionButton
+        title="我已经形成判断"
+        disabled={disabled}
+        onClick={() => onReviewAction(item, "decided")}
+      >
+        {disabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+        已判断
+      </QueueActionButton>
+      <QueueActionButton
+        title="先从今天队列移开，3 天后再看"
+        disabled={disabled}
+        onClick={() => onReviewAction(item, "snoozed")}
+      >
+        <Clock3 className="h-3.5 w-3.5" />
+        稍后
+      </QueueActionButton>
+      <QueueActionButton
+        title="下次 Agent 运行时优先调查"
+        disabled={disabled}
+        onClick={() => onReviewAction(item, "request_investigation")}
+      >
+        <Bot className="h-3.5 w-3.5" />
+        Agent 查
+      </QueueActionButton>
+    </div>
+  );
+}
+
+function QueueActionButton({
+  children,
+  disabled,
+  title,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-7 min-w-0 items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--elevated)] px-2 text-[11px] font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:cursor-wait disabled:opacity-60"
+    >
+      {children}
+    </button>
   );
 }
 

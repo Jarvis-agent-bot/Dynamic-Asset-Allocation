@@ -232,6 +232,67 @@ export async function markThesesSeen(threadIds: string[]): Promise<number> {
   });
 }
 
+export type ThesisQueueReviewAction = "decided" | "snoozed" | "request_investigation";
+
+/**
+ * 记录人在 Today 决策队列里的处理动作。
+ *
+ * - decided：人已经形成判断，写 last_decision_at，队列状态回到 resolved。
+ * - snoozed：人选择稍后再看，短期内不再作为轮询调查目标。
+ * - request_investigation：人点名让 Agent 查，下一轮 prioritize 会优先消费。
+ */
+export async function markThesesQueueAction(
+  threadIds: string[],
+  action: ThesisQueueReviewAction,
+): Promise<number> {
+  const ownerAccountId = getDaaAccountScopeId();
+  const ids = Array.from(new Set(threadIds.map((id) => String(id || "").trim()).filter(Boolean))).slice(0, 20);
+  if (ids.length === 0) return 0;
+
+  return withDaaPgClient(async ({ query }) => {
+    if (action === "decided") {
+      const res = await query(
+        `UPDATE daa_research_threads
+         SET last_seen_at = now(),
+             last_decision_at = now(),
+             review_status = 'resolved'
+         WHERE owner_account_id = $1
+           AND id = ANY($2::text[])
+         RETURNING id`,
+        [ownerAccountId, ids],
+      );
+      return res.rows.length;
+    }
+
+    if (action === "snoozed") {
+      const res = await query(
+        `UPDATE daa_research_threads
+         SET last_seen_at = now(),
+             review_at = now() + interval '3 days',
+             review_status = 'snoozed'
+         WHERE owner_account_id = $1
+           AND id = ANY($2::text[])
+         RETURNING id`,
+        [ownerAccountId, ids],
+      );
+      return res.rows.length;
+    }
+
+    const res = await query(
+      `UPDATE daa_research_threads
+       SET last_seen_at = now(),
+           review_at = now(),
+           review_status = 'investigating',
+           priority_score = GREATEST(priority_score, 0.95)
+       WHERE owner_account_id = $1
+         AND id = ANY($2::text[])
+       RETURNING id`,
+      [ownerAccountId, ids],
+    );
+    return res.rows.length;
+  });
+}
+
 export async function addEvidence(data: {
   threadId: string;
   evidenceType: EvidenceType;

@@ -166,6 +166,66 @@ describe("prioritizeNode starvation prevention", () => {
     expect(result.investigationQueue).toHaveLength(3);
   });
 
+  it("优先调查人手动点名的 thesis", async () => {
+    const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
+    vi.mocked(callDeepSeekJson).mockResolvedValue({
+      data: { targets: [], newThreads: [] },
+      tokensUsed: 100,
+    });
+
+    const state = makeState({
+      activeTheses: [
+        makeThesis({
+          id: "manual-1",
+          conviction: "medium",
+          reviewStatus: "investigating",
+          updatedAt: new Date().toISOString(),
+          lastInvestigatedAt: new Date().toISOString(),
+        }),
+        makeThesis({
+          id: "stale-1",
+          conviction: "medium",
+          updatedAt: new Date(Date.now() - 12 * 86400000).toISOString(),
+        }),
+      ],
+    });
+
+    const { prioritizeNode } = await import("@/src/daa/agent/nodes/prioritizeNode");
+    const result = await prioritizeNode(state);
+
+    const currentTarget = result.currentTarget as InvestigationTarget | null;
+    const queue = (result.investigationQueue ?? []) as InvestigationTarget[];
+    expect(currentTarget?.threadId).toBe("manual-1");
+    expect(queue.map(t => t.threadId)).toContain("manual-1");
+  });
+
+  it("跳过尚未到期的 snoozed thesis", async () => {
+    const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
+    vi.mocked(callDeepSeekJson).mockResolvedValue({
+      data: { targets: [], newThreads: [] },
+      tokensUsed: 100,
+    });
+
+    const state = makeState({
+      activeTheses: [
+        makeThesis({
+          id: "snoozed-1",
+          conviction: "medium",
+          reviewStatus: "snoozed",
+          reviewAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+          updatedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+        }),
+      ],
+    });
+
+    const { prioritizeNode } = await import("@/src/daa/agent/nodes/prioritizeNode");
+    const result = await prioritizeNode(state);
+
+    const queue = (result.investigationQueue ?? []) as InvestigationTarget[];
+    expect(queue.map(t => t.threadId)).not.toContain("snoozed-1");
+    expect(result.currentTarget).toBeNull();
+  });
+
   it("有多个 stale medium+ 时选最旧的", async () => {
     const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
     vi.mocked(callDeepSeekJson).mockResolvedValue({
