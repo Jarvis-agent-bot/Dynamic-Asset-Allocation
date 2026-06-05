@@ -123,7 +123,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
 ## 任务
 1. 从活跃论点中选出最需要立即调查的 1-${maxTargets} 个。优先级依据：
    - 事件触发资产相关论点优先
-   - 相关资产权重高但 thesis 距上次复核较久
+   - 相关资产权重高但 thesis 距上次有效调查较久
    - 观察列表资产没有稳定方向，且可能进入目标权重计划
    - 新闻与现有 thesis 矛盾
    - 新闻智能层提示 holding/target 为 risk 或 review
@@ -157,7 +157,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
 \`\`\`json
 {
   "targets": [
-    {"threadId": "a1b2c3d4-1111-2222-3333-444455556666", "reason": "NVDA 权重15%，论点上次复核在20天前，且近期有重大新闻", "dataNeeded": ["technical", "news"]},
+    {"threadId": "a1b2c3d4-1111-2222-3333-444455556666", "reason": "NVDA 权重15%，论点上次有效调查在20天前，且近期有重大新闻", "dataNeeded": ["technical", "news"]},
     {"threadId": null, "reason": "VIX 突破25但无对应宏观避险论点", "dataNeeded": ["technical"]}
   ],
   "newThreads": [
@@ -323,10 +323,11 @@ export function buildSurfacePrompt(ctx: {
   const thesisText = ctx.theses
     .slice(0, 15)
     .map(t => {
-      const daysSinceUpdate = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+      const lastInvestigatedAt = t.lastInvestigatedAt || t.updatedAt;
+      const daysSinceInvestigation = Math.floor((Date.now() - new Date(lastInvestigatedAt).getTime()) / 86400000);
       const relatedHolding = ctx.portfolio.holdings.find(h => t.assetKeys.includes(h.assetKey));
       const weight = relatedHolding ? (relatedHolding.weightPct * 100).toFixed(1) + "%" : "无持仓";
-      return `- "${sanitizeForPrompt(t.title, 50)}" conviction=${t.conviction} 权重=${weight} ${daysSinceUpdate}天前更新`;
+      return `- "${sanitizeForPrompt(t.title, 50)}" conviction=${t.conviction} 权重=${weight} ${daysSinceInvestigation}天前有效调查`;
     }).join("\n");
 
   // P0-2: 工具调用结果摘要 — 让 LLM 基于新鲜数据生成差异化内容
@@ -464,7 +465,7 @@ export function buildStrategyAdvisorPrompt(ctx: {
   const gapLines = ctx.cognitionGaps.length > 0
     ? ctx.cognitionGaps.map(g => {
       const scope = g.portfolioWeight > 0 ? `权重${(g.portfolioWeight * 100).toFixed(1)}%` : "观察列表";
-      return `${g.assetKey} ${scope}：${sanitizeForPrompt(g.uncertaintyReason || `上次复核 ${g.daysSinceLastInvestigation} 天前`, 90)}${g.suggestedInvestigation ? `；${sanitizeForPrompt(g.suggestedInvestigation, 90)}` : ""}`;
+      return `${g.assetKey} ${scope}：${sanitizeForPrompt(g.uncertaintyReason || `上次有效调查 ${g.daysSinceLastInvestigation} 天前`, 90)}${g.suggestedInvestigation ? `；${sanitizeForPrompt(g.suggestedInvestigation, 90)}` : ""}`;
     }).join("\n")
     : "无";
 

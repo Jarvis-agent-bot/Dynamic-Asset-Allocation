@@ -95,8 +95,8 @@ function buildRotationTargets(state: CognitiveState, stalenessDays: number, focu
 
   return state.activeTheses
     .map((t, order): QueuedInvestigationTarget | null => {
-      const updatedAt = Date.parse(t.updatedAt);
-      const days = Number.isFinite(updatedAt) ? Math.floor((now - updatedAt) / 86400000) : stalenessDays + 1;
+      const investigatedAt = Date.parse(t.lastInvestigatedAt || t.updatedAt);
+      const days = Number.isFinite(investigatedAt) ? Math.floor((now - investigatedAt) / 86400000) : stalenessDays + 1;
       const maxHoldingWeight = Math.max(0, ...t.assetKeys.map(k => holdingWeights.get(k) ?? 0));
       const inWatchlist = t.assetKeys.some(k => watchlistKeys.has(k));
       const reviewDue = t.reviewAt ? Date.parse(t.reviewAt) <= now : false;

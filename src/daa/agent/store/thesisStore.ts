@@ -11,6 +11,7 @@ import type {
   EvidenceType,
   EvidenceSource,
   ThesisConviction,
+  ThesisReviewStatus,
   ThesisStatus,
 } from "@/src/daa/agent/cognitiveTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -29,6 +30,11 @@ function mapThreadRow(r: Record<string, unknown>): ResearchThread {
     assetKeys: Array.isArray(r.asset_keys) ? (r.asset_keys as string[]) : [],
     tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],
     priorityScore: Number(r.priority_score ?? 0.5),
+    lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
+    lastInvestigatedAt: r.last_investigated_at ? String(r.last_investigated_at) : null,
+    lastEvidenceAt: r.last_evidence_at ? String(r.last_evidence_at) : null,
+    lastDecisionAt: r.last_decision_at ? String(r.last_decision_at) : null,
+    reviewStatus: String(r.review_status ?? "pending") as ThesisReviewStatus,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -64,8 +70,8 @@ export async function createResearchThread(data: {
   const created = await withDaaPgClient(async ({ query }) => {
     const id = randomUUID();
     const res = await query(
-      `INSERT INTO daa_research_threads (owner_account_id, id, title, thesis_text, conviction, invalidation_conditions, review_at, asset_keys, tags)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO daa_research_threads (owner_account_id, id, title, thesis_text, conviction, invalidation_conditions, review_at, asset_keys, tags, review_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
        RETURNING *`,
       [
         ownerAccountId,
@@ -198,7 +204,31 @@ export async function updateThesis(
 export async function touchThesis(id: string): Promise<void> {
   const ownerAccountId = getDaaAccountScopeId();
   await withDaaPgClient(async ({ query }) => {
-    await query(`UPDATE daa_research_threads SET updated_at = now() WHERE owner_account_id = $1 AND id = $2`, [ownerAccountId, id]);
+    await query(
+      `UPDATE daa_research_threads
+       SET updated_at = now(),
+           last_investigated_at = now(),
+           review_status = 'resolved'
+       WHERE owner_account_id = $1 AND id = $2`,
+      [ownerAccountId, id],
+    );
+  });
+}
+
+export async function markThesesSeen(threadIds: string[]): Promise<number> {
+  const ownerAccountId = getDaaAccountScopeId();
+  const ids = Array.from(new Set(threadIds.map((id) => String(id || "").trim()).filter(Boolean))).slice(0, 50);
+  if (ids.length === 0) return 0;
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query(
+      `UPDATE daa_research_threads
+       SET last_seen_at = now()
+       WHERE owner_account_id = $1
+         AND id = ANY($2::text[])
+       RETURNING id`,
+      [ownerAccountId, ids],
+    );
+    return res.rows.length;
   });
 }
 
@@ -218,6 +248,13 @@ export async function addEvidence(data: {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [ownerAccountId, id, data.threadId, data.evidenceType, data.source, data.content, data.dataSnapshot ? JSON.stringify(data.dataSnapshot) : null, data.confidence ?? 0.5],
+    );
+    await query(
+      `UPDATE daa_research_threads
+       SET last_evidence_at = now(),
+           review_status = CASE WHEN review_status = 'snoozed' THEN review_status ELSE 'resolved' END
+       WHERE owner_account_id = $1 AND id = $2`,
+      [ownerAccountId, data.threadId],
     );
     return mapEvidenceRow(res.rows[0]);
   });

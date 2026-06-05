@@ -30,7 +30,7 @@ import { recordAgentDecisionAudits } from "@/src/daa/agent/store/agentDecisionAu
  *
  * - 触发条件（二选一）：
    *   (1) thesis conviction=uncertain 且关联持仓或观察列表（必须尽快给出明确判断）
-   *   (2) 持仓权重 > 5% 或观察列表 thesis 距上次复核超过 7 天
+   *   (2) 持仓权重 > 5% 或观察列表 thesis 距上次有效调查超过 7 天
  * - 同 assetKey 多 thesis 去重，取最陈旧的一条
  * - triggerReason / focusHint 字段直接用 thesis 数据拼接，不再让 LLM 改写
  */
@@ -42,7 +42,8 @@ function computeDueForReview(
   const candidates: CognitionGap[] = [];
   const watchlistKeys = new Set((watchlist?.candidates ?? []).map((w) => w.assetKey));
   for (const t of theses) {
-    const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+    const lastInvestigatedAt = t.lastInvestigatedAt || t.updatedAt;
+    const days = Math.floor((Date.now() - new Date(lastInvestigatedAt).getTime()) / 86400000);
     for (const assetKey of t.assetKeys) {
       const holding = portfolio.holdings.find(h => h.assetKey === assetKey);
       const weight = holding?.weightPct ?? 0;
@@ -58,20 +59,24 @@ function computeDueForReview(
               ? `论点刚进入观察态，等待下一轮证据确认（权重 ${(weight * 100).toFixed(1)}%）`
               : "观察列表论点刚进入观察态，等待下一轮证据确认")
             : (weight > 0
-              ? `论点仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，上次复核 ${days} 天前）`
-              : `观察列表论点仍处观察态，尚未形成高置信度方向（上次复核 ${days} 天前）`)
+              ? `论点仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，上次有效调查 ${days} 天前）`
+              : `观察列表论点仍处观察态，尚未形成高置信度方向（上次有效调查 ${days} 天前）`)
         )
         : (weight > 0
-          ? `高权重持仓需要复核：权重 ${(weight * 100).toFixed(1)}%，上次复核 ${days} 天前`
-          : `观察列表论点需要复核：上次复核 ${days} 天前`);
+          ? `高权重持仓需要调查：权重 ${(weight * 100).toFixed(1)}%，上次有效调查 ${days} 天前`
+          : `观察列表论点需要调查：上次有效调查 ${days} 天前`);
       const focusHint = t.invalidationConditions
         ? `核对失效条件：${t.invalidationConditions.slice(0, 80)}`
         : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视论点：${t.title}`);
 
       candidates.push({
         assetKey,
+        sourceThesisId: t.id,
+        sourceThesisTitle: t.title,
         portfolioWeight: weight,
         daysSinceLastInvestigation: days,
+        lastInvestigatedAt,
+        reviewStatus: t.reviewStatus,
         uncertaintyReason: triggerReason,
         suggestedInvestigation: focusHint,
       });

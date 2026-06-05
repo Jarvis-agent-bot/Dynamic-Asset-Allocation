@@ -4,7 +4,7 @@
  * 今日决策队列 — 把 Agent 内部 briefing 翻译成投资者今天要处理的事项。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Loader2, Network, RefreshCw, RotateCcw, Search, Zap } from "lucide-react";
 
@@ -19,14 +19,19 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 interface Surprise {
   title: string;
   description: string;
+  relatedThesisId?: string | null;
   severityScore: number;
   suggestedAction: string;
 }
 
 interface CognitionGap {
   assetKey: string;
+  sourceThesisId?: string | null;
+  sourceThesisTitle?: string | null;
   portfolioWeight: number;
   daysSinceLastInvestigation: number;
+  lastInvestigatedAt?: string | null;
+  reviewStatus?: string;
   uncertaintyReason: string;
   suggestedInvestigation: string;
 }
@@ -44,6 +49,11 @@ interface Thesis {
   thesisText: string;
   conviction: string;
   assetKeys: string[];
+  lastSeenAt?: string | null;
+  lastInvestigatedAt?: string | null;
+  lastEvidenceAt?: string | null;
+  lastDecisionAt?: string | null;
+  reviewStatus?: string;
   updatedAt: string;
 }
 
@@ -241,6 +251,7 @@ export default function AgentBriefingView() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<RunResultSummary | null>(null);
+  const seenKeyRef = useRef("");
 
   const loadStatus = useCallback(async () => {
     try {
@@ -310,6 +321,21 @@ export default function AgentBriefingView() {
   }, [briefing]);
 
   const reviewQueue = useMemo(() => buildReviewQueue(sortedBuckets), [sortedBuckets]);
+
+  useEffect(() => {
+    const threadIds = Array.from(new Set(
+      reviewQueue.topItems.flatMap((item) => item.sourceThreadIds).filter(Boolean),
+    ));
+    if (threadIds.length === 0) return;
+    const key = threadIds.slice().sort().join("|");
+    if (seenKeyRef.current === key) return;
+    seenKeyRef.current = key;
+    void fetch("/api/daa/agent/theses/seen", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ threadIds }),
+    }).catch((error) => logSwallowed("today.agentBriefing.markSeen", error));
+  }, [reviewQueue.topItems]);
 
   if (loading) {
     return (
@@ -443,6 +469,7 @@ interface BriefingBuckets {
 type HumanReviewItem = {
   key: string;
   intent: ReviewIntent;
+  sourceThreadIds: string[];
   title: React.ReactNode;
   why: React.ReactNode;
   nextStep: React.ReactNode;
@@ -468,6 +495,7 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
     return {
       key: `surprise-${index}`,
       intent,
+      sourceThreadIds: surprise.relatedThesisId ? [surprise.relatedThesisId] : [],
       title: surprise.title,
       why: surprise.description,
       nextStep: surprise.suggestedAction || "继续观察，等 Agent 收集更多证据。",
@@ -482,6 +510,7 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
     return {
       key: `gap-${gap.assetKey}-${index}`,
       intent: isImportant ? "investigate" : "monitor",
+      sourceThreadIds: gap.sourceThesisId ? [gap.sourceThesisId] : [],
       title: formatAssetLabelByKey(gap.assetKey),
       why: gap.uncertaintyReason,
       nextStep: gap.suggestedInvestigation || "让 Agent 排队补做一次轻量调查。",
@@ -498,6 +527,7 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
     return {
       key: `risk-${risk.threadId}`,
       intent: risk.riskLevel === "critical" || risk.riskLevel === "high" ? "decide" : "confirm",
+      sourceThreadIds: [risk.threadId],
       title: risk.thesisTitle,
       why: `如果这个判断错了，会影响 ${affectedAssets}`,
       nextStep: risk.riskLevel === "critical" || risk.riskLevel === "high"

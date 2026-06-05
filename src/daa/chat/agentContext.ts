@@ -226,11 +226,11 @@ export function buildAssistantSystemDigest(input: {
   ].join("\n");
 }
 
-function formatThreadAge(updatedAt: string): string {
-  const time = Date.parse(updatedAt);
+function formatThreadAge(thread: ResearchThread): string {
+  const time = Date.parse(thread.lastInvestigatedAt || thread.updatedAt);
   if (!Number.isFinite(time)) return "时间未知";
   const days = Math.max(0, Math.floor((Date.now() - time) / 86400000));
-  return `上次复核 ${days} 天前`;
+  return `上次有效调查 ${days} 天前`;
 }
 
 export function buildAssistantBrainContextDigest(input: {
@@ -242,7 +242,7 @@ export function buildAssistantBrainContextDigest(input: {
     .map((thread) => {
       const assets = thread.assetKeys.slice(0, 5).join(",") || "未绑定资产";
       const text = normalizeText(thread.thesisText).slice(0, 140);
-      return `- ${thread.title} | ${thread.conviction} | ${assets} | ${formatThreadAge(thread.updatedAt)}${text ? ` | ${text}` : ""}`;
+      return `- ${thread.title} | ${thread.conviction} | ${assets} | ${formatThreadAge(thread)}${text ? ` | ${text}` : ""}`;
     });
 
   const latestRun = input.latestRun;

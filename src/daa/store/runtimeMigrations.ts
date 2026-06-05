@@ -1443,6 +1443,40 @@ const MIGRATIONS_: Migration[] = [
       await addCheckConstraintIfMissing(query, "daa_target_weight_audit", "daa_target_weight_audit_prev_weight_check", "previous_target_weight_hint IS NULL OR previous_target_weight_hint >= 0");
     },
   },
+  {
+    id: "20260605_thesis_review_metadata",
+    async apply(query) {
+      if (!(await tableExists(query, "daa_research_threads"))) return;
+      await query("ALTER TABLE daa_research_threads ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ");
+      await query("ALTER TABLE daa_research_threads ADD COLUMN IF NOT EXISTS last_investigated_at TIMESTAMPTZ");
+      await query("ALTER TABLE daa_research_threads ADD COLUMN IF NOT EXISTS last_evidence_at TIMESTAMPTZ");
+      await query("ALTER TABLE daa_research_threads ADD COLUMN IF NOT EXISTS last_decision_at TIMESTAMPTZ");
+      await query("ALTER TABLE daa_research_threads ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'resolved'");
+      await addCheckConstraintIfMissing(
+        query,
+        "daa_research_threads",
+        "daa_research_threads_review_status_check",
+        "review_status IN ('pending','investigating','waiting_human','resolved','snoozed')",
+      );
+
+      await query("UPDATE daa_research_threads SET last_investigated_at = COALESCE(last_investigated_at, updated_at)");
+      if (await tableExists(query, "daa_evidence_items")) {
+        await query(`
+          UPDATE daa_research_threads rt
+          SET last_evidence_at = COALESCE(rt.last_evidence_at, ev.last_evidence_at)
+          FROM (
+            SELECT owner_account_id, thread_id, MAX(created_at) AS last_evidence_at
+            FROM daa_evidence_items
+            GROUP BY owner_account_id, thread_id
+          ) ev
+          WHERE rt.owner_account_id = ev.owner_account_id
+            AND rt.id = ev.thread_id
+        `);
+      }
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_research_threads_owner_review_status ON daa_research_threads(owner_account_id, review_status, last_investigated_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_research_threads_owner_last_seen ON daa_research_threads(owner_account_id, last_seen_at DESC)");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

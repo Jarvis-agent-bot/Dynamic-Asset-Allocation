@@ -8,6 +8,7 @@
 
 export type ThesisStatus = "active" | "paused" | "archived" | "invalidated";
 export type ThesisConviction = "high" | "medium" | "low" | "uncertain";
+export type ThesisReviewStatus = "pending" | "investigating" | "waiting_human" | "resolved" | "snoozed";
 
 export interface ResearchThread {
   id: string;
@@ -20,6 +21,15 @@ export interface ResearchThread {
   assetKeys: string[];
   tags: string[];
   priorityScore: number;
+  /** 人最近一次看到该判断的时间。它不代表 Agent 做过调查。 */
+  lastSeenAt?: string | null;
+  /** Agent 最近一次完成有效调查的时间。Today 页“太久没看”优先看这个字段。 */
+  lastInvestigatedAt?: string | null;
+  /** 最近一次有证据写入的时间。 */
+  lastEvidenceAt?: string | null;
+  /** 最近一次由人或执行层形成决策的时间。 */
+  lastDecisionAt?: string | null;
+  reviewStatus?: ThesisReviewStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -123,8 +133,12 @@ export interface Surprise {
 
 export interface CognitionGap {
   assetKey: string;
+  sourceThesisId?: string | null;
+  sourceThesisTitle?: string | null;
   portfolioWeight: number;
   daysSinceLastInvestigation: number;
+  lastInvestigatedAt?: string | null;
+  reviewStatus?: ThesisReviewStatus;
   uncertaintyReason: string;
   suggestedInvestigation: string;
 }

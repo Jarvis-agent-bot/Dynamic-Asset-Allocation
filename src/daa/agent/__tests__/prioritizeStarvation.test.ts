@@ -220,6 +220,35 @@ describe("prioritizeNode starvation prevention", () => {
     expect(queueIds).toEqual(["u1"]);
   });
 
+  it("优先使用 lastInvestigatedAt 判断是否久未调查", async () => {
+    const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
+    vi.mocked(callDeepSeekJson).mockResolvedValue({
+      data: {
+        targets: [{ threadId: "u1", reason: "", dataNeeded: [] }],
+        newThreads: [],
+      },
+      tokensUsed: 100,
+    });
+
+    const state = makeState({
+      activeTheses: [
+        makeThesis({ id: "u1", conviction: "uncertain", updatedAt: new Date().toISOString() }),
+        makeThesis({
+          id: "m_seen_recently",
+          conviction: "medium",
+          updatedAt: new Date().toISOString(),
+          lastInvestigatedAt: new Date(Date.now() - 12 * 86400000).toISOString(),
+        }),
+      ],
+    });
+
+    const { prioritizeNode } = await import("@/src/daa/agent/nodes/prioritizeNode");
+    const result = await prioritizeNode(state);
+
+    const queue = (result.investigationQueue ?? []) as Array<{ threadId: string | null }>;
+    expect(queue.map(t => t.threadId)).toContain("m_seen_recently");
+  });
+
   it("LLM 已选 stale medium 时不重复注入", async () => {
     const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
     vi.mocked(callDeepSeekJson).mockResolvedValue({

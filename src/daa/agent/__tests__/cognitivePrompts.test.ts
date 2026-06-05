@@ -340,7 +340,7 @@ describe("formatBriefingForTelegram", () => {
         assetKey: "US::NVDA",
         portfolioWeight: 0.107,
         daysSinceLastInvestigation: 2,
-        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向（权重 10.7%，上次复核 2 天前）",
+        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向（权重 10.7%，上次有效调查 2 天前）",
         suggestedInvestigation: "关注维度：组合、资产配置、宏观",
       }],
       mindChangeConditions: [],
