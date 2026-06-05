@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getDaaAccountScopeId: vi.fn(() => "default"),
   getDaaLedgerStartTs: vi.fn(),
   listDaaTradeTickets: vi.fn(),
+  listTargetWeightAudits: vi.fn(),
 }));
 
 vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
@@ -24,6 +25,7 @@ vi.mock("@/src/daa/account/accountScope", () => ({
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   getDaaLedgerStartTs: mocks.getDaaLedgerStartTs,
   listDaaTradeTickets: mocks.listDaaTradeTickets,
+  listTargetWeightAudits: mocks.listTargetWeightAudits,
 }));
 
 import { buildAssetDetailReadModel } from "@/src/daa/modules/read/assetDetailReadService";
@@ -108,6 +110,7 @@ describe("asset-detail-read-service-v1", () => {
         executedAt: null,
       }),
     ]);
+    mocks.listTargetWeightAudits.mockResolvedValue([]);
   });
 
   it("只返回目标资产和当前账本内已成交交易标记", async () => {
@@ -123,6 +126,10 @@ describe("asset-detail-read-service-v1", () => {
     expect(mocks.listDaaTradeTickets).toHaveBeenCalledWith({
       symbol: "000660.KS",
       limit: 80,
+    });
+    expect(mocks.listTargetWeightAudits).toHaveBeenCalledWith({
+      assetKey: "KR::000660.KS",
+      limit: 12,
     });
     expect(result.row?.assetKey).toBe("KR::000660.KS");
     expect(result.tradeMarkers).toEqual([
