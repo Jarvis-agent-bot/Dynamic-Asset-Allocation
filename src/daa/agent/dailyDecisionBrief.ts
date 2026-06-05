@@ -97,8 +97,8 @@ export function buildDailyDecisionBrief(input: DailyDecisionBriefInput): DailyDe
   if (approvals.length > 0) {
     return {
       posture: "approve_required",
-      label: "等待批准",
-      title: "今天建议调整仓位，等待你批准",
+      label: "等待拍板",
+      title: "今天建议调整仓位，等待你拍板",
       description: input.strategyOverlay?.targetAllocationPlan?.reasoning
         || `${approvals.length} 个目标权重变化需要你确认后再进入执行链路。`,
       approvals,

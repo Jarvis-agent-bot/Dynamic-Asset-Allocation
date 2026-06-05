@@ -202,7 +202,7 @@ function intentTone(intent: ReviewIntent): ActionTone {
 }
 
 function intentLabel(intent: ReviewIntent): string {
-  if (intent === "approve") return "待批准";
+  if (intent === "approve") return "待拍板";
   if (intent === "decide") return "今天要决定";
   if (intent === "confirm") return "需要确认";
   if (intent === "investigate") return "重新调查";
@@ -660,7 +660,7 @@ function DecisionQueueView({
         <SectionHeader
           icon={<ShieldCheck className="h-4 w-4 text-[var(--primary)]" />}
           title="需要你拍板"
-          subtitle={authorizationItems.length > 0 ? "这里只放会改变目标权重或调仓方案的动作。" : "今天没有需要你批准的组合动作。"}
+          subtitle={authorizationItems.length > 0 ? "这里只放会改变目标权重或调仓方案的动作。" : "今天没有需要你拍板的组合动作。"}
           count={authorizationItems.length}
         />
         {authorizationItems.length > 0 ? (
@@ -786,7 +786,7 @@ function DecisionConclusionPanel({
           </p>
         </div>
         <div className="grid min-w-0 gap-2 sm:grid-cols-3 xl:w-[520px]">
-          <ConclusionMetric label="待批准" value={dailyBrief.metrics.approvalCount} />
+          <ConclusionMetric label="待拍板" value={dailyBrief.metrics.approvalCount} />
           <ConclusionMetric label="后台任务" value={dailyBrief.metrics.backgroundCount} />
           <ConclusionMetric label="下次运行" value={formatSchedule(schedule)} wide />
         </div>
