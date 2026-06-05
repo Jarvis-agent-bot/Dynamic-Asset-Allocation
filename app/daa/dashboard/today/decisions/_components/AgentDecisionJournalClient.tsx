@@ -17,7 +17,6 @@ import {
 
 import {
   DaaSurfaceActionButton,
-  DaaSurfaceEmptyState,
   DaaSurfaceMiniStat,
   DaaSurfacePanel,
   daaSurfaceDenseFieldClassName,
@@ -366,10 +365,19 @@ export default function AgentDecisionJournalClient() {
           </div>
         </DaaSurfacePanel>
       ) : (
-        <DaaSurfaceEmptyState
-          title="暂无策略计划"
-          description="Agent 完成一次带策略输出的运行后，这里会出现目标权重与理由。"
-        />
+        <DaaSurfacePanel
+          accent="cyan"
+          title="最新策略计划"
+          subtitle="这里只展示会改变目标权重的策略输出。"
+          bodyClassName="py-4"
+        >
+          <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-strong)] px-4 py-8 text-center">
+            <div className="text-sm font-semibold text-[var(--text)]">暂无策略计划</div>
+            <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
+              Agent 完成一次带目标权重的运行后，这里会出现资产、目标比例和理由。
+            </div>
+          </div>
+        </DaaSurfacePanel>
       )}
 
       <DaaSurfacePanel
@@ -391,7 +399,7 @@ export default function AgentDecisionJournalClient() {
         )}
       >
         <div className="space-y-4">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center gap-2 overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
             <Filter className="h-3.5 w-3.5 shrink-0 text-[var(--faint)]" />
             {KIND_FILTERS.map((item) => (
               <button
@@ -401,7 +409,7 @@ export default function AgentDecisionJournalClient() {
                 className={`h-8 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors ${
                   kind === item.value
                     ? "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]"
-                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                    : "border-[var(--border)] bg-[var(--card)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                 }`}
               >
                 {item.label}
@@ -410,8 +418,8 @@ export default function AgentDecisionJournalClient() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[1fr_0.92fr]">
-            <section className="min-w-0 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
-              <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
+            <section className="min-w-0 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)]">
+              <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)]/70 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
                   <BrainCircuit className="h-4 w-4 text-[var(--primary)]" />
                   决策审计
@@ -427,8 +435,8 @@ export default function AgentDecisionJournalClient() {
               </div>
             </section>
 
-            <section className="min-w-0 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
-              <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
+            <section className="min-w-0 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)]">
+              <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)]/70 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
                   <Target className="h-4 w-4 text-[var(--amber)]" />
                   目标权重写入

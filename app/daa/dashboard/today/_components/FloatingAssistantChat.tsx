@@ -25,7 +25,7 @@ function MessageBubble({ message }: { message: DaaChatMessage }) {
   return (
     <div className={cn("flex gap-2", isUser ? "justify-end" : "justify-start")}>
       {!isUser ? (
-        <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-indigo-400/20 bg-indigo-500/10 text-indigo-300">
+        <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--indigo-border)] bg-[var(--indigo-bg)] text-[var(--indigo)]">
           <Bot className="h-3.5 w-3.5" />
         </div>
       ) : null}
@@ -92,15 +92,15 @@ export default function FloatingAssistantChat() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed right-5 top-[92px] z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-indigo-400/30 bg-[var(--surface)] text-[var(--text)] shadow-[0_12px_28px_rgba(15,23,42,0.18)] backdrop-blur transition-all hover:border-indigo-300/55 hover:text-[var(--text)]",
+          "fixed right-5 top-[92px] z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--indigo-border)] bg-[var(--card)] text-[var(--text)] shadow-[0_10px_24px_rgba(15,23,42,0.12)] backdrop-blur transition-all hover:border-[var(--indigo)]/45 hover:text-[var(--text)]",
           open && "opacity-0 pointer-events-none",
         )}
         aria-label="打开 Agent 对话"
         title="和 Agent 对话"
       >
-        <Bot className="h-4 w-4 text-indigo-300" />
+        <Bot className="h-4 w-4 text-[var(--indigo)]" />
         {hasMessages ? (
-          <span className="absolute right-2 top-2 inline-flex h-1.5 w-1.5 rounded-full bg-indigo-300" />
+          <span className="absolute right-2 top-2 inline-flex h-1.5 w-1.5 rounded-full bg-[var(--indigo)]" />
         ) : null}
       </button>
 
@@ -114,12 +114,12 @@ export default function FloatingAssistantChat() {
           <aside
             role="dialog"
             aria-label="Agent 对话"
-            className="fixed right-6 top-[92px] z-50 flex w-[min(420px,calc(100vw-3rem))] max-h-[min(720px,calc(100vh-7rem))] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] shadow-[0_30px_70px_rgba(0,0,0,0.5)]"
+            className="fixed right-6 top-[92px] z-50 flex w-[min(420px,calc(100vw-3rem))] max-h-[min(720px,calc(100vh-7rem))] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
           >
-            <div className="absolute inset-x-0 top-0 h-1 bg-indigo-400/70" />
+            <div className="absolute inset-x-0 top-0 h-1 bg-[var(--indigo)]/70" />
             <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
               <div className="flex min-w-0 items-center gap-2">
-                <Bot className="h-4 w-4 text-indigo-300" />
+                <Bot className="h-4 w-4 text-[var(--indigo)]" />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-[var(--text)]">和 Agent 对话</div>
                   <div className="flex items-center gap-1 text-[11px] text-[var(--faint)]">
@@ -194,7 +194,7 @@ export default function FloatingAssistantChat() {
             </div>
 
             {assistant.error ? (
-              <div className="border-t border-red-400/20 bg-red-500/10 px-4 py-2 text-xs leading-5 text-red-200">
+              <div className="border-t border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-2 text-xs leading-5 text-[var(--danger)]">
                 {assistant.error}
               </div>
             ) : null}
@@ -205,7 +205,7 @@ export default function FloatingAssistantChat() {
                   <button
                     key={prompt}
                     type="button"
-                    className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-indigo-300/30 hover:text-[var(--text)] disabled:opacity-50"
+                    className="rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--indigo)]/35 hover:text-[var(--text)] disabled:opacity-50"
                     onClick={() => setDraft(prompt)}
                     disabled={assistant.sending}
                   >

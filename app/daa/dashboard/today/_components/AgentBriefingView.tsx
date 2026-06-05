@@ -210,11 +210,11 @@ function intentLabel(intent: ReviewIntent): string {
 }
 
 function toneClasses(tone: ActionTone): string {
-  if (tone === "red") return "border-red-400/22 bg-red-500/10 text-red-200";
-  if (tone === "amber") return "border-amber-400/22 bg-amber-500/10 text-amber-200";
+  if (tone === "red") return "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]";
+  if (tone === "amber") return "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]";
   if (tone === "blue") return "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
-  if (tone === "orange") return "border-orange-400/22 bg-orange-500/10 text-orange-200";
-  return "border-[var(--border)] bg-[var(--elevated)] text-[var(--muted)]";
+  if (tone === "orange") return "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
+  return "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]";
 }
 
 function ActionBadge({ tone, children }: { tone: ActionTone; children: string }) {
@@ -473,7 +473,7 @@ export default function AgentBriefingView() {
               {runResult.autopilot ? "自动驾驶检查完成" : "调查完成"}：更新 {runResult.thesesUpdated} 条投资判断，发现 {runResult.surprisesCount} 条需要确认的变化。
             </div>
             {runResult.errors.length > 0 ? (
-              <div className="mt-1 text-amber-200">{runResult.errors.length} 个错误：{runResult.errors[0]}</div>
+              <div className="mt-1 text-[var(--amber)]">{runResult.errors.length} 个错误：{runResult.errors[0]}</div>
             ) : null}
           </div>
         ) : null}
@@ -702,7 +702,7 @@ function DecisionQueueView({
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SectionHeader
-            icon={<Bot className="h-4 w-4 text-amber-300" />}
+            icon={<Bot className="h-4 w-4 text-[var(--amber)]" />}
             title="Agent 后台工作"
             subtitle="调查、旧判断刷新和判断关系诊断都放在这里，不再作为人的主待办。"
             count={backgroundCount}
@@ -763,9 +763,9 @@ function DecisionConclusionPanel({
   schedule: AgentStatus["schedule"];
 }) {
   const postureClasses = dailyBrief.posture === "approve_required"
-    ? "border-red-400/25 bg-red-500/10"
+    ? "border-[var(--danger-border)] bg-[var(--danger-bg)]"
     : dailyBrief.posture === "risk_watch"
-      ? "border-amber-400/25 bg-amber-500/10"
+      ? "border-[var(--amber-border)] bg-[var(--amber-bg)]"
       : dailyBrief.posture === "investigating"
         ? "border-[var(--primary-border)] bg-[var(--primary-bg)]"
         : "border-[var(--border)] bg-[var(--surface)]";
@@ -797,7 +797,7 @@ function DecisionConclusionPanel({
 
 function ConclusionMetric({ label, value, wide }: { label: string; value: string | number; wide?: boolean }) {
   return (
-    <div className={`min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]/75 px-3 py-2 ${wide ? "sm:col-span-1" : ""}`}>
+    <div className={`min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]/80 px-3 py-2 ${wide ? "sm:col-span-1" : ""}`}>
       <div className="text-[11px] font-medium text-[var(--muted)]">{label}</div>
       <div className="mt-1 truncate font-[var(--font-mono)] text-sm leading-5 text-[var(--text)]">{value}</div>
     </div>
@@ -819,7 +819,7 @@ function DailyDecisionActionBar({
     return (
       <div className={`rounded-[var(--radius-sm)] border px-3 py-2 text-xs leading-5 ${
         state.error
-          ? "border-red-400/25 bg-red-500/10 text-red-200"
+          ? "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]"
           : "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]"
       }`}>
         {state.error ?? state.label}
@@ -905,7 +905,7 @@ function SectionHeader({
 
 function BackgroundWorkStat({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">{label}</div>
       <div className="mt-1.5 font-[var(--font-mono)] text-lg leading-6 text-[var(--text)]">{value}</div>
       <div className="mt-1 truncate text-xs leading-5 text-[var(--muted)]">{hint}</div>
@@ -933,7 +933,7 @@ function HumanReviewCard({
   );
 
   return (
-    <div className="flex min-w-0 flex-col rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 shadow-[inset_0_1px_0_var(--surface)]">
+    <div className="flex min-w-0 flex-col rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
       <div className="mb-2 flex items-center justify-between gap-2">
         <ActionBadge tone={intentTone(item.intent)}>{intentLabel(item.intent)}</ActionBadge>
         <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">{Math.round(item.score)}</span>
@@ -986,7 +986,7 @@ function ReviewActionButtons({
     return (
       <div className={`mt-3 rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[11px] leading-4 ${
         actionState.error
-          ? "border-red-400/25 bg-red-500/10 text-red-200"
+          ? "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]"
           : "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]"
       }`}>
         {actionState.error ?? actionState.label}
@@ -1084,7 +1084,7 @@ function BriefingDetailColumns({ buckets }: { buckets: BriefingBuckets }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1.08fr_1fr_1fr]">
       <KanbanColumn
-        icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
+        icon={<AlertTriangle className="h-4 w-4 text-[var(--amber)]" />}
         title="需要确认的新变化"
         subtitle="新闻、市场数据或价格变化让原判断需要人确认"
         count={buckets.surprises.length}
@@ -1108,7 +1108,7 @@ function BriefingDetailColumns({ buckets }: { buckets: BriefingBuckets }) {
       </KanbanColumn>
 
       <KanbanColumn
-        icon={<Network className="h-4 w-4 text-orange-300" />}
+        icon={<Network className="h-4 w-4 text-[var(--primary)]" />}
         title="后台诊断"
         subtitle="判断关系和高暴露风险，不直接等同于人的待办"
         count={buckets.conflicts.length + buckets.risks.length}
@@ -1142,7 +1142,7 @@ function KanbanColumn({
 }) {
   const hasChildren = Array.isArray(children) ? children.flat().some(Boolean) : Boolean(children);
   return (
-    <section className="flex min-w-0 flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[inset_0_1px_0_var(--surface)]">
+    <section className="flex min-w-0 flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
       <header className="flex items-start justify-between gap-2 border-b border-[var(--border)] px-4 py-3.5">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text)]">
@@ -1191,7 +1191,7 @@ function CardShell({
   );
 
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--elevated)]/55 px-3.5 py-3">
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
       <div className="flex items-center justify-between gap-2">
         <ActionBadge tone={action.tone}>{action.label}</ActionBadge>
         {meta ? <span className="truncate text-[11px] text-[var(--muted)]">{meta}</span> : null}
@@ -1263,7 +1263,7 @@ function MindChangeSection({ conditions }: { conditions: MindChangeCondition[] }
   return (
     <section>
       <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-        <RotateCcw className="h-4 w-4 text-amber-300" />
+        <RotateCcw className="h-4 w-4 text-[var(--amber)]" />
         什么会改变判断
       </div>
       <div className="space-y-3 border-l border-[var(--border)] pl-4">

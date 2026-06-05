@@ -67,7 +67,7 @@ export const daaSurfaceTableCellClassName =
   "border-b border-[var(--border)]/70 px-4 py-3 align-top text-sm";
 
 const daaSurfaceDialogContentClassName =
-  "flex max-h-[min(90dvh,860px)] w-[calc(100vw-1rem)] max-w-[720px] flex-col overflow-hidden border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface))] p-0 text-[var(--text)] shadow-[0_28px_72px_rgba(0,0,0,0.48)] sm:w-[calc(100vw-2rem)]";
+  "flex max-h-[min(90dvh,860px)] w-[calc(100vw-1rem)] max-w-[720px] flex-col overflow-hidden border-[var(--border)] bg-[var(--card)] p-0 text-[var(--text)] shadow-[0_24px_60px_rgba(15,23,42,0.18)] sm:w-[calc(100vw-2rem)]";
 
 function toneColor(tone: DaaSurfaceTone = "cyan") {
   return ACCENT_CLASS[tone];
@@ -129,12 +129,11 @@ export function DaaSurfaceMetricCard({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition-transform duration-200 hover:-translate-y-0.5",
+        "group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-5 shadow-[0_8px_18px_rgba(15,23,42,0.055)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--border-strong)]",
         className,
       )}
     >
       <div className="absolute inset-x-0 top-0 h-1" style={{ background: toneColor(accent) }} />
-      <div className="absolute -right-8 top-2 h-24 w-24 rounded-full bg-[var(--primary)]/8 blur-3xl transition-opacity duration-300 group-hover:opacity-100" />
       <div className="relative">
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">{label}</div>
         <div className="mt-4 font-[var(--font-mono)] text-[28px] leading-none tracking-[-0.03em] text-[var(--text)] sm:text-[30px]">
@@ -167,12 +166,11 @@ export function DaaSurfacePanel({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] shadow-[0_24px_50px_rgba(0,0,0,0.3)]",
+        "relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] shadow-[0_8px_20px_rgba(15,23,42,0.045)]",
         className,
       )}
     >
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: toneColor(accent) }} />
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--card)] px-5 py-4 sm:px-6">
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex h-2 w-2 rounded-full" style={{ background: toneColor(accent) }} />
@@ -204,7 +202,7 @@ export function DaaSurfaceMiniStat({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-lg)] border bg-[var(--surface)] px-4 py-3 shadow-[inset_0_1px_0_var(--surface)]",
+        "rounded-[var(--radius-lg)] border bg-[var(--card)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]",
         className,
       )}
       style={{ borderColor: toneStyle.border }}
@@ -232,7 +230,7 @@ export function DaaSurfaceFilterChip({
         "inline-flex h-8 shrink-0 items-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] transition-colors",
         active
           ? "border-[var(--primary)]/38 bg-[var(--primary-bg)] text-[var(--primary)]"
-          : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]",
+          : "border-[var(--border)] bg-[var(--card)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
         className,
       )}
       {...props}
@@ -330,7 +328,7 @@ export function DaaSurfaceEmptyState({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-xl)] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-5 py-10 text-center",
+        "rounded-[var(--radius-xl)] border border-dashed border-[var(--border-strong)] bg-[var(--card)] px-5 py-10 text-center",
         className,
       )}
     >

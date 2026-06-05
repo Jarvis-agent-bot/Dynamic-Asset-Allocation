@@ -9,9 +9,7 @@ export default function MemoriesPage() {
       <AgentSectionTabs />
       <SectionErrorBoundary sectionName="Memory Browser">
         <Suspense fallback={<div className="py-20 text-center text-sm text-[var(--muted)]">加载记忆...</div>}>
-          <div className="mx-auto max-w-4xl">
-            <MemoryBrowserClient />
-          </div>
+          <MemoryBrowserClient />
         </Suspense>
       </SectionErrorBoundary>
     </div>
