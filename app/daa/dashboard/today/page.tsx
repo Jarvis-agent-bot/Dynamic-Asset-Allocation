@@ -9,7 +9,7 @@ export default function TodayPage() {
   return (
     <div className="w-full min-w-0">
       <AgentSectionTabs />
-      <SectionErrorBoundary sectionName="今日待办">
+      <SectionErrorBoundary sectionName="今日决策队列">
         <Suspense fallback={<div className="py-20 text-center text-sm text-[var(--muted)]">加载中...</div>}>
           <AgentBriefingView />
         </Suspense>

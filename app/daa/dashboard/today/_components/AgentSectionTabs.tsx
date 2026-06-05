@@ -7,7 +7,7 @@ import { Brain, Database, ListChecks } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const AGENT_TABS = [
-  { key: "briefing", href: "/daa/dashboard/today", label: "今日待办", Icon: ListChecks },
+  { key: "briefing", href: "/daa/dashboard/today", label: "决策队列", Icon: ListChecks },
   { key: "decisions", href: "/daa/dashboard/today/decisions", label: "决策记录", Icon: Database },
   { key: "memories", href: "/daa/dashboard/today/memories", label: "记忆", Icon: Brain },
 ] as const;
