@@ -305,7 +305,8 @@ export default function AgentBriefingView() {
     );
   }
 
-  const totalToReview = sortedBuckets.surprises.length + sortedBuckets.gaps.length + sortedBuckets.conflicts.length + sortedBuckets.risks.length;
+  const actionItemsCount = humanActionCount(sortedBuckets);
+  const decisionsCount = decisionCount(sortedBuckets);
 
   return (
     <DaaSurfacePanel
@@ -342,8 +343,8 @@ export default function AgentBriefingView() {
     >
       <div className="space-y-6">
         <div className="grid gap-3 border-b border-[var(--border)] pb-5 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryStat label="今天优先看" value={totalToReview > 0 ? Math.min(totalToReview, 5) : 0} hint={hasTheses ? (totalToReview > 5 ? `其余 ${totalToReview - 5} 条先放后台` : "没有积压事项") : "Agent 未初始化"} />
-          <SummaryStat label="需要你决策" value={decisionCount(sortedBuckets)} hint={decisionCount(sortedBuckets) > 0 ? "可能影响仓位或目标权重" : "暂无必须处理"} />
+          <SummaryStat label="今天优先看" value={actionItemsCount > 0 ? Math.min(actionItemsCount, 5) : 0} hint={hasTheses ? (actionItemsCount > 5 ? `其余 ${actionItemsCount - 5} 条交给 Agent 排队` : "没有积压事项") : "Agent 未初始化"} />
+          <SummaryStat label="需要你决策" value={decisionsCount} hint={decisionsCount > 0 ? "可能影响仓位或目标权重" : "暂无必须处理"} />
           <SummaryStat label="太久没看" value={sortedBuckets.gaps.length} hint={sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length > 0 ? `${sortedBuckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length} 个重要持仓` : "Agent 会自动排队调查"} />
           <SummaryStat label="最近运行" value={formatLatestRun(status?.latestRun?.createdAt)} hint={formatSchedule(status?.schedule ?? null)} />
         </div>
@@ -425,10 +426,13 @@ interface BriefingBuckets {
   risks: ThesisFailureImpact[];
 }
 
+function humanActionCount(buckets: BriefingBuckets): number {
+  return buckets.surprises.length + buckets.gaps.length + buckets.risks.length;
+}
+
 function decisionCount(buckets: BriefingBuckets): number {
   return buckets.surprises.filter((s) => s.severityScore >= 8).length
     + buckets.gaps.filter((g) => g.portfolioWeight >= 0.05).length
-    + buckets.conflicts.filter((c) => c.severity === "high").length
     + buckets.risks.filter((r) => r.riskLevel === "critical" || r.riskLevel === "high").length;
 }
 
@@ -488,19 +492,7 @@ function buildPriorityItems(buckets: BriefingBuckets): PriorityReviewItem[] {
     };
   });
 
-  const conflictItems = buckets.conflicts.map((conflict, index) => ({
-    key: `conflict-${index}`,
-    label: "判断打架",
-    tone: "orange" as ActionTone,
-    title: conflict.overlappingAssets.length > 0
-      ? conflict.overlappingAssets.map((k) => formatAssetLabelByKey(k)).join("、")
-      : "同一资产",
-    description: `${conflict.thesisA.title} / ${conflict.thesisB.title}`,
-    score: conflict.severity === "high" ? 72 : conflict.severity === "medium" ? 46 : 28,
-    meta: `两条判断方向不同 · ${conflict.thesisA.conviction} vs ${conflict.thesisB.conviction}`,
-  }));
-
-  return [...surpriseItems, ...gapItems, ...riskItems, ...conflictItems]
+  return [...surpriseItems, ...gapItems, ...riskItems]
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 }
@@ -508,7 +500,8 @@ function buildPriorityItems(buckets: BriefingBuckets): PriorityReviewItem[] {
 function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
   const priorityItems = buildPriorityItems(buckets);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const totalCount = buckets.surprises.length + buckets.gaps.length + buckets.conflicts.length + buckets.risks.length;
+  const primaryDetailCount = humanActionCount(buckets);
+  const conflictCount = buckets.conflicts.length;
 
   return (
     <div className="space-y-4">
@@ -538,15 +531,20 @@ function BriefingKanban({ buckets }: { buckets: BriefingBuckets }) {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
         <ReviewLogicDisclosure />
-        {totalCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => setDetailsOpen((value) => !value)}
-            className="rounded-full border border-[var(--border)] bg-[var(--elevated)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-          >
-            {detailsOpen ? "收起明细" : `查看全部 ${totalCount} 条明细`}
-          </button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {conflictCount > 0 ? (
+            <span className="text-xs text-[var(--faint)]">后台还有 {conflictCount} 条判断关系</span>
+          ) : null}
+          {primaryDetailCount + conflictCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setDetailsOpen((value) => !value)}
+              className="rounded-full border border-[var(--border)] bg-[var(--elevated)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+            >
+              {detailsOpen ? "收起明细" : primaryDetailCount > 0 ? `查看 ${primaryDetailCount} 条待办明细` : "查看判断关系"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {detailsOpen ? <BriefingDetailColumns buckets={buckets} /> : null}

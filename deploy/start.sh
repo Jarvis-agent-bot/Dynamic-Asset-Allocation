@@ -20,7 +20,7 @@ git checkout main
 git pull --ff-only
 
 echo "[deploy] building + starting via docker compose..."
-docker compose "${COMPOSE_ENV_ARGS[@]}" build --no-cache
+docker compose "${COMPOSE_ENV_ARGS[@]}" build
 docker compose "${COMPOSE_ENV_ARGS[@]}" up -d
 
 echo "[deploy] status:"
