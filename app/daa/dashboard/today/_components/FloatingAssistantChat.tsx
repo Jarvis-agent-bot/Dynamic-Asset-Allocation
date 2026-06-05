@@ -54,8 +54,8 @@ export default function FloatingAssistantChat() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const quickPrompts = useMemo(() => [
-    "解释今天需要我复核的变化",
-    "哪些持仓最需要复核？",
+    "解释今天有没有需要我拍板的动作",
+    "哪些持仓最需要后台调查？",
     "当前组合最大的风险暴露是什么？",
   ], []);
 
@@ -181,7 +181,7 @@ export default function FloatingAssistantChat() {
                 <div className="flex h-full min-h-[200px] flex-col items-center justify-center text-center">
                   <Bot className="mb-3 h-8 w-8 text-[var(--faint)]" />
                   <div className="text-sm font-medium text-[var(--text)]">还没有 Web 对话</div>
-                  <div className="mt-1 text-xs leading-5 text-[var(--muted)]">可以从复核项、仓位风险或调仓建议开始问。</div>
+                  <div className="mt-1 text-xs leading-5 text-[var(--muted)]">可以从组合动作、仓位风险或后台调查开始问。</div>
                 </div>
               )}
               {assistant.sending ? (
@@ -225,7 +225,7 @@ export default function FloatingAssistantChat() {
                     void handleSubmit();
                   }
                 }}
-                placeholder="例如：把今天的复核项按仓位影响排序"
+                placeholder="例如：把今天的后台调查按仓位影响排序"
                 className={cn(daaSurfaceFieldClassName, "min-h-[40px] resize-none py-2")}
                 disabled={assistant.sending}
               />

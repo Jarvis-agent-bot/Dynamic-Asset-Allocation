@@ -273,7 +273,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             精准<em className="not-italic" style={{ color: "var(--primary)" }}>决策。</em>
           </h1>
           <p className="max-w-sm text-[15px] leading-relaxed" style={{ color: "var(--muted)" }}>
-            基于 Cognitive Agent 驱动的资产研究与动态再平衡，结合人类审阅与本地风控。
+            基于 Cognitive Agent 驱动的资产研究与动态再平衡，把人的注意力集中到组合动作拍板。
           </p>
         </div>
 
@@ -285,7 +285,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           {[
             { value: "本地", label: "会话认证" },
             { value: "风控", label: "执行前校验" },
-            { value: "复核", label: "Agent 工作流" },
+            { value: "拍板", label: "组合动作" },
           ].map((s) => (
             <div key={s.label}>
               <div

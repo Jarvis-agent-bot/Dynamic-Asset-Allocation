@@ -116,7 +116,7 @@ export function buildDailyDecisionBrief(input: DailyDecisionBriefInput): DailyDe
       posture: "risk_watch",
       label: "风险观察",
       title: "今天不建议直接交易，但有风险需要观察",
-      description: "Agent 没有形成明确的目标权重变化；相关风险先进入后台跟踪，不作为你的授权待办。",
+      description: "Agent 没有形成明确的目标权重变化；相关风险先进入后台跟踪，不作为你的拍板待办。",
       approvals,
       metrics: {
         approvalCount: 0,

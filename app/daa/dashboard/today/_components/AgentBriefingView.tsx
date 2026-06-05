@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 今日结论 — 把 Agent 内部 briefing 翻译成投资者可以授权的结论。
+ * 今日结论 — 把 Agent 内部 briefing 翻译成投资者可以拍板的组合动作。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -398,7 +398,7 @@ export default function AgentBriefingView() {
     <DaaSurfacePanel
       accent="cyan"
       title="今日结论"
-      subtitle="先给可授权结论，再展开 Agent 已经做的后台调查和诊断。"
+      subtitle="先给今天要不要动组合，再展开 Agent 已经做的后台调查和诊断。"
       className="w-full"
       bodyClassName="px-5 py-5 sm:px-6 xl:px-7"
       action={(
@@ -569,7 +569,7 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
       title: risk.thesisTitle,
       why: `如果这个判断错了，会影响 ${affectedAssets}`,
       nextStep: risk.riskLevel === "critical" || risk.riskLevel === "high"
-        ? "确认是否需要调整目标权重、减少集中暴露，或要求 Agent 做深度复核。"
+        ? "确认是否需要调整目标权重、减少集中暴露，或要求 Agent 做深度调查。"
         : "保持观察；如果相关资产继续扩大偏离，再升级为决策事项。",
       evidence: `判断风险 · 暴露 ${(risk.totalExposurePct * 100).toFixed(1)}% · 情景损失 ${(risk.estimatedLossPct * 100).toFixed(1)}%`,
       score: risk.totalExposurePct * 100 + risk.estimatedLossPct * 120 + riskBoost,
@@ -685,7 +685,7 @@ function DecisionQueueView({
         ) : (
           <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-4">
             <div className="text-sm text-[var(--muted)]">
-              Agent 当前没有提出目标权重变化；风险、新闻和旧判断复核都放在后台继续处理。
+              Agent 当前没有提出目标权重变化；风险、新闻和旧判断都放在后台继续处理。
             </div>
             <div className="mt-3">
               <DailyDecisionActionBar
@@ -704,7 +704,7 @@ function DecisionQueueView({
           <SectionHeader
             icon={<Bot className="h-4 w-4 text-amber-300" />}
             title="Agent 后台工作"
-            subtitle="调查、旧判断复核和判断关系诊断都放在这里，不再作为人的主待办。"
+            subtitle="调查、旧判断刷新和判断关系诊断都放在这里，不再作为人的主待办。"
             count={backgroundCount}
           />
           <button
