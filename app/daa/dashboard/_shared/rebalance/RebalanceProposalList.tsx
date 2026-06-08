@@ -82,7 +82,7 @@ export function RebalanceProposalList(props: {
   return (
     <DaaSurfacePanel
       accent={props.currentCycle ? cycleStatusTone(props.currentCycle.status) : "slate"}
-      title="本次建议"
+      title="建议审阅与执行"
       subtitle={props.currentCycle
         ? `周期 ${props.currentCycle.cycleId.slice(0, 8)} · 买入 ${props.buyProposalCount} · 卖出 ${props.sellProposalCount}`
         : "点击「生成/刷新建议」获取调仓建议"}
@@ -177,7 +177,7 @@ export function RebalanceProposalList(props: {
               <div className="space-y-2">
                 {props.currentCycle.proposals.map((row) => {
                   const proposalKey = `${row.assetKey}-${row.side}`;
-                  const decisionExpanded = Boolean(props.expandedProposalDecisionKeys[proposalKey]);
+                  const decisionExpanded = props.expandedProposalDecisionKeys[proposalKey] !== false;
                   const decisionContext = row.decisionContext;
                   const macroShadowDelta = decisionContext?.macroShadowDeltaNotional ?? 0;
                   const hasMacroShadowDelta = decisionContext?.macroShadowNotional != null && Math.abs(macroShadowDelta) >= 0.01;
@@ -235,11 +235,11 @@ export function RebalanceProposalList(props: {
                             <span>价格 <span className="font-[var(--font-mono)] text-[var(--muted)]">{formatCurrency(row.price, row.currency)}</span></span>
                             <button
                               type="button"
-                              onClick={() => props.setExpandedProposalDecisionKeys((prev) => ({ ...prev, [proposalKey]: !prev[proposalKey] }))}
+                              onClick={() => props.setExpandedProposalDecisionKeys((prev) => ({ ...prev, [proposalKey]: !decisionExpanded }))}
                               className="text-[var(--muted)] transition-colors hover:text-[var(--text)]"
                               aria-expanded={decisionExpanded}
                             >
-                              {decisionExpanded ? "▼ 收起" : "▶ 详情"}
+                              {decisionExpanded ? "▼ 收起依据" : "▶ 展开依据"}
                             </button>
                           </div>
                           {decisionExpanded ? (

@@ -214,9 +214,9 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
       {macroPolicy ? (
         <div>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">宏观政策</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">政策环境</div>
             <div className="max-w-[520px] text-[11px] leading-5 text-[var(--muted)]">
-              PPI、降息路径、缩表/流动性只作为政策环境输入；不会单独触发订单。
+              PPI、降息路径、缩表和流动性统一解释政策压力；不会单独触发订单。
             </div>
           </div>
           <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-4")}>
@@ -262,9 +262,9 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
       {assetBudgets.length > 0 ? (
         <div>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">资产预算倾斜</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">预算口径</div>
             <div className="max-w-[520px] text-[11px] leading-5 text-[var(--muted)]">
-              这里是宏观政策和市场区域合成后的预算建议；当前阶段只用于解释和审阅。
+              宏观政策和市场区域合成后的资产预算系数；用于审阅建议规模和方向。
             </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -295,9 +295,9 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
       {indicators.length > 0 ? (
         <div>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">指标概览</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">指标证据</div>
             <div className="max-w-[520px] text-[11px] leading-5 text-[var(--muted)]">
-              单项指标解释风险来源；资产预算倾斜才是给调仓审阅使用的统一预算口径。
+              单项指标用于解释风险来源；预算口径才是调仓审阅使用的统一入口。
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -376,7 +376,7 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
       {/* Section 3: Scope 分析 */}
       {scopes.length > 0 ? (
         <div>
-          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场区域</div>
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场区域结论</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {scopes.map((s) => (
               <div

@@ -178,6 +178,46 @@ function RebalanceDecisionSummary(props: {
   );
 }
 
+function RebalanceActionRail(props: {
+  bootstrap: WorkbenchBootstrap;
+  rp: NonNullable<ReturnType<typeof useDashboardPageModel>["rebalanceSectionProps"]>;
+}) {
+  const selectedProposalKeys = props.rp.currentCycle?.proposals
+    .filter((proposal) => proposal.selected)
+    .map((proposal) => `${proposal.assetKey}-${proposal.side}`) ?? [];
+
+  return (
+    <div className="space-y-3 xl:sticky xl:top-4">
+      <ExecutionPanel
+        currentCycle={props.rp.currentCycle}
+        currentRiskCheck={props.rp.currentRiskCheck}
+        baseCurrency={props.bootstrap.baseCurrency}
+        busy={props.rp.busy}
+        selectedProposalCount={props.rp.selectedProposalCount}
+        selectedProposalNotional={props.rp.selectedProposalNotional}
+        canExecuteAll={props.rp.canExecuteAll}
+        canExecuteSelected={props.rp.canExecuteSelected}
+        isCurrentCycleTerminal={props.rp.isCurrentCycleTerminal}
+        rebalanceChecklistAllPassed={props.rp.rebalanceChecklistAllPassed}
+        compact
+        onGenerateCycle={props.rp.onGenerateCycle}
+        onOpenExecuteDialog={props.rp.onOpenExecuteDialog}
+        onCancelCycle={props.rp.onCancelCycle}
+      />
+      {props.rp.selectedProposalCount > 0 && props.rp.currentCycle ? (
+        <SectionErrorBoundary sectionName="执行预览">
+          <LazyWhatIfPreview
+            cycleId={props.rp.currentCycle.cycleId}
+            selectedProposalKeys={selectedProposalKeys}
+            baseCurrency={props.bootstrap.baseCurrency}
+            embedded
+          />
+        </SectionErrorBoundary>
+      ) : null}
+    </div>
+  );
+}
+
 export default function RebalancePageClient() {
   const wbModel = useDashboardPageModel();
   const searchParams = useSearchParams();
@@ -262,63 +302,47 @@ export default function RebalancePageClient() {
               setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
               onSelectAllProposals={rp.onSelectAllProposals}
               onToggleProposal={rp.onToggleProposal}
-              sideContent={rp.selectedProposalCount > 0 && rp.currentCycle ? (
-                <SectionErrorBoundary sectionName="执行预览">
-                  <LazyWhatIfPreview
-                    cycleId={rp.currentCycle.cycleId}
-                    selectedProposalKeys={rp.currentCycle.proposals
-                      .filter((p) => p.selected)
-                      .map((p) => `${p.assetKey}-${p.side}`)}
-                    baseCurrency={wbModel.bootstrap.baseCurrency}
-                    embedded
-                  />
-                </SectionErrorBoundary>
-              ) : undefined}
-              afterContent={(
-                <ExecutionPanel
-                  currentCycle={rp.currentCycle}
-                  currentRiskCheck={rp.currentRiskCheck}
-                  baseCurrency={wbModel.bootstrap.baseCurrency}
-                  busy={rp.busy}
-                  selectedProposalCount={rp.selectedProposalCount}
-                  selectedProposalNotional={rp.selectedProposalNotional}
-                  canExecuteAll={rp.canExecuteAll}
-                  canExecuteSelected={rp.canExecuteSelected}
-                  isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
-                  rebalanceChecklistAllPassed={rp.rebalanceChecklistAllPassed}
-                  onGenerateCycle={rp.onGenerateCycle}
-                  onOpenExecuteDialog={rp.onOpenExecuteDialog}
-                  onCancelCycle={rp.onCancelCycle}
-                />
-              )}
+              sideContent={<RebalanceActionRail bootstrap={wbModel.bootstrap} rp={rp} />}
             />
           </SectionErrorBoundary>
 
-          <SectionErrorBoundary sectionName="漂移概览">
-            <DaaSurfacePanel
-              title="漂移概览"
-              subtitle="按当前持仓与目标权重的偏离查看，超过策略阈值的项目会优先进入调仓审阅。"
-              accent={driftCount > 0 ? "amber" : "green"}
-              action={(
-                <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
-                  {driftCount > 0 ? `${driftCount} 项超阈值` : "目标内"}
-                </DaaSurfaceStatusPill>
-              )}
-            >
-              <LazyDriftBarChart
-                rows={wbModel.tableProps.rows}
-                driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
-                maxItems={12}
-              />
-            </DaaSurfacePanel>
-          </SectionErrorBoundary>
-
-          {/* ── 市场环境（默认折叠的概览 + 可展开完整指标） ── */}
+          {/* ── 市场环境与预算依据（默认展开，便于审阅建议来源） ── */}
           {wbModel.bootstrap.marketContext ? (
             <SectionErrorBoundary sectionName="市场环境">
-              <RebalanceMarketStrip marketContext={wbModel.bootstrap.marketContext} />
+              <RebalanceMarketStrip
+                marketContext={wbModel.bootstrap.marketContext}
+                driftCount={driftCount}
+                driftContent={(
+                  <SectionErrorBoundary sectionName="组合偏离">
+                    <LazyDriftBarChart
+                      rows={wbModel.tableProps.rows}
+                      driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
+                      maxItems={12}
+                    />
+                  </SectionErrorBoundary>
+                )}
+              />
             </SectionErrorBoundary>
-          ) : null}
+          ) : (
+            <SectionErrorBoundary sectionName="组合偏离">
+              <DaaSurfacePanel
+                title="组合偏离"
+                subtitle="当前持仓相对目标权重的偏离；市场环境暂不可用时，仍可先审阅组合漂移。"
+                accent={driftCount > 0 ? "amber" : "green"}
+                action={(
+                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                    {driftCount > 0 ? `${driftCount} 项超阈值` : "目标内"}
+                  </DaaSurfaceStatusPill>
+                )}
+              >
+                <LazyDriftBarChart
+                  rows={wbModel.tableProps.rows}
+                  driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
+                  maxItems={12}
+                />
+              </DaaSurfacePanel>
+            </SectionErrorBoundary>
+          )}
         </>
       ) : (
         <RebalanceLoadingState />

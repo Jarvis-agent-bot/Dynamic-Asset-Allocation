@@ -30,6 +30,7 @@ export function ExecutionPanel(props: {
   canExecuteSelected: boolean;
   isCurrentCycleTerminal: boolean;
   rebalanceChecklistAllPassed: boolean;
+  compact?: boolean;
   onGenerateCycle: () => Promise<void>;
   onOpenExecuteDialog: (mode: "all" | "selected") => void;
   onCancelCycle: () => void;
@@ -42,7 +43,7 @@ export function ExecutionPanel(props: {
 
   return (
     <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <div className={props.compact ? "grid gap-4" : "grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start"}>
         <div className="space-y-3">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">执行面板</div>
 

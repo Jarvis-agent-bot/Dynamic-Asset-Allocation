@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { DaaSurfacePanel, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
@@ -26,8 +27,16 @@ function indicatorTone(ind: DaaMarketIndicatorSnapshot | undefined) {
   return "slate" as const;
 }
 
-export function RebalanceMarketStrip({ marketContext }: { marketContext: DaaMarketContext | null }) {
-  const [expanded, setExpanded] = useState(false);
+export function RebalanceMarketStrip({
+  marketContext,
+  driftContent,
+  driftCount,
+}: {
+  marketContext: DaaMarketContext | null;
+  driftContent?: ReactNode;
+  driftCount?: number;
+}) {
+  const [expanded, setExpanded] = useState(true);
 
   if (!marketContext) return null;
 
@@ -40,18 +49,19 @@ export function RebalanceMarketStrip({ marketContext }: { marketContext: DaaMark
   return (
     <DaaSurfacePanel
       accent={marketRegimeTone(regime)}
-      title="市场环境"
+      title="市场环境与预算依据"
       subtitle={expanded
-        ? "完整指标列表，点击单项可看历史走势。仅解释环境，不代表订单方向。"
-        : "默认仅显示概览；需要细看时再展开。"}
+        ? "组合偏离、宏观政策、资产预算和指标证据合并在同一处；用于解释建议，不单独触发订单。"
+        : "已收起明细，仅保留环境摘要和关键指标。"}
       action={(
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
           className="inline-flex min-h-10 items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
         >
           {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {expanded ? "收起" : "展开全部指标"}
+          {expanded ? "收起依据" : "展开依据"}
         </button>
       )}
     >
@@ -83,7 +93,25 @@ export function RebalanceMarketStrip({ marketContext }: { marketContext: DaaMark
       ) : null}
 
       {expanded ? (
-        <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <div className="mt-4 space-y-5 border-t border-[var(--border)] pt-4">
+          {driftContent ? (
+            <section>
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">组合偏离</div>
+                  <div className="mt-1 text-[11px] leading-5 text-[var(--muted)]">
+                    当前持仓相对目标权重的偏离；超过策略阈值的资产优先进入建议审阅。
+                  </div>
+                </div>
+                {typeof driftCount === "number" ? (
+                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                    {driftCount > 0 ? `${driftCount} 项超阈值` : "目标内"}
+                  </DaaSurfaceStatusPill>
+                ) : null}
+              </div>
+              {driftContent}
+            </section>
+          ) : null}
           <MarketIndicatorDashboard marketContext={marketContext} hideClock />
         </div>
       ) : null}
