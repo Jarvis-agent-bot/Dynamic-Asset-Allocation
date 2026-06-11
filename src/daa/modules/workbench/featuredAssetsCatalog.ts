@@ -44,35 +44,35 @@ export type WorkbenchFeaturedCatalogItem = {
 
 const ROLE_META_: Record<WorkbenchFeaturedRole, { label: string; description: string }> = {
   cash_buffer: {
-    label: "现金与短债",
+    label: "现金/短债",
     description: "组合流动性与低波动底仓，承担等待机会、降低回撤的角色。",
   },
   core_equity: {
-    label: "核心股票敞口",
-    description: "组合长期增长引擎，优先使用宽基 ETF，避免一开始就堆太多个股。",
+    label: "核心宽基",
+    description: "组合长期增长底仓，优先使用覆盖面广、流动性好的宽基 ETF。",
   },
   defensive_bond: {
-    label: "防守债券",
-    description: "用于降低组合波动、管理久期与信用风险。",
+    label: "债券/稳健收益",
+    description: "用于降低组合波动，管理久期、信用风险和稳定现金流。",
   },
   real_asset: {
-    label: "黄金与实物资产",
+    label: "黄金/商品",
     description: "通胀、地缘风险和美元波动的对冲层，包含黄金、白银与商品篮子。",
   },
   regional_diversifier: {
-    label: "区域分散",
-    description: "在美国以外补充地区风险暴露，服务于全球资产配置。",
+    label: "区域市场",
+    description: "补充不同国家和地区的股票市场敞口，服务于全球分散配置。",
   },
   satellite_theme: {
-    label: "卫星主题",
-    description: "增强收益弹性的主题仓位，应小比例、强约束使用。",
+    label: "行业主题/龙头",
+    description: "行业 ETF 与龙头个股，用于增强收益弹性，应小比例、强约束使用。",
   },
   crypto_optional: {
-    label: "加密可选",
+    label: "加密资产",
     description: "高波动另类资产，只适合小比例或观察仓位。",
   },
   currency_hedge: {
-    label: "汇率对冲",
+    label: "汇率工具",
     description: "用于美元、日元等货币风险表达，不应替代现金管理。",
   },
 };

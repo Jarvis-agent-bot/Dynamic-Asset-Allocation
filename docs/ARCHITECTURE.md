@@ -162,6 +162,17 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 流程：**DB 优先 → 判断新鲜度 → 按需补增量 → 异步写回 DB → 外部失败时降级返回缓存**。
 
+### 4.3.1 Market Session Guard
+
+所有模拟执行入口必须经过 `src/daa/marketSession`：
+
+- `marketSessionCalendar.ts` 负责交易所时区、节假日、半日市、午休和常规交易时段判断。
+- `marketSessionExecutionGuard.ts` 负责把市场状态转换成执行层错误码。
+- 手动交易、再平衡执行和自动执行共享同一个守门结果，避免各链路重复实现交易时段判断。
+- 行情缓存中的 `priceUpdatedAt` 表示真实行情 bar 时间，不表示本次抓取时间；抓取时间保存在缓存行 / raw payload 的 fetched 字段。
+
+当前内置 `US`、`HK`、`CRYPTO`。后续扩展其他市场必须先补日历数据和测试。
+
 支持的资产类别（AssetClass）：`EQUITY` / `ETF` / `BOND` / `COMMODITY` / `CASH` / `CRYPTO` / `FUND` / `INDEX` / `CURRENCY` / `OTHER`。
 支持的市场（Region）：`US` / `HK` / `CN` / `EU` / `JP` / `GLOBAL` / `OTHER`。
 

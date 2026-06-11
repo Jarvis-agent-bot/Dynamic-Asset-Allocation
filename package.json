@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "calendar:check": "vitest run src/daa/__tests__/exchangeCalendarMaintenance.test.ts",
     "test:daa-e2e-chain-gate-v0": "pnpm run gates",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "gates": "pnpm test && pnpm run typecheck && pnpm run build:check",

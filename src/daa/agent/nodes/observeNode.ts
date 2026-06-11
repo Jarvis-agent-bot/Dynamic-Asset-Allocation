@@ -8,6 +8,7 @@ import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
 import { listDaaFxRates } from "@/src/daa/store/fxStore";
+import { summarizeMarketSessionsForAssetKeys } from "@/src/daa/marketSession/marketSessionSnapshot";
 import { buildAssetUniverseViewRows } from "@/src/daa/modules/workbench/assetUniverseService";
 import {
   buildFxLookupToBase,
@@ -162,6 +163,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       })),
     ];
     const focusAssetKeys = Array.from(new Set(focusAssets.map((asset) => asset.assetKey).filter(Boolean)));
+    market.sessions = summarizeMarketSessionsForAssetKeys({ assetKeys: focusAssetKeys });
     let thesisCoverageCreated = 0;
     try {
       const stalenessDays = agentConfig?.thesisStalenessDays ?? 7;

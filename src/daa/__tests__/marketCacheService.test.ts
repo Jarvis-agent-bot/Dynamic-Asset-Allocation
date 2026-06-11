@@ -159,7 +159,7 @@ describe("market-cache-service-v1", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response("{}", { status: 429 }))
-      .mockResolvedValueOnce(new Response(buildChartPayload(321.45), { status: 200 }));
+      .mockResolvedValueOnce(new Response(buildChartPayload(321.45, new Date().toISOString()), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await getMarketPricesWithCache({
@@ -172,6 +172,24 @@ describe("market-cache-service-v1", () => {
     expect(result["US::MSFT"]?.price).toBe(321.45);
     expect(result["US::MSFT"]?.priceStatus).toBe("fresh");
     expect(vi.mocked(appendDaaMarketPriceHistoryRows)).toHaveBeenCalledTimes(1);
+  });
+
+  it("latest close 使用行情 bar 日期作为 priceUpdatedAt，而不是抓取时间", async () => {
+    const fetchMock = vi.fn(async () => new Response(buildChartPayload(195, "2026-06-05T20:00:00.000Z"), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getMarketPricesWithCache({
+      assets: [{ market: "US", symbol: "AAPL", currency: "USD" }],
+      allowRefresh: true,
+      forceRefresh: true,
+      refreshBudget: 1,
+      freshSec: 60,
+      serveStaleSec: 7 * 24 * 3600,
+    });
+
+    expect(result["US::AAPL"]?.price).toBe(195);
+    expect(result["US::AAPL"]?.priceUpdatedAt).toBe("2026-06-05T20:00:00.000Z");
+    expect(result["US::AAPL"]?.priceStatus).toBe("stale");
   });
 
   it("刷新失败时会从 history 回捞最后成功价并标记 stale", async () => {

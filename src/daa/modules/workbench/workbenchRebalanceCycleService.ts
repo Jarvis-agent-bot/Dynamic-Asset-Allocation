@@ -20,6 +20,7 @@ import {
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
+import { resolveMarketExecutionGuard } from "@/src/daa/marketSession/marketSessionExecutionGuard";
 import { buildInvestmentIntents } from "@/src/daa/modules/intents/intentBuilder";
 import { buildPortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateService";
 import { buildProposalPlan } from "@/src/daa/modules/proposal-planner/proposalPlanner";
@@ -1121,6 +1122,32 @@ export async function executeWorkbenchRebalanceCycle(input: {
   });
 
   const createdTicketIds: string[] = [];
+  const blockedExecutionRow = executionRows
+    .map((row) => {
+      const parsed = parseDaaAssetKey(row.assetKey);
+      const guard = resolveMarketExecutionGuard({
+        market: parsed?.market || "US",
+        symbol: row.symbol,
+        orderType: "market",
+      });
+      return guard.allowed ? null : { row, guard };
+    })
+    .find((item): item is { row: (typeof executionRows)[number]; guard: ReturnType<typeof resolveMarketExecutionGuard> } => Boolean(item));
+
+  if (blockedExecutionRow) {
+    await patchDaaRebalanceCycle({
+      cycleId: input.cycleId,
+      status: "reviewing",
+      notes: `${cycle.notes || ""}\n[market-session] ${blockedExecutionRow.guard.message}`.trim(),
+    });
+    throw new Error(`MARKET_CLOSED:${JSON.stringify({
+      code: blockedExecutionRow.guard.code,
+      symbol: blockedExecutionRow.row.symbol,
+      marketStatus: blockedExecutionRow.guard.status,
+      message: blockedExecutionRow.guard.message,
+    })}`);
+  }
+
   for (const row of executionRows) {
     const ticketId = await executeWorkbenchProposalByRoute({
       cycleId: input.cycleId,

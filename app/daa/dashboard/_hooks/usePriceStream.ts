@@ -11,6 +11,14 @@ export type PriceUpdate = {
   delta: number;
   currency: string;
   source?: string;
+  marketSession?: {
+    market: string;
+    isOpen: boolean;
+    reasonCode: string;
+    localDate: string;
+    localTime: string;
+    reasonZh: string;
+  };
   /** 价格方向: "up" | "down" | "flat" */
   direction: "up" | "down" | "flat";
 };
@@ -58,7 +66,7 @@ export function usePriceStream(assetKeys: string[]): StreamState {
     const keys = assetKeysRef.current;
     if (keys.length === 0) return;
 
-    const url = `/api/daa/stream/prices?assets=${keys.join(",")}`;
+    const url = `/api/daa/stream/prices?assets=${keys.map(encodeURIComponent).join(",")}`;
     const source = new EventSource(url);
     sourceRef.current = source;
 
@@ -79,13 +87,21 @@ export function usePriceStream(assetKeys: string[]): StreamState {
           setState((prev) => {
             const next = new Map(prev.prices);
             for (const [key, update] of Object.entries(parsed.data)) {
-              const u = update as { price: number; ts: string; delta: number; currency: string; source?: string };
+              const u = update as {
+                price: number;
+                ts: string;
+                delta: number;
+                currency: string;
+                source?: string;
+                marketSession?: PriceUpdate["marketSession"];
+              };
               next.set(key, {
                 price: u.price,
                 ts: u.ts,
                 delta: u.delta,
                 currency: u.currency,
                 source: u.source,
+                marketSession: u.marketSession,
                 direction: u.delta > 0 ? "up" : u.delta < 0 ? "down" : "flat",
               });
             }

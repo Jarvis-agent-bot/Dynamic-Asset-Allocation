@@ -10,13 +10,17 @@
 
 import { batchReadAssetPriceSnapshots, type AssetPriceSnapshot } from "@/src/daa/store/assetUniverseStore";
 import { appendDaaMarketPriceHistoryRows, upsertDaaMarketPriceSnapshots } from "@/src/daa/store/daaStorePg";
+import {
+  summarizeMarketSessionsForMarkets,
+  type MarketSessionSnapshot,
+} from "@/src/daa/marketSession/marketSessionSnapshot";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { getYahooRealtimeQuoteHub, type YahooRealtimePriceUpdate } from "@/src/market/yahooRealtime";
 
 type PriceUpdateEvent = {
   type: "price_update";
-  data: Record<string, { price: number; ts: string; delta: number; currency: string; source?: string }>;
+  data: Record<string, { price: number; ts: string; delta: number; currency: string; source?: string; marketSession?: MarketSessionSnapshot }>;
 };
 
 type HeartbeatEvent = {
@@ -155,12 +159,20 @@ function subscribeYahooRealtimePrices(
 function diffPriceSnapshots(
   prev: Map<string, AssetPriceSnapshot>,
   curr: AssetPriceSnapshot[],
+  marketSessionByMarket: Map<string, MarketSessionSnapshot> = new Map(),
 ): PriceUpdateEvent | null {
   const changes: PriceUpdateEvent["data"] = {};
   let hasChange = false;
 
   for (const snap of curr) {
     const prevSnap = prev.get(snap.assetKey);
+    if (prevSnap) {
+      const prevTs = Date.parse(prevSnap.priceUpdatedAt || "");
+      const currTs = Date.parse(snap.priceUpdatedAt || "");
+      if (Number.isFinite(prevTs) && Number.isFinite(currTs) && currTs < prevTs) {
+        continue;
+      }
+    }
     if (!prevSnap || prevSnap.lastPrice !== snap.lastPrice || prevSnap.priceUpdatedAt !== snap.priceUpdatedAt) {
       const delta = prevSnap ? snap.lastPrice - prevSnap.lastPrice : 0;
       changes[snap.assetKey] = {
@@ -168,6 +180,7 @@ function diffPriceSnapshots(
         ts: snap.priceUpdatedAt,
         delta,
         currency: snap.currency,
+        marketSession: marketSessionByMarket.get(parseAssetKey(snap.assetKey)?.market ?? ""),
       };
       hasChange = true;
     }
@@ -188,7 +201,7 @@ export function createPriceStream(
   assetKeys: string[],
   intervalMs = 3000,
   maxDurationMs = 5 * 60 * 1000,
-  opts: { realtimeSubscribe?: RealtimePriceSubscription } = {},
+  opts: { realtimeSubscribe?: RealtimePriceSubscription; marketSessionNow?: Date } = {},
 ): ReadableStream<Uint8Array> | null {
   // 连接限制检查
   if (activeStreamCount >= MAX_GLOBAL_STREAMS) {
@@ -203,13 +216,23 @@ export function createPriceStream(
   let cleaned = false;
   const prevSnapshots = new Map<string, AssetPriceSnapshot>();
   let unsubscribeRealtime: (() => void) | null = null;
+  const marketSessions = summarizeMarketSessionsForMarkets({
+    markets: buildRealtimeAssets(assetKeys).map((asset) => asset.market),
+    now: opts.marketSessionNow,
+  });
+  const marketSessionByMarket = new Map(marketSessions.map((row) => [row.market, row]));
 
   function enqueuePriceUpdate(
     controller: ReadableStreamDefaultController<Uint8Array>,
     input: { assetKey: string; price: number; ts: string; currency: string; source?: string; fallbackDelta?: number },
   ) {
     const prev = prevSnapshots.get(input.assetKey);
-    const delta = prev ? input.price - prev.lastPrice : (input.fallbackDelta ?? 0);
+    const market = parseAssetKey(input.assetKey)?.market ?? "";
+    const delta = Number.isFinite(input.fallbackDelta)
+      ? input.fallbackDelta!
+      : prev
+        ? input.price - prev.lastPrice
+        : 0;
     const event: PriceUpdateEvent = {
       type: "price_update",
       data: {
@@ -219,6 +242,7 @@ export function createPriceStream(
           delta,
           currency: input.currency,
           source: input.source,
+          marketSession: marketSessionByMarket.get(market),
         },
       },
     };
@@ -270,7 +294,7 @@ export function createPriceStream(
 
         try {
           const snapshots = await batchReadAssetPriceSnapshots(assetKeys);
-          const diff = diffPriceSnapshots(prevSnapshots, snapshots);
+          const diff = diffPriceSnapshots(prevSnapshots, snapshots, marketSessionByMarket);
 
           if (diff) {
             const sseData = `data: ${JSON.stringify(diff)}\n\n`;

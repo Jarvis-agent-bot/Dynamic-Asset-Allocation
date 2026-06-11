@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/src/daa/modules/workbench/executionGateway", () => ({
   executeRebalanceViaGateway: vi.fn(async () => ({ logs: [] })),
@@ -60,6 +60,11 @@ function policySnapshot(action: PolicyDecisionSnapshot["decision"]["action"]): P
 describe("auto-rebalance-execution-policy-gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.setSystemTime(new Date("2026-06-08T14:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("policy 未授权自动执行时阻断执行网关", async () => {
@@ -202,6 +207,47 @@ describe("auto-rebalance-execution-policy-gate", () => {
     expect(result.blockedReason).toContain("最近 24 小时内已有 BUY 成交");
     expect(executeRebalanceViaGateway).not.toHaveBeenCalledWith(expect.objectContaining({
       cycleId: "cycle-agent-stability",
+    }));
+  });
+
+  it("自动执行遇到闭市市场时阻断，不进入执行网关", async () => {
+    vi.setSystemTime(new Date("2026-06-08T13:00:00.000Z"));
+
+    const result = await executeAutoRebalanceCycle({
+      cycle: {
+        cycleId: "cycle-market-closed",
+        proposals: [{
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 3,
+          suggestedNotional: 300,
+          price: 100,
+          reason: "test",
+          selected: true,
+          hfContribution: null,
+        }],
+        riskCheck: { overallStatus: "pass", items: [] },
+        policySnapshot: policySnapshot("authorize_auto_execute"),
+      },
+      systemConfig: normalizeSystemConfig({
+        policy: {
+          execution: {
+            autoGenerateEnabled: true,
+            autoExecuteEnabled: true,
+          },
+        },
+      }),
+      triggerSource: "cron_drift_check",
+      totalEquity: 10_000,
+    });
+
+    expect(result.executed).toBe(false);
+    expect(result.blockedReason).toContain("当前不可执行");
+    expect(executeRebalanceViaGateway).not.toHaveBeenCalledWith(expect.objectContaining({
+      cycleId: "cycle-market-closed",
     }));
   });
 });

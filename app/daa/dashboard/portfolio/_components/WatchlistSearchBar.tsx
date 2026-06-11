@@ -203,20 +203,21 @@ function FeaturedAssetsDialog(props: {
   const [groups, setGroups] = useState<WorkbenchFeaturedAssetGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [role, setRole] = useState("ALL");
+  const [market, setMarket] = useState("ALL");
   const [assetClass, setAssetClass] = useState("ALL");
   const [addingKey, setAddingKey] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await props.onListFeaturedAssets({ role, market: "ALL", assetClass, limitPerRole: 20 });
+      const data = await props.onListFeaturedAssets({ role, market, assetClass, limitPerRole: 20 });
       setGroups(Array.isArray(data.groups) ? data.groups : []);
     } catch {
       setGroups([]);
     } finally {
       setLoading(false);
     }
-  }, [role, assetClass, props.onListFeaturedAssets]);
+  }, [role, market, assetClass, props.onListFeaturedAssets]);
 
   useEffect(() => {
     if (props.open) void loadData();
@@ -254,19 +255,28 @@ function FeaturedAssetsDialog(props: {
 
   const ROLES = [
     { value: "ALL", label: "全部" },
-    { value: "cash_buffer", label: "现金短债" },
-    { value: "core_equity", label: "核心股票" },
-    { value: "defensive_bond", label: "防守债券" },
-    { value: "real_asset", label: "黄金商品" },
-    { value: "regional_diversifier", label: "区域分散" },
-    { value: "satellite_theme", label: "卫星主题" },
-    { value: "crypto_optional", label: "加密可选" },
-    { value: "currency_hedge", label: "汇率对冲" },
+    { value: "cash_buffer", label: "现金/短债" },
+    { value: "core_equity", label: "核心宽基" },
+    { value: "defensive_bond", label: "债券/收益" },
+    { value: "real_asset", label: "黄金/商品" },
+    { value: "regional_diversifier", label: "区域市场" },
+    { value: "satellite_theme", label: "行业主题/龙头" },
+    { value: "crypto_optional", label: "加密资产" },
+    { value: "currency_hedge", label: "汇率工具" },
+  ];
+  const MARKETS = [
+    { value: "ALL", label: "全部市场" },
+    { value: "US", label: "美股/美 ETF" },
+    { value: "HK", label: "港股" },
+    { value: "CN", label: "A 股" },
+    { value: "KR", label: "韩股" },
+    { value: "COMMODITY", label: "商品" },
+    { value: "CRYPTO", label: "加密" },
   ];
   const CLASSES = [
-    { value: "ALL", label: "全部类型" }, { value: "EQUITY", label: "股票" },
-    { value: "ETF", label: "ETF 基金" }, { value: "COMMODITY", label: "商品" },
-    { value: "BOND", label: "债券" }, { value: "CRYPTO", label: "加密" }, { value: "CURRENCY", label: "货币" },
+    { value: "ALL", label: "全部品种" }, { value: "EQUITY", label: "股票" },
+    { value: "ETF", label: "ETF" }, { value: "COMMODITY", label: "商品/黄金" },
+    { value: "BOND", label: "债券/短债" }, { value: "CRYPTO", label: "加密" }, { value: "CURRENCY", label: "货币 ETF" },
   ];
   const marketLabel = (item: WorkbenchFeaturedAssetItem): string => {
     if (item.market === "US") return "美股";
@@ -284,13 +294,13 @@ function FeaturedAssetsDialog(props: {
         accent="indigo"
         className="max-w-[800px] max-h-[80dvh]"
         title="配置候选池"
-        description="按组合角色精选少量高流动性资产，用于构建目标配置。"
+        description="按配置用途、市场和品种筛选高流动性资产，用于构建目标配置。"
         bodyClassName="space-y-4 overflow-y-auto"
       >
         {/* 筛选器 */}
         <div className="flex flex-wrap gap-4">
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">配置角色</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">配置用途</div>
             <div className="flex flex-wrap gap-1.5">
               {ROLES.map((m) => (
                 <DaaSurfaceFilterChip key={m.value} active={role === m.value} onClick={() => { setRole(m.value); }}>
@@ -300,8 +310,18 @@ function FeaturedAssetsDialog(props: {
             </div>
           </div>
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">类型</div>
-            <div className="flex gap-1.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">市场</div>
+            <div className="flex flex-wrap gap-1.5">
+              {MARKETS.map((m) => (
+                <DaaSurfaceFilterChip key={m.value} active={market === m.value} onClick={() => { setMarket(m.value); }}>
+                  {m.label}
+                </DaaSurfaceFilterChip>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">品种</div>
+            <div className="flex flex-wrap gap-1.5">
               {CLASSES.map((c) => (
                 <DaaSurfaceFilterChip key={c.value} active={assetClass === c.value} onClick={() => { setAssetClass(c.value); }}>
                   {c.label}

@@ -241,6 +241,24 @@ curl -X POST -H "x-daa-cron-token: $CRON_TOKEN" \
 | **权益快照** | `daa_equity_snapshots_v2` | **永久** |
 | **Agent 记忆** | `daa_agent_memory` | 按 `strength` 衰减 + 僵尸清理（见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)） |
 
+### 6.1 Exchange Calendar Maintenance
+
+每年年末需要检查下一年度交易所日历：
+
+- `src/daa/marketSession/exchangeCalendarData.ts`
+- 美股：常规休市日与半日市。
+- 港股：公众假期、交易所特别休市、午休保持 12:00-13:00。
+- 如果交易所有临时休市，先更新该文件并部署，再允许自动执行恢复。
+
+维护后运行：
+
+```bash
+pnpm run calendar:check
+pnpm vitest run src/daa/__tests__/marketSessionCalendar.test.ts
+```
+
+未配置市场默认不能执行市价模拟成交，避免把未知市场误当 24/7。
+
 ---
 
 ## 7. 备份
