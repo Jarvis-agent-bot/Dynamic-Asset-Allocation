@@ -433,6 +433,7 @@ export async function getMarketPricesWithCache(input: {
               price: fetchResult.price,
               status: "fresh",
               priceUpdatedAt: fetchResult.priceAsOf || fetchedAt,
+              fetchedAt,
               source: `${source}:yfinance:${yfinanceSymbol}`,
               errorCode: null,
               errorMessage: null,
@@ -449,6 +450,7 @@ export async function getMarketPricesWithCache(input: {
               price: fetchResult.price,
               currency: current.currency || existing?.currency || "USD",
               source: `${source}:yfinance:${yfinanceSymbol}`,
+              fetchedAt,
               rawRefId,
             },
           ]);
@@ -471,6 +473,7 @@ export async function getMarketPricesWithCache(input: {
             price: fallbackPrice,
             status: fallbackStatus,
             priceUpdatedAt: fallbackUpdatedAt,
+            fetchedAt,
             source: fallbackSource,
             errorCode: fetchResult.errorCode,
             errorMessage: fetchResult.errorMessage,

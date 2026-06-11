@@ -223,6 +223,7 @@ function mapMarketPriceHistoryRow(row: Record<string, unknown>): DaaStoreMarketP
     price: Math.max(0, toFiniteNumber(row.price, 0)),
     currency: normalizeUpper(row.currency, "USD"),
     source: normalizeText(row.source, "market_cache"),
+    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
     rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
   };
 }
@@ -457,7 +458,9 @@ function mapMarketIndicatorSnapshotRow(row: Record<string, unknown>): DaaStoreMa
   };
 }
 
-export async function upsertDaaMarketPriceSnapshots(rows: Array<Partial<DaaStoreMarketPriceSnapshot>>): Promise<DaaStoreMarketPriceSnapshot[]> {
+export async function upsertDaaMarketPriceSnapshots(
+  rows: Array<Partial<DaaStoreMarketPriceSnapshot> & { fetchedAt?: string | null }>,
+): Promise<DaaStoreMarketPriceSnapshot[]> {
   if (!rows.length) return [];
   await ensureDaaMarketCacheSchemaPg();
   return withDaaPgClient(async ({ query }) => {
@@ -472,8 +475,9 @@ export async function upsertDaaMarketPriceSnapshots(rows: Array<Partial<DaaStore
         const currency = normalizeUpper(row.currency, "USD");
         const price = Math.max(0, toFiniteNumber(row.price, 0));
         const status = normalizeMarketPriceStatus(row.status, price > 0 ? "fresh" : "missing");
-        const priceUpdatedAt = row.priceUpdatedAt ? toIsoString(row.priceUpdatedAt, new Date().toISOString()) : (price > 0 ? new Date().toISOString() : null);
-        const persistedFetchedAt = priceUpdatedAt || new Date().toISOString();
+        const nowIso = new Date().toISOString();
+        const priceUpdatedAt = row.priceUpdatedAt ? toIsoString(row.priceUpdatedAt, nowIso) : (price > 0 ? nowIso : null);
+        const persistedFetchedAt = row.fetchedAt ? toIsoString(row.fetchedAt, nowIso) : nowIso;
         const source = normalizeText(row.source, "market_cache");
         const errorCode = row.errorCode == null ? null : normalizeText(row.errorCode) || null;
         const errorMessage = row.errorMessage == null ? null : normalizeText(row.errorMessage) || null;
@@ -610,6 +614,7 @@ export async function appendDaaMarketPriceHistoryRows(rows: Array<Partial<DaaSto
         const price = Math.max(0, toFiniteNumber(row.price, 0));
         if (!symbol || !(price > 0)) continue;
         const ts = toIsoString(row.ts, new Date().toISOString());
+        const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
         const currency = normalizeUpper(row.currency, "USD");
         const source = normalizeText(row.source, "market_cache");
         const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
@@ -624,7 +629,7 @@ export async function appendDaaMarketPriceHistoryRows(rows: Array<Partial<DaaSto
              source = EXCLUDED.source,
              fetched_at = EXCLUDED.fetched_at,
              raw_ref_id = EXCLUDED.raw_ref_id`,
-          [provider, market, symbol, ts, price, currency, source, ts, rawRefId],
+          [provider, market, symbol, ts, price, currency, source, fetchedAt, rawRefId],
         );
         inserted += 1;
       }

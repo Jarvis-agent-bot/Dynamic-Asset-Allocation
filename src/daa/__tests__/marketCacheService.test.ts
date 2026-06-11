@@ -86,6 +86,7 @@ function buildHistoryFixture(
     price: 188.12,
     currency: "USD",
     source: "market_cache",
+    fetchedAt: "2026-03-06T00:05:00.000Z",
     rawRefId: null,
     ...overrides,
   };
@@ -190,6 +191,33 @@ describe("market-cache-service-v1", () => {
     expect(result["US::AAPL"]?.price).toBe(195);
     expect(result["US::AAPL"]?.priceUpdatedAt).toBe("2026-06-05T20:00:00.000Z");
     expect(result["US::AAPL"]?.priceStatus).toBe("stale");
+  });
+
+  it("写入快照时区分行情时间和本次抓取时间", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(buildChartPayload(195, "2026-06-05T20:00:00.000Z"), { status: 200 })));
+
+    const beforeMs = Date.now();
+    await getMarketPricesWithCache({
+      assets: [{ market: "US", symbol: "AAPL", currency: "USD" }],
+      allowRefresh: true,
+      forceRefresh: true,
+      refreshBudget: 1,
+    });
+    const afterMs = Date.now();
+
+    const latestUpsertInput = vi.mocked(upsertDaaMarketPriceSnapshots).mock.calls.at(-1)?.[0]?.[0] as Record<string, unknown> | undefined;
+    expect(latestUpsertInput?.priceUpdatedAt).toBe("2026-06-05T20:00:00.000Z");
+    const fetchedAtMs = Date.parse(String(latestUpsertInput?.fetchedAt || ""));
+    expect(fetchedAtMs).toBeGreaterThanOrEqual(beforeMs);
+    expect(fetchedAtMs).toBeLessThanOrEqual(afterMs);
+    expect(latestUpsertInput?.fetchedAt).not.toBe(latestUpsertInput?.priceUpdatedAt);
+
+    const latestHistoryInput = vi.mocked(appendDaaMarketPriceHistoryRows).mock.calls.at(-1)?.[0]?.[0] as Record<string, unknown> | undefined;
+    expect(latestHistoryInput?.ts).toBe("2026-06-05T20:00:00.000Z");
+    const historyFetchedAtMs = Date.parse(String(latestHistoryInput?.fetchedAt || ""));
+    expect(historyFetchedAtMs).toBeGreaterThanOrEqual(beforeMs);
+    expect(historyFetchedAtMs).toBeLessThanOrEqual(afterMs);
+    expect(latestHistoryInput?.fetchedAt).not.toBe(latestHistoryInput?.ts);
   });
 
   it("刷新失败时会从 history 回捞最后成功价并标记 stale", async () => {

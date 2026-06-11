@@ -168,6 +168,7 @@ export type DaaStoreMarketPriceHistory = {
   price: number;
   currency: string;
   source: string;
+  fetchedAt: string;
   rawRefId: string | null;
 };
 
