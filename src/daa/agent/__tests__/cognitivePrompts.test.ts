@@ -8,9 +8,8 @@ import {
   buildReviewPrompt,
   buildStrategyAdvisorPrompt,
   buildSurfacePrompt,
-  formatBriefingForTelegram,
 } from "@/src/daa/agent/cognitivePrompts";
-import type { ResearchThread, DailyBriefing } from "@/src/daa/agent/cognitiveTypes";
+import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 
 // ── 测试数据 ──
 
@@ -264,262 +263,50 @@ describe("buildStrategyAdvisorPrompt", () => {
   });
 });
 
-// ── formatBriefingForTelegram ──
 
-describe("formatBriefingForTelegram", () => {
-  it("格式化含所有板块的 briefing", () => {
-    const briefing: DailyBriefing = {
-      surprises: [{ title: "测试意外", description: "描述", relatedThesisId: null, severityScore: 8, suggestedAction: "行动" }],
-      cognitionGaps: [{ assetKey: "US::NVDA", portfolioWeight: 0.15, daysSinceLastInvestigation: 20, uncertaintyReason: "原因", suggestedInvestigation: "建议" }],
-      mindChangeConditions: [{ thesisTitle: "测试论点", currentConviction: "high", conditions: ["条件1"], monitoringIndicators: ["VIX"] }],
-      thesesUpdated: 2,
-      memoriesCreated: 1,
-      totalTokens: 5000,
-      estimatedCost: 0.001,
-    };
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 5000, durationMs: 3000, thesesCount: 10, memoriesCount: 20 });
-    expect(html).toContain("Agent 日报");
-    expect(html).toContain("测试意外");
-    expect(html).toContain("英伟达 NVDA");
-    expect(html).toContain("测试论点");
-  });
+// ── 输出长度/标题规范（推送语义化重构） ──
 
-  it("组合概览优先使用基准货币估值，避免港股原币种金额放大", () => {
-    const briefing: DailyBriefing = {
-      surprises: [],
-      cognitionGaps: [],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-    };
-    const html = formatBriefingForTelegram(briefing, {
-      totalTokens: 0,
-      durationMs: 1000,
-      thesesCount: 1,
-      memoriesCount: 0,
-      portfolio: {
-        totalEquity: 10_200,
-        cashPct: 0.9,
-        holdings: [{
-          assetKey: "HK::0388.HK",
-          symbol: "0388.HK",
-          holdingQty: 20,
-          lastPrice: 390,
-          valuationBase: 1_000,
-          weightPct: 0.098,
-          unrealizedPnlPct: 0.032,
-        }],
-      },
+describe("prompt 输出规范约束", () => {
+  it("prioritize prompt 要求新论点标题为 ≤16 字名词短语，禁止疑问句", () => {
+    const prompt = buildPrioritizePrompt({
+      portfolio: mockPortfolio,
+      market: mockMarket,
+      news: { items: [] },
+      theses: [mockThread],
     });
-
-    expect(html).toContain("持仓 <code>$1.0K</code>");
-    expect(html).toContain("香港交易所 0388.HK 9.8% $1.0K");
-    expect(html).not.toContain("$7.8K");
+    expect(prompt).toContain("16 个字");
+    expect(prompt).toContain("名词短语");
+    expect(prompt).toContain("禁止");
+    // few-shot 示例本身必须是短标题
+    expect(prompt).toContain("波动率飙升避险");
+    expect(prompt).not.toContain("市场波动率飙升的避险策略");
   });
 
-  it("空 briefing 也能正常格式化", () => {
-    const briefing: DailyBriefing = {
+  it("surface prompt 约束 surprises/conditions 的长度，避免推送被硬截断", () => {
+    const prompt = buildSurfacePrompt({
+      portfolio: mockPortfolio,
+      market: mockMarket,
+      theses: [mockThread],
+      surprises: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+    });
+    expect(prompt).toContain("长度规范");
+    expect(prompt).toContain("80 字");
+    expect(prompt).toContain("60 字");
+  });
+
+  it("策略顾问 prompt 约束 reasoning 长度", () => {
+    const prompt = buildStrategyAdvisorPrompt({
+      holdings: [],
+      watchlist: [],
+      theses: [],
       surprises: [],
       cognitionGaps: [],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-    };
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 0, memoriesCount: 0 });
-    expect(html).toContain("没有发现会改变当前判断的新信号");
-  });
-
-  it("有自动跟踪但无目标权重计划时，明确说明不会直接调仓", () => {
-    const briefing: DailyBriefing = {
-      surprises: [],
-      cognitionGaps: [{
-        assetKey: "US::NVDA",
-        portfolioWeight: 0.107,
-        daysSinceLastInvestigation: 2,
-        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向（权重 10.7%，上次有效调查 2 天前）",
-        suggestedInvestigation: "关注维度：组合、资产配置、宏观",
-      }],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-      strategyOverlay: {
-        generatedAt: "2026-04-27T00:00:00.000Z",
-        agentRunId: "run-1",
-        regimeOverride: null,
-        targetAllocationPlan: null,
-      },
-    };
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
-    expect(html).toContain("策略建议");
-    expect(html).toContain("本轮未形成高置信度目标权重计划");
-    expect(html).toContain("不会仅因观察态论点或观察列表存在而直接调仓");
-  });
-
-  it("日报展示自动驾驶覆盖，不再输出规则入场跳过噪声", () => {
-    const briefing: DailyBriefing = {
-      surprises: [],
-      cognitionGaps: [],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-      autopilotCoverage: {
-        holdingAssets: 2,
-        watchlistCandidates: 16,
-        watchlistTargetedAssets: 0,
-        brainPlanIntents: 0,
-        acceptedBrainPlanIntents: 0,
-      },
-    };
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
-    expect(html).toContain("自动驾驶覆盖");
-    expect(html).toContain("观察候选 <code>16</code>");
-    expect(html).toContain("已设目标 <code>0</code>");
-    expect(html).not.toContain("入场候选就绪");
-    expect(html).not.toContain("规则入场跳过");
-  });
-
-  it("有目标权重计划时，展示 Agent 的目标权重、置信度和理由", () => {
-    const briefing: DailyBriefing = {
-      surprises: [],
-      cognitionGaps: [],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-      strategyOverlay: {
-        generatedAt: "2026-04-27T00:00:00.000Z",
-        agentRunId: "run-1",
-        regimeOverride: null,
-        targetAllocationPlan: {
-          reasoning: "NVDA 论点失效风险抬升，先降至观察仓。",
-          intents: [{
-            assetKey: "US::NVDA",
-            symbol: "NVDA",
-            proposedTargetWeightPct: 3,
-            confidence: 86,
-            reasoning: "论点证据转弱",
-          }],
-        },
-      },
-    };
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
-    expect(html).toContain("目标权重: NVDA→3.0% (86%)");
-    expect(html).toContain("理由: NVDA 论点失效风险抬升");
-  });
-
-  it("日报长文本按句子收口，避免硬截断成半句话", () => {
-    const longDescription = "在仅持有NVDA与0388.HK两只股票的情况下，现金占比达到80%，显著高于常规防守配置区间，组合主要矛盾已经从选股错误转为暴露不足，需要优先复核建仓节奏。结合当前市场regime为transitional、VIX仅18.02且SPY过去90天回报为正同时最大回撤温和所以这里是非常长的第二句话没有可用句号，旧逻辑会直接切断。";
-    const longReasoning = "当前组合现金拖累较高，但已有NVDA与0388.HK均接近单仓上限，因此目标权重计划应优先把现有超限仓位拉回规则边界，再用SPY承接一部分核心市场暴露，避免把新增风险继续压到单一高弹性资产上，同时保留足够现金缓冲来应对VIX快速上行、港股流动性回落、跨市场相关性上升以及模拟仓执行回执延迟。更稳妥的规则参数建议是：将现有超限仓位小幅回落到上限以下，并把观察列表中的核心宽基资产纳入分步买入，随后根据执行回执和风险检查结果逐步提高目标权重。如果仍然不足，再由下一轮自动驾驶重新评估。";
-    const briefing: DailyBriefing = {
-      surprises: [{ title: "现金仓位异常偏高", description: longDescription, relatedThesisId: null, severityScore: 8, suggestedAction: "复核建仓节奏" }],
-      cognitionGaps: [],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-      strategyOverlay: {
-        generatedAt: "2026-04-27T00:00:00.000Z",
-        agentRunId: "run-1",
-        regimeOverride: null,
-        targetAllocationPlan: {
-          reasoning: longReasoning,
-          intents: [{
-            assetKey: "US::SPY",
-            symbol: "SPY",
-            proposedTargetWeightPct: 8,
-            confidence: 76,
-            reasoning: "承接核心市场暴露",
-          }],
-        },
-      },
-    };
-
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
-    expect(html).toContain("需要优先复核建仓节奏。…");
-    expect(html).not.toContain("VIX仅");
-    expect(html).toContain("逐步提高目标权重。…");
-    expect(html).not.toContain("如果仍然不足");
-  });
-
-  it("渲染风险暴露板块（thesisFailureImpacts 存在且达 medium 及以上）", () => {
-    const briefing: DailyBriefing = {
-      surprises: [],
-      cognitionGaps: [],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-      thesisFailureImpacts: [
-        {
-          threadId: "t1",
-          thesisTitle: "超高集中度论点",
-          conviction: "high",
-          affectedAssets: [{ assetKey: "HK::0388.HK", weightPct: 0.875 }],
-          totalExposurePct: 0.875,
-          estimatedLossPct: 0.437,
-          riskLevel: "critical",
-        },
-        // low 级别不应被展示
-        {
-          threadId: "t2",
-          thesisTitle: "小仓位论点",
-          conviction: "medium",
-          affectedAssets: [{ assetKey: "US::SPY", weightPct: 0.03 }],
-          totalExposurePct: 0.03,
-          estimatedLossPct: 0.009,
-          riskLevel: "low",
-        },
-      ],
-    };
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 0, thesesCount: 1, memoriesCount: 0 });
-    expect(html).toContain("风险暴露");
-    expect(html).toContain("严重");
-    expect(html).toContain("超高集中度论点");
-    // 资产标签走 assetRegistry：HK::0388.HK → "香港交易所 0388.HK"
-    expect(html).toContain("香港交易所 0388.HK");
-    expect(html).toContain("相关持仓约 87.5%");
-    expect(html).toContain("优先复核这些资产的目标权重、止损和降仓条件");
-    expect(html).not.toContain("暴露×");
-    expect(html).not.toContain("若失效估损");
-    expect(html).not.toContain("43.7%");
-    // low 级别不展示
-    expect(html).not.toContain("小仓位论点");
-  });
-
-  it("渲染同一资产判断不一致板块（thesisConflicts 存在）", () => {
-    const briefing: DailyBriefing = {
-      surprises: [],
-      cognitionGaps: [],
-      mindChangeConditions: [],
-      thesesUpdated: 0,
-      memoriesCreated: 0,
-      totalTokens: 0,
-      estimatedCost: 0,
-      thesisConflicts: [{
-        thesisA: { id: "a", title: "看多A", conviction: "high" },
-        thesisB: { id: "b", title: "看空A", conviction: "low" },
-        conflictType: "directional",
-        overlappingAssets: ["US::NVDA"],
-        severity: "high",
-        llmAssessment: null,
-      }],
-    };
-    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 0, thesesCount: 2, memoriesCount: 0 });
-    expect(html).toContain("同一资产判断不一致");
-    expect(html).toContain("看多A");
-    expect(html).toContain("看空A");
-    // 资产标签走 assetRegistry：US::NVDA → "英伟达 NVDA"
-    expect(html).toContain("英伟达 NVDA");
+      ruleRegime: "risk_on",
+      defaultDriftThresholdPct: 0.05,
+      maxPositionPct: 0.3,
+    });
+    expect(prompt).toContain("120 字");
   });
 });

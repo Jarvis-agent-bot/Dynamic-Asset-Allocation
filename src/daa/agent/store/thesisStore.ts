@@ -139,6 +139,74 @@ export async function archiveStaleUncertainTheses(staleDays = 7, protectedAssetK
   });
 }
 
+/**
+ * 归档超过 staleDays 天未有效调查的 low conviction thesis。
+ * low conviction 论点本身就是"证据不足/看空倾向待验证"，长期没人调查说明它既没被
+ * 市场证实也没被推翻，留在 active 池里只会在日报复核清单和冲突检测中制造噪声。
+ * 持仓/观察列表资产（protectedAssetKeys）的论点不动，避免与 ensureAssetThesisCoverage
+ * 形成"归档→重建→再归档"的来回churn。
+ */
+export async function archiveStaleLowConvictionTheses(staleDays = 30, protectedAssetKeys: string[] = []): Promise<string[]> {
+  const ownerAccountId = getDaaAccountScopeId();
+  return withDaaPgClient(async ({ query }) => {
+    const protectedKeys = protectedAssetKeys
+      .map((key) => String(key || "").trim())
+      .filter(Boolean);
+    const res = await query<{ id: string }>(
+      `UPDATE daa_research_threads
+       SET status = 'archived', updated_at = now()
+       WHERE owner_account_id = $3
+         AND status = 'active'
+         AND conviction = 'low'
+         AND COALESCE(last_investigated_at, updated_at) < now() - (interval '1 day' * $1)
+         AND (cardinality($2::text[]) = 0 OR NOT (asset_keys && $2::text[]))
+       RETURNING id`,
+      [staleDays, protectedKeys, ownerAccountId],
+    );
+    return res.rows.map(r => r.id);
+  });
+}
+
+/**
+ * 全局活跃论点上限。超限时从 conviction 最弱（uncertain → low）、最久未调查的开始归档，
+ * 永不触碰 high/medium 论点和 protectedAssetKeys（持仓/观察列表）相关论点。
+ * 这是 per-asset 上限（MAX_ACTIVE_THESES_PER_ASSET）和 stale 清扫之外的总量兜底：
+ * 没有它，宏观/已移除资产的论点会无限累积，导致复核积压永远清不完。
+ */
+export async function enforceActiveThesisCap(maxActive = 60, protectedAssetKeys: string[] = []): Promise<string[]> {
+  const ownerAccountId = getDaaAccountScopeId();
+  return withDaaPgClient(async ({ query }) => {
+    const countRes = await query<{ c: number }>(
+      `SELECT COUNT(*)::int AS c FROM daa_research_threads WHERE owner_account_id = $1 AND status = 'active'`,
+      [ownerAccountId],
+    );
+    const active = Number(countRes.rows[0]?.c ?? 0);
+    const excess = active - Math.max(1, maxActive);
+    if (excess <= 0) return [];
+
+    const protectedKeys = protectedAssetKeys
+      .map((key) => String(key || "").trim())
+      .filter(Boolean);
+    const res = await query<{ id: string }>(
+      `UPDATE daa_research_threads
+       SET status = 'archived', updated_at = now()
+       WHERE id IN (
+         SELECT id FROM daa_research_threads
+         WHERE owner_account_id = $3
+           AND status = 'active'
+           AND conviction IN ('uncertain', 'low')
+           AND (cardinality($2::text[]) = 0 OR NOT (asset_keys && $2::text[]))
+         ORDER BY CASE conviction WHEN 'uncertain' THEN 0 ELSE 1 END,
+                  COALESCE(last_investigated_at, updated_at) ASC
+         LIMIT $1
+       )
+       RETURNING id`,
+      [excess, protectedKeys, ownerAccountId],
+    );
+    return res.rows.map(r => r.id);
+  });
+}
+
 export async function getThesisById(id: string): Promise<ResearchThread | null> {
   const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {

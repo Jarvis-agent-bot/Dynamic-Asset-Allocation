@@ -1,5 +1,5 @@
 import { buildAssistantBrainStatusText } from "./assistantBrain";
-import { formatBriefingTextExcerpt } from "@/src/daa/agent/cognitivePrompts";
+import { formatBriefingForChat } from "@/src/daa/agent/briefingPresenter";
 import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
 import { formatMoney, formatPct } from "./agentContext";
 import type { DaaAgentToolContext, DaaAgentToolExecutor, DaaAgentToolResult } from "./agentToolTypes";
@@ -163,46 +163,9 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
       if (!run?.briefing) {
         return { text: "暂无 Agent 日报。请先运行一次 Agent 调查。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
       }
-      const b = run.briefing;
-      const parts: string[] = [`Agent 日报 (${new Date(run.createdAt).toLocaleString("zh-CN")})\n`];
-      if (b.surprises.length > 0) {
-        parts.push("⚡ 需要复核的变化:");
-        for (const s of b.surprises.slice(0, 3)) parts.push(`  [${s.severityScore}/10] ${s.title}: ${s.description}`);
-      } else {
-        parts.push("⚡ 没有发现会改变当前判断的新信号。");
-      }
-      if (b.cognitionGaps.length > 0) {
-        parts.push("\n🔍 论点复核:");
-        for (const g of b.cognitionGaps.slice(0, 3)) {
-          parts.push(`  ${g.assetKey} — ${g.uncertaintyReason}`);
-          if (g.suggestedInvestigation) parts.push(`    ↳ ${g.suggestedInvestigation}`);
-        }
-      }
-      if (b.autopilotCoverage) {
-        const c = b.autopilotCoverage;
-        parts.push("\n🧭 自动驾驶覆盖:");
-        parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 已设目标 ${c.watchlistTargetedAssets} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
-      }
-      if (b.mindChangeConditions.length > 0) {
-        parts.push("\n🔄 改变判断的条件:");
-        for (const m of b.mindChangeConditions.slice(0, 3)) parts.push(`  "${m.thesisTitle}" (${m.currentConviction}): ${m.conditions.slice(0, 2).join("; ")}`);
-      }
-      const overlay = b.strategyOverlay ?? null;
-      const intents = overlay?.targetAllocationPlan?.intents ?? [];
-      if (overlay?.regimeOverride || intents.length > 0 || b.cognitionGaps.length > 0) {
-        parts.push("\n🤖 策略建议:");
-        if (overlay?.regimeOverride) {
-          parts.push(`  Regime: ${overlay.regimeOverride.ruleBasedRegime} → ${overlay.regimeOverride.suggestedRegime} (${overlay.regimeOverride.confidence}%)`);
-        }
-        if (intents.length > 0) {
-          parts.push(`  目标权重: ${intents.slice(0, 4).map(i => `${i.symbol || i.assetKey}→${i.proposedTargetWeightPct.toFixed(1)}% (${i.confidence.toFixed(0)}%)`).join(", ")}`);
-          if (overlay?.targetAllocationPlan?.reasoning) parts.push(`  理由: ${formatBriefingTextExcerpt(overlay.targetAllocationPlan.reasoning, 220)}`);
-        } else if (b.cognitionGaps.length > 0 || (b.autopilotCoverage?.watchlistCandidates ?? 0) > 0) {
-          parts.push("  本轮未形成高置信度目标权重计划；执行层不会仅因观察态论点或观察列表存在而直接调仓。");
-        }
-      }
-      parts.push(`\n📊 论点更新: ${b.thesesUpdated} | 记忆: ${b.memoriesCreated}`);
-      return { text: parts.join("\n"), intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
+      const header = `Agent 日报 (${new Date(run.createdAt).toLocaleString("zh-CN")})\n`;
+      const body = formatBriefingForChat(run.briefing);
+      return { text: `${header}\n${body}`, intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
     } catch {
       return { text: "查询 Agent 日报失败，请稍后重试。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
     }

@@ -26,6 +26,11 @@ import {
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
+/** low conviction 论点超过该天数未有效调查则归档（持仓/观察列表资产除外） */
+const LOW_CONVICTION_STALE_DAYS = 30;
+/** 全局活跃论点上限；超限时从最弱、最陈旧的非持仓论点开始归档 */
+const MAX_ACTIVE_THESES_GLOBAL = 60;
+
 export async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
   try {
@@ -173,6 +178,19 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       }
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.archiveStale", e);
+    }
+    // 论点 GC：low conviction 久未调查归档 + 全局活跃总量兜底（防止复核积压无限增长）
+    try {
+      const archivedLow = await thesisStore.archiveStaleLowConvictionTheses(LOW_CONVICTION_STALE_DAYS, focusAssetKeys);
+      if (archivedLow.length > 0) {
+        logSwallowed("cognitiveGraph.observe.archiveStaleLow", new Error(`archived ${archivedLow.length} stale non-focus low-conviction theses`));
+      }
+      const capped = await thesisStore.enforceActiveThesisCap(MAX_ACTIVE_THESES_GLOBAL, focusAssetKeys);
+      if (capped.length > 0) {
+        logSwallowed("cognitiveGraph.observe.thesisCap", new Error(`archived ${capped.length} theses over global cap ${MAX_ACTIVE_THESES_GLOBAL}`));
+      }
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.thesisGc", e);
     }
     try {
       const coverage = await ensureAssetThesisCoverage(focusAssets);

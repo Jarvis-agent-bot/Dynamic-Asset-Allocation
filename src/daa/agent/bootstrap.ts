@@ -133,7 +133,7 @@ export async function bootstrapTheses(assets: BootstrapAsset[]): Promise<{
 请输出严格 JSON：
 \`\`\`json
 {
-  "title": "研究线索标题（简短，如'看多NVDA的AI增长逻辑'）",
+  "title": "研究线索标题（≤16字名词短语，如'NVDA AI 增长逻辑'，禁止写成疑问句）",
   "thesis": "当前核心判断（1-2句话）",
   "conviction": "medium",
   "invalidationConditions": "什么条件会推翻这个判断",

@@ -4,12 +4,12 @@
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
 import type { DailyBriefing, ThesisFailureImpact, ThesisConflict, AgentStrategyOverlay, CognitionGap, MindChangeCondition, Surprise } from "@/src/daa/agent/cognitiveTypes";
-import { buildSurfacePrompt, buildStrategyAdvisorPrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import { buildSurfacePrompt, buildStrategyAdvisorPrompt } from "@/src/daa/agent/cognitivePrompts";
+import { formatBriefingForTelegram } from "@/src/daa/agent/briefingPresenter";
 import { callDeepSeekJson } from "@/src/daa/agent/helpers/llm";
 import { validateShape, shouldCircuitBreak } from "@/src/daa/agent/helpers/validation";
 import { DEEPSEEK_AVG_COST_PER_TOKEN } from "@/src/daa/agent/helpers/constants";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
-import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
@@ -98,7 +98,6 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
   const t0 = Date.now();
   try {
     const theses = await thesisStore.getActiveTheses();
-    const memCount = await memoryStore.countMemories();
 
     // P0-3: 读取上次成功运行的 briefing 用于对比
     let previousBriefing: { mindChangeConditions: MindChangeCondition[] } | null = null;
@@ -447,10 +446,6 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
       const { sendTelegramByEnv } = await import("@/src/daa/notify/telegram");
       const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
       const tgText = formatBriefingForTelegram(briefing, {
-        totalTokens: briefing.totalTokens,
-        durationMs: Date.now() - t0,
-        thesesCount: theses.length,
-        memoriesCount: memCount,
         portfolio: {
           holdings: portfolio.holdings,
           totalEquity: portfolio.totalEquity,

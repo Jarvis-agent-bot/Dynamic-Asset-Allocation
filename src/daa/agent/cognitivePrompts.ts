@@ -6,9 +6,8 @@
  */
 
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
-import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
+import type { ResearchThread, AgentMemory, Surprise, ToolCallRecord, ReasoningTrace, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, WatchlistSnapshot, NewsSnapshot, NewsIntelligenceSnapshot } from "@/src/daa/agent/cognitiveState";
-import { formatAssetLabel, formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 
 // ── Prioritize 节点 Prompt ──
 
@@ -138,6 +137,10 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
    - 历史准确率低（<50%）的论点需要重新审视
 2. 如果发现任何不在现有论点中的重大变化，建议创建新研究线索。
 
+## 标题规范（必须遵守）
+- newThreads.title 必须是不超过 16 个字的**名词短语**（如"科技集中度 vs 利率上行"、"波动率飙升避险"）
+- **禁止**把标题写成完整疑问句或长句（如"XX是否需要在YY环境下系统性ZZ"）；详细问题和推理写进 initialThesis
+
 ## 输出格式（严格 JSON）
 \`\`\`json
 {
@@ -150,8 +153,8 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
   ],
   "newThreads": [
     {
-      "title": "新研究线索标题",
-      "initialThesis": "初始判断",
+      "title": "≤16字名词短语标题",
+      "initialThesis": "初始判断（详细问题写在这里）",
       "assetKeys": ["US::AAPL"],
       "tags": ["个股"]
     }
@@ -167,7 +170,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
     {"threadId": null, "reason": "VIX 突破25但无对应宏观避险论点", "dataNeeded": ["technical"]}
   ],
   "newThreads": [
-    {"title": "市场波动率飙升的避险策略", "initialThesis": "VIX 突破25暗示市场恐慌情绪升温，需评估是否增加避险仓位", "assetKeys": ["US::GLD", "US::TLT"], "tags": ["宏观", "避险"]}
+    {"title": "波动率飙升避险", "initialThesis": "VIX 突破25暗示市场恐慌情绪升温，需评估是否增加 GLD/TLT 等避险仓位来对冲股票回撤风险", "assetKeys": ["US::GLD", "US::TLT"], "tags": ["宏观", "避险"]}
   ]
 }
 \`\`\`
@@ -395,6 +398,11 @@ ${prevBriefingText}
 1. **需要复核的变化**：最不符合现有认知、或可能改变仓位假设的变化（从上面的 surprises 和工具调用结果中总结）。如果没有实质变化，**必须**返回空数组 \`[]\`，**不要**生成"市场与预期一致"等占位条目；系统会在输出为空时自动展示 fallback 文案。仅当 severityScore >= 3 的真实矛盾信息才值得输出。
 2. **改变判断的条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
 
+## 长度规范（必须遵守，输出会直接推送到手机通知）
+- surprises.title ≤ 20 字；surprises.description 是**一句完整的话**，≤ 80 字；suggestedAction ≤ 40 字
+- mindChangeConditions.conditions 每条 ≤ 60 字且是完整句子，最多 3 条
+- 不要靠堆砌细节凑长度；超长内容会被截断，宁可短而完整
+
 ## 输出格式（严格 JSON）
 \`\`\`json
 {
@@ -419,6 +427,12 @@ ${prevBriefingText}
 }
 
 // ── 策略顾问 Prompt（surfaceNode 末尾，生成目标权重计划） ──
+
+function fmtK(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(0);
+}
 
 export function buildStrategyAdvisorPrompt(ctx: {
   holdings: Array<{
@@ -527,6 +541,7 @@ ${gapLines}
 - confidence 代表你的把握程度，但执行层默认会采纳；因此不能在信息不足时为了满足输出要求给出大仓位
 - regimeOverride.confidence < 80 时不会被采纳
 - 不要输出“继续观察”式空计划；你的任务是直接形成可执行目标权重
+- targetAllocationPlan.reasoning ≤ 120 字、每条 intent.reasoning ≤ 60 字，且必须是完整句子（输出会直接推送到手机通知，超长会被截断）
 
 只输出 JSON，不要其他文字。`;
 }
@@ -658,191 +673,4 @@ VIX: ${ctx.vix ?? "N/A"}
 只输出 JSON，不要其他文字。`;
 }
 
-// ── Telegram 格式化 ──
-
-function normalizeBriefingText(text: string): string {
-  return String(text || "").replace(/\s+/g, " ").trim();
-}
-
-export function formatBriefingTextExcerpt(text: string, charLimit: number): string {
-  const normalized = normalizeBriefingText(text);
-  if (normalized.length <= charLimit) return normalized;
-
-  const head = normalized.slice(0, charLimit);
-  const minBoundary = Math.max(24, Math.floor(charLimit * 0.45));
-  let boundary = -1;
-
-  for (let i = head.length - 1; i >= minBoundary; i -= 1) {
-    const ch = head[i];
-    if ("。！？；;!?".includes(ch)) {
-      boundary = i + 1;
-      break;
-    }
-    if (ch === "." && !/\d/.test(head[i - 1] || "") && !/\d/.test(normalized[i + 1] || "")) {
-      boundary = i + 1;
-      break;
-    }
-  }
-
-  if (boundary < 0) {
-    for (let i = head.length - 1; i >= minBoundary; i -= 1) {
-      if ("，,、 ".includes(head[i])) {
-        boundary = i;
-        break;
-      }
-    }
-  }
-
-  const clipped = (boundary > 0 ? head.slice(0, boundary) : head).trim();
-  return clipped.endsWith("…") ? clipped : `${clipped}…`;
-}
-
-export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
-  totalTokens: number;
-  durationMs: number;
-  thesesCount: number;
-  memoriesCount: number;
-  /** 可选: 持仓快照 — 传入后追加持仓明细和漂移监控 */
-  portfolio?: {
-    holdings: Array<{ assetKey: string; symbol: string; weightPct: number; lastPrice: number; unrealizedPnlPct: number | null; holdingQty: number; targetWeightHint?: number; gapPct?: number | null; valuationBase?: number | null }>;
-    totalEquity: number;
-    cashPct: number;
-    cash?: number;
-    marketRegime?: string;
-  };
-}): string {
-  const lines: string[] = [];
-  lines.push("<b>\u{1F9E0} Agent 日报</b>\n");
-
-  // ── 持仓概览（从 portfolio 合并） ──
-  if (meta.portfolio) {
-    const p = meta.portfolio;
-    const holdingsValue = p.holdings.reduce((s, h) => s + (h.valuationBase ?? 0), 0);
-    lines.push("<b>\u{1F4B0} 组合概览</b>");
-    lines.push(`总权益 <code>$${fmtK(p.totalEquity)}</code> | 持仓 <code>$${fmtK(holdingsValue)}</code> (${p.holdings.length}个) | 现金 <code>${(p.cashPct * 100).toFixed(0)}%</code>`);
-    lines.push("");
-
-    // 持仓明细（top 8）
-    if (p.holdings.length > 0) {
-      const sorted = [...p.holdings].sort((a, b) => (b.valuationBase ?? 0) - (a.valuationBase ?? 0));
-      lines.push("<b>\u{1F4CB} 持仓</b>");
-      for (const h of sorted.slice(0, 8)) {
-        const pnl = h.unrealizedPnlPct != null ? `${h.unrealizedPnlPct >= 0 ? "+" : ""}${(h.unrealizedPnlPct * 100).toFixed(1)}%` : "";
-        lines.push(`• ${formatAssetLabel({ symbol: h.symbol, assetKey: h.assetKey })} ${(h.weightPct * 100).toFixed(1)}% $${fmtK(h.valuationBase ?? 0)} ${pnl}`);
-      }
-      lines.push("");
-    }
-  }
-
-  // ── Agent 分析 ──
-  if (briefing.surprises.length > 0) {
-    lines.push("<b>\u26A1 需要复核的变化</b>");
-    for (const s of briefing.surprises.slice(0, 3)) {
-      lines.push(`• [${s.severityScore}/10] ${s.title}`);
-      lines.push(`  ${formatBriefingTextExcerpt(s.description, 160)}`);
-    }
-    lines.push("");
-  } else {
-    lines.push("<b>\u26A1 需要复核的变化</b>\n没有发现会改变当前判断的新信号。\n");
-  }
-
-  if (briefing.cognitionGaps.length > 0) {
-    lines.push("<b>\u{1F50D} 论点复核</b>");
-    for (const g of briefing.cognitionGaps.slice(0, 3)) {
-      lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
-      if (g.suggestedInvestigation) {
-        lines.push(`  ↳ ${g.suggestedInvestigation}`);
-      }
-    }
-    lines.push("");
-  }
-
-  if (briefing.autopilotCoverage) {
-    const c = briefing.autopilotCoverage;
-    lines.push("<b>\u{1F9ED} 自动驾驶覆盖</b>");
-    lines.push(`• 持仓复核 <code>${c.holdingAssets}</code> 个 | 观察候选 <code>${c.watchlistCandidates}</code> 个 | 已设目标 <code>${c.watchlistTargetedAssets}</code> 个 | 大脑目标计划 <code>${c.acceptedBrainPlanIntents}/${c.brainPlanIntents}</code> 条`);
-    lines.push("");
-  }
-
-  if (briefing.mindChangeConditions.length > 0) {
-    lines.push("<b>\u{1F504} 改变判断的条件</b>");
-    for (const m of briefing.mindChangeConditions.slice(0, 3)) {
-      lines.push(`• "${m.thesisTitle}" (${m.currentConviction})`);
-      lines.push(`  改变条件: ${formatBriefingTextExcerpt(m.conditions.slice(0, 2).join("; "), 260)}`);
-    }
-    lines.push("");
-  }
-
-  // ── 风险暴露（论点失效的组合影响） ──
-  const failureImpacts = briefing.thesisFailureImpacts ?? [];
-  if (failureImpacts.length > 0) {
-    // 只展示 medium 及以上 riskLevel，按估损从高到低
-    const ranked = [...failureImpacts]
-      .filter(i => i.riskLevel === "medium" || i.riskLevel === "high" || i.riskLevel === "critical")
-      .sort((a, b) => b.estimatedLossPct - a.estimatedLossPct)
-      .slice(0, 3);
-    if (ranked.length > 0) {
-      lines.push("<b>\u{26A0}\u{FE0F} 风险暴露</b> <i>(论点失效的假设情景)</i>");
-      for (const i of ranked) {
-        const levelLabel = i.riskLevel === "critical" ? "严重" : i.riskLevel === "high" ? "高" : "中";
-        const assets = i.affectedAssets.slice(0, 3).map(a => formatAssetLabelByKey(a.assetKey)).join(", ");
-        lines.push(`• [${levelLabel}] "${i.thesisTitle}" (${i.conviction})`);
-        lines.push(`  相关持仓约 ${(i.totalExposurePct * 100).toFixed(1)}%；若该论点被证伪，优先复核这些资产的目标权重、止损和降仓条件：${assets}`);
-      }
-      lines.push("");
-    }
-  }
-
-  // ── 同一资产判断不一致 ──
-  const conflicts = briefing.thesisConflicts ?? [];
-  if (conflicts.length > 0) {
-    const ranked = [...conflicts]
-      .sort((a, b) => {
-        const rank = (s: string) => s === "high" ? 2 : s === "medium" ? 1 : 0;
-        return rank(b.severity) - rank(a.severity);
-      })
-      .slice(0, 3);
-    lines.push("<b>\u{26A1} 同一资产判断不一致</b>");
-    for (const c of ranked) {
-      const sevLabel = c.severity === "high" ? "高" : c.severity === "medium" ? "中" : "低";
-      const assets = c.overlappingAssets.slice(0, 3).map(k => formatAssetLabelByKey(k)).join(", ");
-      lines.push(`• [${sevLabel}] "${c.thesisA.title}" (${c.thesisA.conviction}) × "${c.thesisB.title}" (${c.thesisB.conviction})`);
-      lines.push(`  重叠资产: ${assets}`);
-    }
-    lines.push("");
-  }
-
-  // ── Agent 目标权重计划（如有） ──
-  const ov = briefing.strategyOverlay ?? null;
-  const strategyLines: string[] = [];
-  if (ov?.regimeOverride) {
-    strategyLines.push(`Regime: ${ov.regimeOverride.ruleBasedRegime}→${ov.regimeOverride.suggestedRegime} (${ov.regimeOverride.confidence}%)`);
-  }
-  const intents = ov?.targetAllocationPlan?.intents ?? [];
-  if (intents.length > 0) {
-    const topIntents = intents.slice(0, 4).map(i => {
-      const label = i.symbol || formatAssetLabelByKey(i.assetKey);
-      return `${label}→${i.proposedTargetWeightPct.toFixed(1)}% (${i.confidence.toFixed(0)}%)`;
-    }).join(", ");
-    strategyLines.push(`目标权重: ${topIntents}`);
-    if (ov?.targetAllocationPlan?.reasoning) {
-      strategyLines.push(`理由: ${formatBriefingTextExcerpt(ov.targetAllocationPlan.reasoning, 220)}`);
-    }
-  } else if (briefing.cognitionGaps.length > 0 || (briefing.autopilotCoverage?.watchlistCandidates ?? 0) > 0) {
-    strategyLines.push("本轮未形成高置信度目标权重计划；执行层不会仅因观察态论点或观察列表存在而直接调仓。");
-  }
-  if (strategyLines.length > 0) {
-    lines.push("<b>\u{1F916} 策略建议</b>");
-    for (const part of strategyLines) lines.push(`• ${part}`);
-    lines.push("");
-  }
-
-  lines.push(`<i>\u{1F4CA} 论点: ${meta.thesesCount} | 记忆: ${meta.memoriesCount}</i>`);
-  return lines.join("\n");
-}
-
-function fmtK(v: number): string {
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-  return v.toFixed(0);
-}
+// Telegram / Chat 日报渲染已移至 src/daa/agent/briefingPresenter.ts（展示层与 prompt 层分离）。
