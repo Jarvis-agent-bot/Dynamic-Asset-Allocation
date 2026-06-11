@@ -26,13 +26,18 @@ registerTool(
       regime: ctx.market.regime,
       vix: ctx.market.vix,
       indicators: ctx.market.indicators,
+      sessions: ctx.market.sessions ?? [],
     };
     return {
       toolName: "query_market_regime",
       category: "observe",
       success: true,
       data,
-      outputFields: { regime: ctx.market.regime, vix: ctx.market.vix },
+      outputFields: {
+        regime: ctx.market.regime,
+        vix: ctx.market.vix,
+        openMarkets: (ctx.market.sessions ?? []).filter((row) => row.isOpen).map((row) => row.market),
+      },
       latencyMs: Date.now() - t0,
     };
   },

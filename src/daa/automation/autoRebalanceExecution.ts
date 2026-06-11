@@ -1,4 +1,6 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { resolveMarketExecutionGuard } from "@/src/daa/marketSession/marketSessionExecutionGuard";
 import { evaluateAutoRebalanceAuthority, type AutomationAuthorityDecision, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -100,6 +102,29 @@ export async function executeAutoRebalanceCycle(input: {
 
   const selectedProposalCount = selectedProposals(input.cycle.proposals).length;
   const fullyAutonomousAgent = input.triggerSource === "agent_trigger";
+  const closedProposal = selectedProposals(input.cycle.proposals)
+    .map((proposal) => {
+      const parsed = parseDaaAssetKey(proposal.assetKey);
+      const guard = resolveMarketExecutionGuard({
+        market: parsed?.market || "US",
+        symbol: proposal.symbol,
+        orderType: "market",
+      });
+      return guard.allowed ? null : { proposal, guard };
+    })
+    .find((row): row is { proposal: RebalanceProposal; guard: ReturnType<typeof resolveMarketExecutionGuard> } => Boolean(row));
+
+  if (closedProposal) {
+    const message = `[market-session 守门] ${closedProposal.guard.message}`;
+    logSwallowed(`${input.triggerSource}.autoExecuteMarketSessionGate`, new Error(message));
+    return {
+      ...base,
+      blockedReason: message,
+      error: message,
+      authority: null,
+    };
+  }
+
   const authority = evaluateAutoRebalanceAuthority({
     systemConfig: input.systemConfig,
     triggerSource: input.triggerSource,

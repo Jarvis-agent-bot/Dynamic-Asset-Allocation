@@ -33,6 +33,16 @@ const mockMarket: MarketSnapshot = {
   regime: "risk_on",
   vix: 18.5,
   indicators: { qqqSpyRatio: 1.12, goldSilverRatio: 78 },
+  sessions: [
+    {
+      market: "US",
+      isOpen: true,
+      reasonCode: "OPEN",
+      localDate: "2026-06-08",
+      localTime: "10:00",
+      reasonZh: "US 当前处于常规交易时段（2026-06-08 10:00）。",
+    },
+  ],
 };
 
 const mockCtx: ToolExecutionContext = { market: mockMarket, portfolio: mockPortfolio };
@@ -58,9 +68,11 @@ describe("query_market_regime V2", () => {
     const data = result.data as Record<string, unknown>;
     expect(data.regime).toBe("risk_on");
     expect(data.vix).toBe(18.5);
+    expect(data.sessions).toEqual(mockMarket.sessions);
     // V2: outputFields 供链式引用
     expect(result.outputFields.regime).toBe("risk_on");
     expect(result.outputFields.vix).toBe(18.5);
+    expect(result.outputFields.openMarkets).toEqual(["US"]);
   });
 
   it("市场数据为 null 时返回 error", async () => {

@@ -7,6 +7,11 @@ import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
 import {
+  assertMarketSessionAllowsExecution,
+  MarketSessionExecutionError,
+  resolveMarketExecutionGuard,
+} from "@/src/daa/marketSession/marketSessionExecutionGuard";
+import {
   applyDaaBrokerOrderSync,
   createDaaTradeTicket,
   executeDaaTradeTickets,
@@ -277,6 +282,15 @@ export async function previewManualTrade(input: PreviewManualTradeInput): Promis
   if (row.market === "CRYPTO" || row.assetClass === "CRYPTO" || row.instrumentType === "CRYPTO") {
     warnings.push(`${row.symbol} 属于高波动资产，请控制仓位与回撤`);
   }
+  const marketGuard = resolveMarketExecutionGuard({
+    market: row.market,
+    symbol: row.symbol,
+    orderType: "market",
+  });
+  if (!marketGuard.allowed) {
+    warnings.push(marketGuard.message);
+    manualBlock = true;
+  }
 
   if (priceSnapshotAt) {
     const ageMs = Date.now() - Date.parse(priceSnapshotAt);
@@ -384,6 +398,21 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
   const assetUniverseRows = await listDaaAssetUniverse();
   const assetUniverse = Array.isArray(assetUniverseRows) ? assetUniverseRows : [];
   const assetMeta = assetUniverse.find((row) => row.assetKey === assetKey) || null;
+  try {
+    assertMarketSessionAllowsExecution({
+      market,
+      symbol,
+      orderType: pricingMode === "market" ? "market" : "manual",
+    });
+  } catch (error) {
+    if (error instanceof MarketSessionExecutionError) {
+      throwManualTradeError(error.code, error.message.replace(`${error.code}:`, ""), 409, {
+        code: error.code,
+        marketStatus: error.status,
+      });
+    }
+    throw error;
+  }
   const sizing = normalizeOrderSizing({
     side,
     market,

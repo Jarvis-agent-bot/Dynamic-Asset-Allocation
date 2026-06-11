@@ -10,6 +10,8 @@ export type ApiErrorCode =
   | "CRON_AUTH_FAILED"
   | "BROKER_READ_ONLY"
   | "BROKER_SESSION_NOT_READY"
+  | "MARKET_CLOSED"
+  | "UNSUPPORTED_MARKET"
   | "RATE_LIMITED"
   | "UNKNOWN";
 

@@ -85,6 +85,10 @@ export function buildPrioritizePrompt(ctx: {
     .filter(Boolean)
     .slice(0, 10)
     .join(", ");
+  const marketSessionSummary = (ctx.market.sessions ?? [])
+    .slice(0, 8)
+    .map((row) => `${row.market}: ${row.isOpen ? "开市" : "闭市"} / ${row.reasonCode} / ${row.localDate} ${row.localTime}`)
+    .join("\n");
   const maxTargets = Math.max(1, Math.min(10, Math.trunc(Number(ctx.maxTargets) || 5)));
 
   return `你是一个投资研究操作系统的「投委会主席」。你的职责是决定今天最值得深入调查的研究线索。
@@ -100,6 +104,8 @@ ${watchlistSummary || "无观察列表候选"}
 ## 市场环境
 Regime: ${ctx.market?.regime ?? "unknown"}
 VIX: ${ctx.market?.vix ?? "N/A"}
+交易时段:
+${marketSessionSummary || "无关注市场交易时段"}
 
 ## 事件触发资产
 ${focusSummary || "无"}

@@ -44,12 +44,16 @@ describe("priceStreamService", () => {
           ts: "2026-06-02T04:50:00.000Z",
           currency: "USD",
           source: "yahoo_streamer",
+          change: 8.25,
         });
       });
       return () => undefined;
     });
 
-    const stream = createPriceStream(["US::AMD"], 10_000, 10_000, { realtimeSubscribe: subscribe });
+    const stream = createPriceStream(["US::AMD"], 10_000, 10_000, {
+      realtimeSubscribe: subscribe,
+      marketSessionNow: new Date("2026-06-08T14:00:00.000Z"),
+    });
     expect(stream).not.toBeNull();
 
     const text = await readStreamText(stream!, 50);
@@ -67,5 +71,10 @@ describe("priceStreamService", () => {
     expect(text).toContain("\"US::AMD\"");
     expect(text).toContain("\"price\":510.13");
     expect(text).toContain("\"source\":\"yahoo_streamer\"");
+    expect(text).toContain("\"delta\":8.25");
+    expect(text).toContain("\"marketSession\"");
+    expect(text).toContain("\"market\":\"US\"");
+    expect(text).toContain("\"reasonCode\":\"OPEN\"");
+    expect(text).toContain("\"isOpen\":true");
   });
 });

@@ -45,6 +45,7 @@ type FetchResult = {
   ok: boolean;
   status: number;
   price: number;
+  priceAsOf: string | null;
   payloadJson: Record<string, unknown> | null;
   payloadText: string;
   responseHeaders: Record<string, string>;
@@ -140,17 +141,25 @@ function resolveHistoryFallback(input: {
   };
 }
 
-function pickLatestClose(payload: YfinanceChartPayload | null): number {
-  const closes = Array.isArray(payload?.chart?.result?.[0]?.indicators?.quote?.[0]?.close)
-    ? payload.chart.result[0].indicators.quote[0].close
+function pickLatestClose(payload: YfinanceChartPayload | null): { price: number; priceAsOf: string | null } {
+  const result = payload?.chart?.result?.[0];
+  const closes = Array.isArray(result?.indicators?.quote?.[0]?.close)
+    ? result.indicators.quote[0].close
     : [];
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
 
   for (let i = closes.length - 1; i >= 0; i -= 1) {
     const close = Number(closes[i]);
     if (!Number.isFinite(close) || close <= 0) continue;
-    return close;
+    const timestamp = Number(timestamps[i]);
+    return {
+      price: close,
+      priceAsOf: Number.isFinite(timestamp) && timestamp > 0
+        ? new Date(timestamp * 1000).toISOString()
+        : null,
+    };
   }
-  return 0;
+  return { price: 0, priceAsOf: null };
 }
 
 async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number): Promise<FetchResult> {
@@ -183,6 +192,7 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
         ok: false,
         status: 200,
         price: 0,
+        priceAsOf: null,
         payloadJson,
         payloadText: yahooResult.payloadText,
         responseHeaders: yahooResult.responseHeaders,
@@ -194,11 +204,12 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
     }
 
     const latest = pickLatestClose(typedPayload);
-    if (!(latest > 0)) {
+    if (!(latest.price > 0)) {
       return {
         ok: false,
         status: 200,
         price: 0,
+        priceAsOf: null,
         payloadJson,
         payloadText: yahooResult.payloadText,
         responseHeaders: yahooResult.responseHeaders,
@@ -212,7 +223,8 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
     return {
       ok: true,
       status: yahooResult.status,
-      price: latest,
+      price: latest.price,
+      priceAsOf: latest.priceAsOf,
       payloadJson,
       payloadText: yahooResult.payloadText,
       responseHeaders: yahooResult.responseHeaders,
@@ -227,6 +239,7 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
       ok: false,
       status: error instanceof Error && "status" in error ? Number((error as { status?: unknown }).status) || 0 : 0,
       price: 0,
+      priceAsOf: null,
       payloadJson: null,
       payloadText: "",
       responseHeaders: {},
@@ -419,7 +432,7 @@ export async function getMarketPricesWithCache(input: {
               currency: current.currency || existing?.currency || "USD",
               price: fetchResult.price,
               status: "fresh",
-              priceUpdatedAt: fetchedAt,
+              priceUpdatedAt: fetchResult.priceAsOf || fetchedAt,
               source: `${source}:yfinance:${yfinanceSymbol}`,
               errorCode: null,
               errorMessage: null,
@@ -432,7 +445,7 @@ export async function getMarketPricesWithCache(input: {
               provider,
               market: current.market,
               symbol: current.symbol,
-              ts: fetchedAt,
+              ts: fetchResult.priceAsOf || fetchedAt,
               price: fetchResult.price,
               currency: current.currency || existing?.currency || "USD",
               source: `${source}:yfinance:${yfinanceSymbol}`,

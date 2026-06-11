@@ -8,6 +8,7 @@ function statusFromCode(code: ApiErrorCode): number {
   if (code === "VALIDATION_FAILED") return 400;
   if (code === "NOT_FOUND") return 404;
   if (code === "BROKER_SESSION_NOT_READY") return 409;
+  if (code === "MARKET_CLOSED" || code === "UNSUPPORTED_MARKET") return 409;
   if (code === "DB_ERROR") return 503;
   return 500;
 }

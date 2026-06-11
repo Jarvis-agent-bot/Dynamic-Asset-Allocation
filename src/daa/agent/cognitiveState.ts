@@ -14,12 +14,14 @@ import type {
   DailyBriefing,
   AgentMemory,
 } from "@/src/daa/agent/cognitiveTypes";
+import type { MarketSessionSnapshot } from "@/src/daa/marketSession/marketSessionSnapshot";
 
 // 简化的市场快照（从现有数据读取）
 export interface MarketSnapshot {
   regime: string; // risk_on / risk_off / transitional
   vix: number | null;
   indicators: Record<string, unknown>;
+  sessions?: MarketSessionSnapshot[];
 }
 
 export interface PortfolioSnapshot {

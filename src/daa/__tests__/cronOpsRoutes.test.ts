@@ -250,6 +250,11 @@ function buildExternalPayloadRawFixture(): DaaStoreExternalPayloadRaw {
   };
 }
 
+function freezeAtUsRegularSession(): void {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-06-08T14:00:00.000Z"));
+}
+
 function buildFxRateFixture(overrides?: Partial<DaaStoreFxRate>): DaaStoreFxRate {
   return {
     id: "fx-1",
@@ -670,6 +675,7 @@ describe("cron-ops-routes-v1", () => {
   });
 
   it("daily-analysis 生成新周期后会发送通知", async () => {
+    freezeAtUsRegularSession();
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig({
       autoGenerateEnabled: true,
       telegramOnSuggestion: true,
@@ -719,6 +725,7 @@ describe("cron-ops-routes-v1", () => {
   });
 
   it("daily-analysis 自动执行会先应用单笔 NAV 硬上限", async () => {
+    freezeAtUsRegularSession();
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
       policy: {
         review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
@@ -796,6 +803,7 @@ describe("cron-ops-routes-v1", () => {
   });
 
   it("daily-analysis 自动执行只执行已选中的提案", async () => {
+    freezeAtUsRegularSession();
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
       policy: {
         review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
@@ -868,6 +876,7 @@ describe("cron-ops-routes-v1", () => {
   });
 
   it("daily-analysis 只有未选中提案时不会进入执行网关", async () => {
+    freezeAtUsRegularSession();
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
       policy: {
         review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
@@ -924,6 +933,7 @@ describe("cron-ops-routes-v1", () => {
   });
 
   it("daily-analysis 自动执行会应用总换手 NAV 硬上限", async () => {
+    freezeAtUsRegularSession();
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
       policy: {
         review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
@@ -1015,6 +1025,7 @@ describe("cron-ops-routes-v1", () => {
   });
 
   it("daily-analysis 自动执行遇到非纯 SELL 风控 warn 时转人工", async () => {
+    freezeAtUsRegularSession();
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
       policy: {
         review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },

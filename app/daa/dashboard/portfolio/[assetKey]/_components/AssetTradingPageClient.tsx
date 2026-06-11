@@ -64,12 +64,41 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   const priceStreamAssetKeys = useMemo(() => row ? [row.assetKey] : [], [row]);
   const priceStream = usePriceStream(priceStreamAssetKeys);
   const livePrice = row ? priceStream.prices.get(row.assetKey) ?? null : null;
+  const displayRow = useMemo(() => {
+    if (!row || !livePrice) return row;
+    const holdingQty = Number(row.holdingQty || 0);
+    const fxRateToBase = Number(row.fxRateToBase || 0);
+    const valuationBase = holdingQty > 0 && fxRateToBase > 0
+      ? holdingQty * livePrice.price * fxRateToBase
+      : row.valuationBase;
+    const costBasisInBase = Number(row.costBasisInBase ?? 0);
+    const unrealizedPnlBase = valuationBase != null && costBasisInBase > 0
+      ? valuationBase - costBasisInBase
+      : row.unrealizedPnlBase;
+    const unrealizedPnlPct = unrealizedPnlBase != null && costBasisInBase > 0
+      ? (unrealizedPnlBase / costBasisInBase) * 100
+      : row.unrealizedPnlPct;
+
+    return {
+      ...row,
+      lastPrice: livePrice.price,
+      priceUpdatedAt: livePrice.ts,
+      priceStatus: "fresh" as const,
+      priceSource: livePrice.source || row.priceSource,
+      priceAgeSec: 0,
+      priceDelta: livePrice.delta,
+      priceDirection: livePrice.direction,
+      valuationBase,
+      unrealizedPnlBase,
+      unrealizedPnlPct,
+    };
+  }, [row, livePrice]);
 
   // 成本价（单价）
   const costBasisPerShare = useMemo(() => {
-    if (!row || row.holdingQty <= 0 || !row.costBasis || row.costBasis <= 0) return null;
-    return row.costBasis / row.holdingQty;
-  }, [row]);
+    if (!displayRow || displayRow.holdingQty <= 0 || !displayRow.costBasis || displayRow.costBasis <= 0) return null;
+    return displayRow.costBasis / displayRow.holdingQty;
+  }, [displayRow]);
 
   const handlePreviewOrder = useCallback((payload: {
     assetKey: string;
@@ -97,26 +126,26 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   }, [orderSubmitting]);
 
   const handleUpdateTargetWeight = useCallback(async (targetWeightPct: number) => {
-    if (!row || targetUpdating) return;
+    if (!displayRow || targetUpdating) return;
     if (!Number.isFinite(targetWeightPct) || targetWeightPct < 0 || targetWeightPct > 100) {
       toast.error("目标权重必须在 0 到 100% 之间");
       return;
     }
     setTargetUpdating(true);
     try {
-      const updatedRow = await patchWorkbenchAsset(row.assetKey, {
+      const updatedRow = await patchWorkbenchAsset(displayRow.assetKey, {
         targetWeightHint: targetWeightPct / 100,
         watchEnabled: true,
       });
       setDetail((prev) => prev ? { ...prev, row: updatedRow } : prev);
-      toast.success(`${row.symbol} 目标权重已更新为 ${targetWeightPct.toFixed(2)}%`);
+      toast.success(`${displayRow.symbol} 目标权重已更新为 ${targetWeightPct.toFixed(2)}%`);
       void loadDetail(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "目标权重更新失败");
     } finally {
       setTargetUpdating(false);
     }
-  }, [loadDetail, row, targetUpdating]);
+  }, [displayRow, loadDetail, targetUpdating]);
 
   const tradeCallbacks = useMemo(() => ({
     onPreview: handlePreviewOrder,
@@ -148,7 +177,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   }
 
   // 未找到资产
-  if (!row) {
+  if (!displayRow) {
     return (
       <div className="space-y-4 py-12 text-center">
         <div className="text-sm text-[var(--muted)]">
@@ -168,7 +197,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   return (
     <div className="space-y-5">
       {/* 顶部信息栏 */}
-      <AssetInfoBar row={row} baseCurrency={baseCurrency} sparkData={sparkData} />
+      <AssetInfoBar row={displayRow} baseCurrency={baseCurrency} sparkData={sparkData} />
 
       {/* 主体：左 K 线 + 右交易区 */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -176,8 +205,8 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
         <SectionErrorBoundary sectionName="K线图">
           <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[#050607] shadow-[0_18px_42px_rgba(15,23,42,0.14)]">
             <AssetKlineChart
-              symbol={row.yfinanceSymbol || row.symbol}
-              market={row.market}
+              symbol={displayRow.yfinanceSymbol || displayRow.symbol}
+              market={displayRow.market}
               className="min-h-[520px]"
               tradeMarkers={tradeMarkers}
               costBasisPerShare={costBasisPerShare}
@@ -190,7 +219,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
         <div className="space-y-3 xl:sticky xl:top-3">
           <SectionErrorBoundary sectionName="持仓状态">
             <AssetPositionPanel
-              row={row}
+              row={displayRow}
               baseCurrency={baseCurrency}
               targetWeightAudits={detail?.targetWeightAudits ?? []}
               onUpdateTargetWeight={handleUpdateTargetWeight}
@@ -200,7 +229,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
 
           <SectionErrorBoundary sectionName="交易面板">
             <InlineTradePanel
-              row={row}
+              row={displayRow}
               availableCash={availableCashValue}
               slippageBps={slippageBps}
               submitting={orderSubmitting || refreshing}
@@ -213,7 +242,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
 
       {/* 底部：交易所式证据区 */}
       <SectionErrorBoundary sectionName="资产详情">
-        <AssetDetailTabs row={row} />
+        <AssetDetailTabs row={displayRow} />
       </SectionErrorBoundary>
     </div>
   );

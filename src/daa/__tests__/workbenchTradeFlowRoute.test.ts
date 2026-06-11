@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -15,6 +15,7 @@ import { getDaaSystemConfig, listDaaCashLedgerEntries, replaceDaaAccountState, s
 describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.setSystemTime(new Date("2026-06-08T14:00:00.000Z"));
     resetTestDb();
 
     const current = await getDaaSystemConfig();
@@ -34,6 +35,10 @@ describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
         },
       },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("搜索新增资产 -> 市价预览 -> 直接执行 -> 持仓与现金更新", async () => {
@@ -192,6 +197,81 @@ describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
       ticketId: sellExecuteJson.data.item.ticketId,
       cycleId: null,
     });
+  }, 15000);
+
+  it("闭市时手动预览不可提交，执行会被稳定错误码阻断", async () => {
+    vi.setSystemTime(new Date("2026-06-08T13:00:00.000Z"));
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        dataSources: {
+          ...current.config.dataSources,
+          priceFeed: {
+            ...current.config.dataSources.priceFeed,
+            enabled: false,
+          },
+        },
+      },
+    });
+
+    const upsertResponse = await upsertAsset(new Request("http://localhost/api/daa/workbench/assets/upsert", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        assetClass: "EQUITY",
+        region: "US",
+        exchange: "NASDAQ",
+        instrumentType: "STOCK",
+        marketGroup: "US_EQUITY",
+        watchEnabled: true,
+        lastPrice: 100,
+      }),
+    }));
+    expect(upsertResponse.status).toBe(200);
+
+    const previewResponse = await previewExecution(new Request("http://localhost/api/daa/workbench/execution/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        assetKey: "US::AAPL",
+        side: "BUY",
+        qty: 1,
+      }),
+    }));
+    const previewJson = await previewResponse.json();
+
+    expect(previewResponse.status).toBe(200);
+    expect(previewJson.ok).toBe(true);
+    expect(previewJson.data.canSubmit).toBe(false);
+    expect(previewJson.data.warnings.join(" ")).toContain("当前不可执行");
+
+    const executeResponse = await executeOrder(new Request("http://localhost/api/daa/workbench/execution/execute", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: "manual",
+        side: "BUY",
+        assetKey: "US::AAPL",
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        qty: 1,
+        price: 100,
+        fee: 0,
+        pricingMode: "market",
+        reasonText: "闭市阻断测试",
+      }),
+    }));
+    const executeJson = await executeResponse.json();
+
+    expect(executeResponse.status).toBe(409);
+    expect(executeJson.ok).toBe(false);
+    expect(executeJson.error.code).toBe("MARKET_CLOSED");
   }, 15000);
 
   it("冻结现金不应被手工预览与执行链路透支", async () => {
