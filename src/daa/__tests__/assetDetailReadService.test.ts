@@ -29,7 +29,7 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
 }));
 
 import { buildAssetDetailReadModel } from "@/src/daa/modules/read/assetDetailReadService";
-import { clearReadModelMemoryCache } from "@/src/daa/modules/read/readModelMemoryCache";
+import { clearReadModelCache } from "@/src/daa/modules/read/readModelCache";
 
 function buildTradeTicketFixture(overrides?: Partial<TradeTicket>): TradeTicket {
   return {
@@ -82,7 +82,7 @@ function buildTradeTicketFixture(overrides?: Partial<TradeTicket>): TradeTicket 
 describe("asset-detail-read-service-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    clearReadModelMemoryCache();
+    clearReadModelCache();
     mocks.getDaaAccountScopeId.mockReturnValue("default");
     mocks.getDaaLedgerStartTs.mockResolvedValue("2026-03-01T00:00:00.000Z");
     mocks.buildWorkbenchBootstrap.mockResolvedValue(buildWorkbenchBootstrapFixture({

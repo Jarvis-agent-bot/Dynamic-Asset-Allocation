@@ -62,7 +62,7 @@ function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUnivers
   };
 }
 
-const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
+const ASSET_UNIVERSE_ROW_SELECT_COLUMNS = [
   "am.asset_key",
   "am.symbol",
   "am.name",
@@ -91,7 +91,7 @@ const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
   "am.updated_at",
 ].join(", ");
 
-const ASSET_UNIVERSE_FROM_SQL_ = [
+const ASSET_UNIVERSE_ROW_FROM_SQL = [
   "FROM daa_asset_master am",
   "LEFT JOIN daa_positions_v2 p ON p.owner_account_id = $1 AND p.asset_key = am.asset_key",
   "LEFT JOIN daa_watchlist_entries we ON we.owner_account_id = $1 AND we.asset_key = am.asset_key",
@@ -106,7 +106,7 @@ async function selectAssetUniverseRowByKeyInTx(
 ): Promise<DaaStoreAssetUniverseRow | null> {
   const ownerAccountId = getDaaAccountScopeId();
   const result = await query(
-    `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $2 LIMIT 1`,
+    `SELECT ${ASSET_UNIVERSE_ROW_SELECT_COLUMNS} ${ASSET_UNIVERSE_ROW_FROM_SQL} WHERE am.asset_key = $2 LIMIT 1`,
     [ownerAccountId, assetKey],
   );
   if (!result.rows.length) return null;
@@ -118,7 +118,7 @@ export async function listDaaAssetUniverse(): Promise<DaaStoreAssetUniverseRow[]
   const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_}
+      `SELECT ${ASSET_UNIVERSE_ROW_SELECT_COLUMNS} ${ASSET_UNIVERSE_ROW_FROM_SQL}
        WHERE COALESCE(p.qty, 0) > 0 OR COALESCE(we.watch_enabled, FALSE) = TRUE OR COALESCE(ta.target_weight_hint, 0) > 0
        ORDER BY am.symbol ASC, am.market ASC`,
       [ownerAccountId],
@@ -330,7 +330,7 @@ export async function patchDaaAssetUniverseRow(input: {
     const txQuery = query;
     await txQuery("BEGIN");
     try {
-      const currentRes = await txQuery(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $2 LIMIT 1`, [ownerAccountId, assetKey]);
+      const currentRes = await txQuery(`SELECT ${ASSET_UNIVERSE_ROW_SELECT_COLUMNS} ${ASSET_UNIVERSE_ROW_FROM_SQL} WHERE am.asset_key = $2 LIMIT 1`, [ownerAccountId, assetKey]);
       if (!currentRes.rows.length) throw new Error(`asset not found: ${assetKey}`);
       const current = mapAssetUniverseRow(currentRes.rows[0] as Record<string, unknown>);
 

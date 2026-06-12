@@ -68,7 +68,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
 
   return (
     <div className="space-y-5 xl:sticky xl:top-[104px] xl:self-start">
-      <DaaSurfacePanel accent="cyan" title="资产选择" subtitle="从当前资产池中选择要回测的资产。">
+      <DaaSurfacePanel accent="primary" title="资产选择" subtitle="从当前资产池中选择要回测的资产。">
         <div className="space-y-3">
           <input
             type="text"
@@ -79,9 +79,9 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
           />
           <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-2">
             {assetsLoading ? (
-              <div className="px-3 py-4 text-center text-xs text-[var(--faint)]">加载资产池中…</div>
+              <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-2.5 py-2 text-xs text-[var(--faint)]">加载资产池中…</div>
             ) : filteredAssets.length === 0 ? (
-              <div className="px-3 py-4 text-center text-xs text-[var(--faint)]">
+              <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-2.5 py-2 text-xs text-[var(--faint)]">
                 {assets.length === 0 ? "资产池为空，请先到持仓页添加资产" : "未找到匹配资产"}
               </div>
             ) : (
@@ -90,7 +90,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
                 return (
                   <label
                     key={asset.assetKey}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--elevated)]"
+                    className="flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--elevated)]"
                   >
                     <input
                       type="checkbox"
@@ -101,7 +101,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
                     <span className="font-[var(--font-mono)] text-xs text-[var(--text)]">{asset.symbol}</span>
                     <span className="text-[11px] text-[var(--faint)]">{asset.assetClass}</span>
                     {asset.holdingQty > 0 ? (
-                      <DaaSurfaceStatusPill tone="green" className="ml-auto text-[9px]">持仓</DaaSurfaceStatusPill>
+                      <DaaSurfaceStatusPill tone="success" className="ml-auto text-[9px]">持仓</DaaSurfaceStatusPill>
                     ) : null}
                   </label>
                 );
@@ -114,24 +114,24 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
         </div>
       </DaaSurfacePanel>
 
-      <DaaSurfacePanel accent="indigo" title="策略选择" subtitle="选择一个或多个配置策略进行对比回测。">
+      <DaaSurfacePanel accent="info" title="策略选择" subtitle="可多选。">
         <div className="space-y-1">
-          {STRATEGY_OPTIONS.map((s) => {
-            const checked = config.selectedStrategies.includes(s.key);
+          {STRATEGY_OPTIONS.map((strategyOption) => {
+            const checked = config.selectedStrategies.includes(strategyOption.key);
             return (
               <label
-                key={s.key}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-[var(--elevated)]"
+                key={strategyOption.key}
+                className="flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-sm transition-colors hover:bg-[var(--elevated)]"
               >
                 <input
                   type="checkbox"
                   checked={checked}
-                  onChange={() => toggleStrategy(s.key)}
+                  onChange={() => toggleStrategy(strategyOption.key)}
                   className="h-3.5 w-3.5 rounded border-[var(--border-strong)] bg-transparent accent-[var(--primary)]"
                 />
                 <div>
-                  <span className="text-[var(--text)]">{s.label}</span>
-                  <span className="ml-2 text-[11px] text-[var(--faint)]">{s.desc}</span>
+                  <span className="text-[var(--text)]">{strategyOption.label}</span>
+                  <span className="ml-2 text-[11px] text-[var(--faint)]">{strategyOption.desc}</span>
                 </div>
               </label>
             );
@@ -139,10 +139,10 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
         </div>
       </DaaSurfacePanel>
 
-      <DaaSurfacePanel accent="amber" title="回测参数" subtitle="设定回测区间、再平衡频率与初始资金。">
+      <DaaSurfacePanel accent="warning" title="回测参数" subtitle="区间、频率和资金。">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">起始日期</label>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">起始日期</label>
             <input
               type="date"
               value={config.startDate}
@@ -151,7 +151,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">结束日期</label>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">结束日期</label>
             <input
               type="date"
               value={config.endDate}
@@ -160,7 +160,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             />
           </div>
           <div className="sm:col-span-2">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">常用区间</div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">常用区间</div>
             <div className="flex flex-wrap gap-2">
               {DATE_PRESETS.map((preset) => (
                 <button
@@ -174,7 +174,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
                       endDate: formatDateInput(endDate),
                     }));
                   }}
-                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-bg)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-bg)]"
+                  className="inline-flex min-h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-bg)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-bg)]"
                 >
                   {preset.label}
                 </button>
@@ -182,7 +182,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">再平衡频率</label>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">再平衡频率</label>
             <select
               value={config.rebalanceFrequency}
               onChange={(e) => setConfig((prev) => ({ ...prev, rebalanceFrequency: e.target.value }))}
@@ -194,7 +194,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">基准货币</label>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">基准货币</label>
             <select
               value={config.baseCurrency}
               onChange={(e) => setConfig((prev) => ({ ...prev, baseCurrency: e.target.value }))}
@@ -206,7 +206,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">初始资金 ({config.baseCurrency})</label>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">初始资金 ({config.baseCurrency})</label>
             <input
               type="number"
               min={1000}
@@ -217,7 +217,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">最小下单额 ({config.baseCurrency})</label>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">最小下单额 ({config.baseCurrency})</label>
             <input
               type="number"
               min={0}

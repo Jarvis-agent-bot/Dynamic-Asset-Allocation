@@ -11,7 +11,7 @@ import {
   marketScopeMetricLabelZh,
   marketScopePrimaryLabelZh,
 } from "@/src/daa/modules/marketContext/marketContextLabels";
-import { MARKET_INDICATOR_KEYS_, MARKET_INDICATOR_META_CATALOG_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
+import { MARKET_INDICATOR_KEYS, MARKET_INDICATOR_META_CATALOG } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import { normalizeMarketIndicatorKey } from "@/src/daa/store/marketIndicatorNormalizers";
 
 describe("market-context-labels", () => {
@@ -48,12 +48,12 @@ describe("market-context-labels", () => {
   });
 
   it("store 层支持 catalog 中的全部市场指标 key", () => {
-    expect(MARKET_INDICATOR_KEYS_.map((key) => normalizeMarketIndicatorKey(key))).toEqual(MARKET_INDICATOR_KEYS_);
+    expect(MARKET_INDICATOR_KEYS.map((key) => normalizeMarketIndicatorKey(key))).toEqual(MARKET_INDICATOR_KEYS);
   });
 
   it("每个市场指标都有完整解释口径", () => {
-    for (const key of MARKET_INDICATOR_KEYS_) {
-      const meaning = MARKET_INDICATOR_META_CATALOG_[key].meaning;
+    for (const key of MARKET_INDICATOR_KEYS) {
+      const meaning = MARKET_INDICATOR_META_CATALOG[key].meaning;
       expect(meaning.measurement).toBeTruthy();
       expect(meaning.highSignal).toBeTruthy();
       expect(meaning.lowSignal).toBeTruthy();

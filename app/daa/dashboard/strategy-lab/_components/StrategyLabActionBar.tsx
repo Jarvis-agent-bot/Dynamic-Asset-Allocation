@@ -23,9 +23,9 @@ export function StrategyLabActionBar({ state, historyOpen, onToggleHistory }: St
   const applyStrategyLabel = applyMeta.strategyKey ? strategyLabel(applyMeta.strategyKey) : "当前策略";
 
   return (
-    <div className="sticky top-[64px] z-20 -mx-1 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.25)] backdrop-blur sm:px-4">
+    <div className="sticky top-[52px] z-20 -mx-1 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 sm:px-4">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
-        <span className="rounded-full bg-[var(--elevated)] px-2 py-0.5 font-[var(--font-mono)] text-[11px]">
+        <span className="rounded-[var(--radius-sm)] bg-[var(--elevated)] px-2 py-0.5 font-[var(--font-mono)] text-[11px]">
           {assetCount} 资产 · {strategyCount} 策略
         </span>
         <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">{rangeLabel}</span>
@@ -38,9 +38,9 @@ export function StrategyLabActionBar({ state, historyOpen, onToggleHistory }: St
           </span>
         ) : null}
         <DaaSurfaceActionButton
-          tone="slate"
+          tone="neutral"
           onClick={onToggleHistory}
-          className={cn("h-8 px-3 text-xs", historyOpen && "border-indigo-300/40 text-[var(--text)]")}
+          className={cn("h-8 px-3 text-xs", historyOpen && "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]")}
           title="查看回测历史"
         >
           <History className="h-3.5 w-3.5" />

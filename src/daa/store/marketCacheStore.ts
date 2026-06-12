@@ -6,7 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
-import { MARKET_INDICATOR_KEYS_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
+import { MARKET_INDICATOR_KEYS } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import {
   withDaaPgClient, parseJsonb, toIsoString, withPgTransaction, clampNumber, normalizeUpper, normalizeStringArray,
   isRecord,
@@ -26,7 +26,7 @@ import type {
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
 import { normalizeMarketIndicatorKey, normalizeMarketRegimeStore } from "./marketIndicatorNormalizers";
 
-const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_ = [
+const MARKET_INDICATOR_SNAPSHOT_ROW_SELECT_COLUMNS = [
   "id",
   "indicator_key",
   "scope",
@@ -49,7 +49,7 @@ const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_ = [
   "created_at",
 ].join(", ");
 
-const NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_ = [
+const NEWS_ITEM_SNAPSHOT_ROW_SELECT_COLUMNS = [
   "provider",
   "symbol",
   "item_hash",
@@ -63,7 +63,7 @@ const NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_ = [
   "raw_ref_id",
 ].join(", ");
 
-const NEWS_EVENT_SNAPSHOT_SELECT_COLUMNS_ = [
+const NEWS_EVENT_SNAPSHOT_ROW_SELECT_COLUMNS = [
   "provider",
   "symbol",
   "event_hash",
@@ -82,7 +82,7 @@ const NEWS_EVENT_SNAPSHOT_SELECT_COLUMNS_ = [
   "updated_at",
 ].join(", ");
 
-const NEWS_EVENT_GRAPH_SELECT_COLUMNS_ = [
+const NEWS_EVENT_GRAPH_ROW_SELECT_COLUMNS = [
   "provider",
   "symbol",
   "event_hash",
@@ -96,7 +96,7 @@ const NEWS_EVENT_GRAPH_SELECT_COLUMNS_ = [
   "updated_at",
 ].join(", ");
 
-const NEWS_EVENT_RELATED_ASSET_SELECT_COLUMNS_ = [
+const NEWS_EVENT_RELATED_ASSET_ROW_SELECT_COLUMNS = [
   "provider",
   "symbol",
   "event_hash",
@@ -111,7 +111,7 @@ const NEWS_EVENT_RELATED_ASSET_SELECT_COLUMNS_ = [
   "updated_at",
 ].join(", ");
 
-const NEWS_PORTFOLIO_IMPACT_SELECT_COLUMNS_ = [
+const NEWS_PORTFOLIO_IMPACT_ROW_SELECT_COLUMNS = [
   "id",
   "owner_account_id",
   "provider",
@@ -127,7 +127,7 @@ const NEWS_PORTFOLIO_IMPACT_SELECT_COLUMNS_ = [
   "updated_at",
 ].join(", ");
 
-const DISCOVERY_CANDIDATE_SELECT_COLUMNS_ = [
+const DISCOVERY_CANDIDATE_ROW_SELECT_COLUMNS = [
   "id",
   "owner_account_id",
   "topic_key",
@@ -154,7 +154,7 @@ const DISCOVERY_CANDIDATE_SELECT_COLUMNS_ = [
   "updated_at",
 ].join(", ");
 
-const MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_ = [
+const MARKET_PRICE_SNAPSHOT_ROW_SELECT_COLUMNS = [
   "provider",
   "market",
   "symbol",
@@ -500,7 +500,7 @@ export async function upsertDaaMarketPriceSnapshots(
              error_message = EXCLUDED.error_message,
              raw_ref_id = EXCLUDED.raw_ref_id,
              updated_at = NOW()
-           RETURNING ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_}`,
+           RETURNING ${MARKET_PRICE_SNAPSHOT_ROW_SELECT_COLUMNS}`,
           [provider, market, symbol, normalizedSymbol, currency, price, status, priceUpdatedAt, persistedFetchedAt, source, errorCode, errorMessage, rawRefId],
         );
         if (result.rows.length > 0) {
@@ -543,7 +543,7 @@ export async function listDaaMarketPriceSnapshots(input: {
     const limit = Math.max(1, Math.min(5000, Math.trunc(toFiniteNumber(input.limit, 2000))));
     params.push(limit);
     const result = await query(
-      `SELECT ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_}
+      `SELECT ${MARKET_PRICE_SNAPSHOT_ROW_SELECT_COLUMNS}
        FROM daa_market_price_snapshot
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY fetched_at DESC
@@ -740,7 +740,7 @@ export async function listDaaNewsItemsBySymbol(input: {
     }
     params.push(limit);
     const result = await query(
-      `SELECT ${NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_}
+      `SELECT ${NEWS_ITEM_SNAPSHOT_ROW_SELECT_COLUMNS}
        FROM daa_news_item_snapshot_v1
        WHERE ${where.join(" AND ")}
        ORDER BY COALESCE(published_at, fetched_at) DESC
@@ -839,7 +839,7 @@ export async function listDaaNewsEventsBySymbol(input: {
     }
     params.push(limit);
     const result = await query(
-      `SELECT ${NEWS_EVENT_SNAPSHOT_SELECT_COLUMNS_}
+      `SELECT ${NEWS_EVENT_SNAPSHOT_ROW_SELECT_COLUMNS}
        FROM daa_news_event_snapshot_v1
        WHERE ${where.join(" AND ")}
        ORDER BY COALESCE(published_at, analyzed_at) DESC
@@ -983,7 +983,7 @@ export async function listLatestDaaNewsEventGraphs(input: {
     const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
     params.push(limit);
     const result = await query(
-      `SELECT ${NEWS_EVENT_GRAPH_SELECT_COLUMNS_}
+      `SELECT ${NEWS_EVENT_GRAPH_ROW_SELECT_COLUMNS}
        FROM daa_news_event_graph_v1
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY generated_at DESC
@@ -1041,7 +1041,7 @@ export async function listLatestDaaNewsEventRelatedAssets(input: {
     const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
     params.push(limit);
     const result = await query(
-      `SELECT ${NEWS_EVENT_RELATED_ASSET_SELECT_COLUMNS_}
+      `SELECT ${NEWS_EVENT_RELATED_ASSET_ROW_SELECT_COLUMNS}
        FROM daa_news_event_related_asset_v1
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY generated_at DESC
@@ -1166,7 +1166,7 @@ export async function listLatestDaaNewsPortfolioImpacts(input: {
     const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
     params.push(limit);
     const result = await query(
-      `SELECT ${NEWS_PORTFOLIO_IMPACT_SELECT_COLUMNS_}
+      `SELECT ${NEWS_PORTFOLIO_IMPACT_ROW_SELECT_COLUMNS}
        FROM daa_news_portfolio_impact_v1
        WHERE ${where.join(" AND ")}
        ORDER BY generated_at DESC
@@ -1324,7 +1324,7 @@ export async function listDaaDiscoveryCandidates(input: {
     const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 80))));
     params.push(limit);
     const result = await query(
-      `SELECT ${DISCOVERY_CANDIDATE_SELECT_COLUMNS_}
+      `SELECT ${DISCOVERY_CANDIDATE_ROW_SELECT_COLUMNS}
        FROM daa_discovery_candidates_v1
        WHERE ${where.join(" AND ")}
        ORDER BY score_pct DESC, updated_at DESC
@@ -1417,11 +1417,11 @@ export async function listLatestDaaMarketIndicatorSnapshots(): Promise<DaaStoreM
   await ensureDaaMarketCacheSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT DISTINCT ON (indicator_key) ${MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_}
+      `SELECT DISTINCT ON (indicator_key) ${MARKET_INDICATOR_SNAPSHOT_ROW_SELECT_COLUMNS}
        FROM daa_market_indicator_snapshot_v1
        WHERE indicator_key = ANY($1::text[])
        ORDER BY indicator_key, generated_at DESC`,
-      [MARKET_INDICATOR_KEYS_],
+      [MARKET_INDICATOR_KEYS],
     );
     return result.rows.map((row) => mapMarketIndicatorSnapshotRow(row as Record<string, unknown>));
   });
@@ -1441,7 +1441,7 @@ export async function listDaaMarketIndicatorHistory(input: {
     const scope = normalizeText(input.scope, "");
     const result = scope
       ? await query(
-        `SELECT ${MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_}
+        `SELECT ${MARKET_INDICATOR_SNAPSHOT_ROW_SELECT_COLUMNS}
          FROM daa_market_indicator_snapshot_v1
          WHERE indicator_key = ANY($1::text[])
            AND scope = $2
@@ -1450,7 +1450,7 @@ export async function listDaaMarketIndicatorHistory(input: {
         [keys, scope, since],
       )
       : await query(
-        `SELECT ${MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_}
+        `SELECT ${MARKET_INDICATOR_SNAPSHOT_ROW_SELECT_COLUMNS}
          FROM daa_market_indicator_snapshot_v1
          WHERE indicator_key = ANY($1::text[])
            AND generated_at >= $2

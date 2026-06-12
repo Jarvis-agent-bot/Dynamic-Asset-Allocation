@@ -2,44 +2,42 @@
 
 import type { ComponentType } from "react";
 
-import { Brain, Briefcase, ClipboardList, FlaskConical, Menu, RefreshCw, Settings } from "lucide-react";
+import { Briefcase, CalendarCheck, ClipboardList, FlaskConical, Menu, RefreshCw, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { DAA_BRAND_ICON_PATH, DAA_BRAND_NAME } from "@/src/daa/brand";
+import {
+  WORKBENCH_SECTIONS,
+  resolveWorkbenchSection,
+  type WorkbenchSectionKey,
+  type WorkbenchSectionMeta,
+} from "./workbenchSections";
 
-type NavKey = "today" | "portfolio" | "rebalance" | "trades" | "strategy-lab" | "settings";
 type IconType = ComponentType<{ className?: string }>;
-type NavItem = { key: NavKey; href: string; label: string; shortLabel: string; Icon: IconType };
+type NavItem = WorkbenchSectionMeta & { Icon: IconType };
 
-function useActiveNav(): NavKey | null {
-  const pathname = usePathname() || "";
-  if (pathname.startsWith("/daa/dashboard/today")) return "today";
-  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
-  if (pathname.startsWith("/daa/dashboard/rebalance")) return "rebalance";
-  if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
-  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
-  if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
-  return "portfolio";
-}
+const WORKBENCH_SECTION_ICONS: Record<WorkbenchSectionKey, IconType> = {
+  today: CalendarCheck,
+  portfolio: Briefcase,
+  rebalance: RefreshCw,
+  trades: ClipboardList,
+  "strategy-lab": FlaskConical,
+  settings: Settings,
+};
 
-function useNavItems(): NavItem[] {
-  return useMemo(
-    () => [
-      { key: "today" as const, href: "/daa/dashboard/today", label: "Agent", shortLabel: "Agent", Icon: Brain },
-      { key: "portfolio" as const, href: "/daa/dashboard/portfolio", label: "持仓", shortLabel: "持仓", Icon: Briefcase },
-      { key: "rebalance" as const, href: "/daa/dashboard/rebalance", label: "调仓", shortLabel: "调仓", Icon: RefreshCw },
-      { key: "trades" as const, href: "/daa/dashboard/trades", label: "交易记录", shortLabel: "交易", Icon: ClipboardList },
-      { key: "strategy-lab" as const, href: "/daa/dashboard/strategy-lab", label: "策略实验室", shortLabel: "回测", Icon: FlaskConical },
-      { key: "settings" as const, href: "/daa/dashboard/settings", label: "设置", shortLabel: "设置", Icon: Settings },
-    ],
-    [],
-  );
+const WORKBENCH_NAV_ITEMS: NavItem[] = WORKBENCH_SECTIONS.map((section) => ({
+  ...section,
+  Icon: WORKBENCH_SECTION_ICONS[section.key],
+}));
+
+function useActiveWorkbenchSection(): WorkbenchSectionKey {
+  return resolveWorkbenchSection(usePathname() || "").key;
 }
 
 type SidebarNavProps = {
@@ -53,7 +51,7 @@ export function DaaBrandMark(props: { className?: string }) {
       src={DAA_BRAND_ICON_PATH}
       alt=""
       aria-hidden="true"
-      className={cn("rounded-lg object-cover shadow-[0_0_18px_var(--primary-bg)]", props.className)}
+      className={cn("rounded-[var(--radius-md)] object-cover", props.className)}
     />
   );
 }
@@ -73,7 +71,7 @@ function SidebarLink(props: {
       title={collapsed ? item.label : undefined}
       onClick={onNavigate}
       className={cn(
-        "group relative flex items-center rounded-xl transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        "group relative flex items-center rounded-[var(--radius-md)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         collapsed ? "h-10 w-10 justify-center" : "h-10 w-full gap-3 px-3",
         isActive
           ? "bg-[var(--hover)] text-[var(--text)]"
@@ -93,7 +91,7 @@ function SidebarLink(props: {
         aria-hidden="true"
       />
       {!collapsed ? (
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-[-0.01em]">{item.label}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{item.label}</span>
       ) : null}
     </Link>
   );
@@ -111,18 +109,17 @@ function SidebarLink(props: {
 }
 
 export function DaaSidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
-  const items = useNavItems();
-  const active = useActiveNav();
+  const activeSectionKey = useActiveWorkbenchSection();
 
   return (
     <TooltipProvider delayDuration={120}>
       <nav className={cn("flex flex-col gap-1", collapsed ? "items-center" : "items-stretch")} aria-label="DAA 主导航">
-        {items.map((item) => (
+        {WORKBENCH_NAV_ITEMS.map((item) => (
           <SidebarLink
             key={item.key}
             item={item}
             collapsed={collapsed}
-            isActive={active === item.key}
+            isActive={activeSectionKey === item.key}
             onNavigate={onNavigate}
           />
         ))}
@@ -133,8 +130,7 @@ export function DaaSidebarNav({ collapsed = false, onNavigate }: SidebarNavProps
 
 export function DaaMobileNav() {
   const [open, setOpen] = useState(false);
-  const items = useNavItems();
-  const active = useActiveNav();
+  const activeSectionKey = useActiveWorkbenchSection();
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -150,18 +146,17 @@ export function DaaMobileNav() {
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="w-[260px] border-r-0 px-0"
-        style={{ background: "var(--surface)", borderColor: "transparent" }}
+        className="w-[260px] border-r-0 border-transparent bg-[var(--surface)] px-0"
       >
         <SheetHeader className="px-4 pb-4 pt-5">
-          <SheetTitle className="flex items-center gap-2.5 text-left text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
+          <SheetTitle className="flex items-center gap-2.5 text-left text-[15px] font-semibold text-[var(--text)]">
             <DaaBrandMark className="h-7 w-7" />
             {DAA_BRAND_NAME}
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 px-3" aria-label="DAA 主导航">
-          {items.map((item) => {
-            const isActive = active === item.key;
+          {WORKBENCH_NAV_ITEMS.map((item) => {
+            const isActive = activeSectionKey === item.key;
             return (
               <Link
                 key={item.key}
@@ -169,7 +164,7 @@ export function DaaMobileNav() {
                 aria-current={isActive ? "page" : undefined}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  "group relative flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-[13px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   isActive
                     ? "bg-[var(--hover)] text-[var(--text)]"
                     : "text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]",

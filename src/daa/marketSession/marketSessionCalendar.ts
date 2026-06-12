@@ -1,4 +1,4 @@
-import { EXCHANGE_CALENDAR_DATA_, type MarketSessionRange } from "./exchangeCalendarData";
+import { EXCHANGE_CALENDAR_DATA, type MarketSessionRange } from "./exchangeCalendarData";
 
 export type MarketSessionReasonCode =
   | "OPEN"
@@ -121,7 +121,7 @@ export function resolveMarketSessionStatus(input: {
   calendarOverride?: MarketSessionCalendarOverride;
 }): MarketSessionStatus {
   const market = normalizeMarket(input.market);
-  const data = EXCHANGE_CALENDAR_DATA_[market];
+  const data = EXCHANGE_CALENDAR_DATA[market];
   const now = input.now ?? new Date();
 
   if (!data) {

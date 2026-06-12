@@ -1,5 +1,5 @@
 /**
- * meta/queryEntityHistory — 查询实体图关联的历史记忆与论点
+ * meta/queryEntityHistory — 查询实体图关联的历史记忆与投资判断
  *
  * 支持 6 种实体：asset / thesis_id / regime / ticker / news_source / strategy_tag
  * 回答 "关于 NVDA 学到了什么"、"risk_off 下的历史 pattern" 这类跨资产因果查询。
@@ -23,7 +23,7 @@ const VALID_KINDS: EntityKind[] = [
 registerTool(
   {
     name: "query_entity_history",
-    description: "查询实体图中关联的历史记忆与论点。回答类似'关于 NVDA 学到过什么'、'risk_off 环境下历史 pattern'、'reuters 报道过的 thesis'。kind 取值：asset / thesis_id / regime / ticker / news_source / strategy_tag。",
+    description: "查询实体图中关联的历史记忆与投资判断。回答类似'关于 NVDA 学到过什么'、'risk_off 环境下历史 pattern'、'reuters 报道过的判断'。kind 取值：asset / thesis_id / regime / ticker / news_source / strategy_tag。",
     category: "meta",
     parameters: {
       kind: { type: "string", description: "实体类型", required: true },

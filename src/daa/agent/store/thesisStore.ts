@@ -1,5 +1,5 @@
 /**
- * Thesis Store — 研究线索 + 证据链的持久化层
+ * 投资判断 Store — 投资判断 + 依据链的持久化层（内部沿用 thesis/evidence 契约）
  */
 
 import { randomUUID } from "node:crypto";
@@ -88,7 +88,7 @@ export async function createResearchThread(data: {
     return mapThreadRow(res.rows[0]);
   });
 
-  // 实体图：为新 thesis 自动抽取并链接实体（失败不影响主流程）
+  // 实体图：为新投资判断自动抽取并链接实体（失败不影响主流程）
   try {
     const { extractEntitiesFromThesis } = await import("@/src/daa/agent/entities/entityExtractor");
     const { upsertAndLinkForThesis } = await import("@/src/daa/agent/entities/entityStore");
@@ -113,9 +113,9 @@ export async function getActiveTheses(): Promise<ResearchThread[]> {
 }
 
 /**
- * 归档超过 staleDays 天未更新的 uncertain thesis。
- * prioritizeNode 会为驱动调查创建 conviction=uncertain 的待确认 thesis，如果长时间没被 investigate 节点转正，
- * 它们会在冲突检测、论点复核清单等下游产生噪声。此函数在每次 observe 时清扫一次。
+ * 归档超过 staleDays 天未更新的 uncertain 投资判断。
+ * prioritizeNode 会为驱动复核创建 conviction=uncertain 的待确认判断，如果长时间没被 investigate 节点转正，
+ * 它们会在判断关系检测、投资判断复核清单等下游产生噪声。此函数在每次 observe 时清扫一次。
  * 返回归档的 thesis id 列表，便于日志观察。
  */
 export async function archiveStaleUncertainTheses(staleDays = 7, protectedAssetKeys: string[] = []): Promise<string[]> {
@@ -140,10 +140,10 @@ export async function archiveStaleUncertainTheses(staleDays = 7, protectedAssetK
 }
 
 /**
- * 归档超过 staleDays 天未有效调查的 low conviction thesis。
- * low conviction 论点本身就是"证据不足/看空倾向待验证"，长期没人调查说明它既没被
- * 市场证实也没被推翻，留在 active 池里只会在日报复核清单和冲突检测中制造噪声。
- * 持仓/观察列表资产（protectedAssetKeys）的论点不动，避免与 ensureAssetThesisCoverage
+ * 归档超过 staleDays 天未有效复核的 low conviction 投资判断。
+ * low conviction 判断本身就是"依据不足/看空倾向待验证"，长期没人复核说明它既没被
+ * 市场证实也没被推翻，留在 active 池里只会在每日复核清单和判断关系检测中制造噪声。
+ * 持仓/观察列表资产（protectedAssetKeys）的投资判断不动，避免与 ensureAssetThesisCoverage
  * 形成"归档→重建→再归档"的来回churn。
  */
 export async function archiveStaleLowConvictionTheses(staleDays = 30, protectedAssetKeys: string[] = []): Promise<string[]> {
@@ -168,10 +168,10 @@ export async function archiveStaleLowConvictionTheses(staleDays = 30, protectedA
 }
 
 /**
- * 全局活跃论点上限。超限时从 conviction 最弱（uncertain → low）、最久未调查的开始归档，
- * 永不触碰 high/medium 论点和 protectedAssetKeys（持仓/观察列表）相关论点。
+ * 全局活跃投资判断上限。超限时从 conviction 最弱（uncertain → low）、最久未复核的开始归档，
+ * 永不触碰 high/medium 判断和 protectedAssetKeys（持仓/观察列表）相关判断。
  * 这是 per-asset 上限（MAX_ACTIVE_THESES_PER_ASSET）和 stale 清扫之外的总量兜底：
- * 没有它，宏观/已移除资产的论点会无限累积，导致复核积压永远清不完。
+ * 没有它，宏观/已移除资产的判断会无限累积，导致复核积压永远清不完。
  */
 export async function enforceActiveThesisCap(maxActive = 60, protectedAssetKeys: string[] = []): Promise<string[]> {
   const ownerAccountId = getDaaAccountScopeId();
@@ -266,8 +266,8 @@ export async function updateThesis(
 
 /**
  * 只刷新 updated_at，不改其他字段。
- * 供 investigateNode 在"调查完成但 thesis 未变化"时使用，避免
- * 论点复核天数永远增长的 bug（medium thesis 被调查后仍显示 N 天未调查）。
+ * 供 investigateNode 在"复核完成但 thesis 未变化"时使用，避免
+ * 投资判断复核天数永远增长的 bug（medium thesis 被复核后仍显示 N 天未复核）。
  */
 export async function touchThesis(id: string): Promise<void> {
   const ownerAccountId = getDaaAccountScopeId();
@@ -306,8 +306,8 @@ export type ThesisQueueReviewAction = "decided" | "snoozed" | "request_investiga
  * 记录人在 Today 决策队列里的处理动作。
  *
  * - decided：人已经形成判断，写 last_decision_at，队列状态回到 resolved。
- * - snoozed：人选择稍后再看，短期内不再作为轮询调查目标。
- * - request_investigation：人点名让 Agent 查，下一轮 prioritize 会优先消费。
+ * - snoozed：人选择稍后再看，短期内不再作为轮询复核目标。
+ * - request_investigation：人点名让投资助理复核，下一轮 prioritize 会优先消费。
  */
 export async function markThesesQueueAction(
   threadIds: string[],
@@ -421,10 +421,10 @@ export async function createThesisReview(data: {
 }
 
 /**
- * P2-9: 查找与给定 assetKeys 和标题相似的已有活跃 thesis。
+ * P2-9: 查找与给定 assetKeys 和标题相似的已有活跃投资判断。
  * 用于去重：同一资产组合，且标题 pg_trgm 相似度 >= 0.40 视为重复。
  * 0.40 阈值经验值——足以捕获"NVDA AI 突破"vs"NVDA AI 估值修复"这类同主题
- * 不同措辞的论点，又不会把"NVDA 估值过高"vs"NVDA 看多 AI"误判为同一篇。
+ * 不同措辞的判断，又不会把"NVDA 估值过高"vs"NVDA 看多 AI"误判为同一篇。
  */
 export async function findSimilarThesis(assetKeys: string[], title: string): Promise<ResearchThread | null> {
   if (assetKeys.length === 0 || !title.trim()) return null;
@@ -445,8 +445,8 @@ export async function findSimilarThesis(assetKeys: string[], title: string): Pro
 }
 
 /**
- * 统计某资产的活跃 thesis 数量。
- * prioritize 节点用于阻止单资产论点数量失控（默认上限 5 篇）。
+ * 统计某资产的活跃投资判断数量。
+ * prioritize 节点用于阻止单资产投资判断数量失控（默认上限 5 篇）。
  */
 export async function countActiveThesesForAssets(assetKeys: string[]): Promise<number> {
   if (assetKeys.length === 0) return 0;
@@ -462,8 +462,8 @@ export async function countActiveThesesForAssets(assetKeys: string[]): Promise<n
 }
 
 /**
- * 获取某资产相关的所有活跃 thesis（按 updated_at 倒序）。
- * 用于 /portfolio/[assetKey] 页展示该资产的 Agent 观点。
+ * 获取某资产相关的所有活跃投资判断（按 updated_at 倒序）。
+ * 用于 /portfolio/[assetKey] 页展示该资产的复核判断。
  */
 export async function getThesesByAssetKey(assetKey: string): Promise<ResearchThread[]> {
   const key = String(assetKey || "").trim();
@@ -482,8 +482,8 @@ export async function getThesesByAssetKey(assetKey: string): Promise<ResearchThr
 }
 
 /**
- * 获取一组 thesis 各自的最新 N 条证据（按 thesis id 分组返回）。
- * 用于资产详情页一次性加载多个 thesis 的最近证据。
+ * 获取一组投资判断各自的最新 N 条依据（按 thesis id 分组返回）。
+ * 用于资产详情页一次性加载多个投资判断的最近依据。
  */
 export async function getLatestEvidenceByThreadIds(
   threadIds: string[],
@@ -535,7 +535,7 @@ export async function getLatestEvidenceByThreadIds(
 }
 
 /**
- * 查询某 thesis 的所有复盘记录（按时间倒序）。
+ * 查询某投资判断的所有复盘记录（按时间倒序）。
  */
 export async function getReviewsByThreadId(threadId: string): Promise<Array<{
   id: string;
@@ -569,8 +569,8 @@ export async function getReviewsByThreadId(threadId: string): Promise<Array<{
 }
 
 /**
- * 关键字搜索证据链条（跨论点）。
- * 用于 Agent 自查"我之前在哪里推理过 XX"，pg_trgm 子串匹配。
+ * 关键字搜索依据链条（跨投资判断）。
+ * 用于投资助理自查"我之前在哪里推理过 XX"，pg_trgm 子串匹配。
  */
 export async function searchEvidenceByKeyword(
   keyword: string,

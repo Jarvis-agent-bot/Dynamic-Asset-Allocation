@@ -42,7 +42,7 @@ export type WorkbenchFeaturedCatalogItem = {
   themeLabelZh: string;
 };
 
-const ROLE_META_: Record<WorkbenchFeaturedRole, { label: string; description: string }> = {
+const ROLE_META: Record<WorkbenchFeaturedRole, { label: string; description: string }> = {
   cash_buffer: {
     label: "现金/短债",
     description: "组合流动性与低波动底仓，承担等待机会、降低回撤的角色。",
@@ -78,7 +78,7 @@ const ROLE_META_: Record<WorkbenchFeaturedRole, { label: string; description: st
 };
 
 function withRole(input: Omit<WorkbenchFeaturedCatalogItem, "roleLabelZh" | "roleDescriptionZh">): WorkbenchFeaturedCatalogItem {
-  const role = ROLE_META_[input.roleKey];
+  const role = ROLE_META[input.roleKey];
   return {
     ...input,
     roleLabelZh: role.label,
@@ -86,7 +86,7 @@ function withRole(input: Omit<WorkbenchFeaturedCatalogItem, "roleLabelZh" | "rol
   };
 }
 
-export const WORKBENCH_FEATURED_ROLE_ORDER_: WorkbenchFeaturedRole[] = [
+export const WORKBENCH_FEATURED_ROLE_ORDER: WorkbenchFeaturedRole[] = [
   "cash_buffer",
   "core_equity",
   "defensive_bond",
@@ -97,7 +97,7 @@ export const WORKBENCH_FEATURED_ROLE_ORDER_: WorkbenchFeaturedRole[] = [
   "currency_hedge",
 ];
 
-export const WORKBENCH_FEATURED_ASSETS_CATALOG_: WorkbenchFeaturedCatalogItem[] = [
+export const WORKBENCH_FEATURED_ASSETS_CATALOG: WorkbenchFeaturedCatalogItem[] = [
   withRole({
     symbol: "SGOV", market: "US", assetClass: "BOND", name: "iShares 0-3 Month Treasury Bond ETF", displayNameZh: "0-3 月美国国债 ETF",
     currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "现金替代", roleKey: "cash_buffer", allocationNoteZh: "适合作为美元现金缓冲，波动低、久期短。", suggestedWeightBandZh: "5%-30%", themeKey: "cash_equivalent", themeLabelZh: "现金替代",

@@ -7,7 +7,7 @@
 
 ## 1. 背景与结论
 
-当前系统已经具备完整的 DAA 闭环: 行情刷新、组合读取、漂移检测、再平衡周期生成、Agent 目标权重、风控校验、自动执行、通知、审计记录。但当前自动调仓的核心抽象仍然偏向工程触发器:
+当前系统已经具备完整的 DAA 闭环: 行情刷新、组合读取、漂移检测、再平衡周期生成、目标权重建议、风控校验、自动执行、通知、审计记录。但当前自动调仓的核心抽象仍然偏向工程触发器:
 
 ```text
 cron -> drift/scheduled_review/agent signal -> policy decision -> proposal plan -> authorization -> execution
@@ -33,10 +33,10 @@ Portfolio State -> Signals -> Intent -> Policy Decision -> Proposal Plan -> Auth
 | --- | --- | --- |
 | `src/daa/modules/workbench/workbenchReadService.ts` | 汇总账户、持仓、行情、目标权重、最新周期、风险提示 | 读模型和自动风险周期预热耦合 |
 | `src/daa/modules/workbench/workbenchModeling.ts` | 计算 drift snapshot、proposal、risk draft、组合指标 | 纯数学建模、交易建议、风险提案混在一个文件 |
-| `src/daa/modules/workbench/workbenchRebalanceCycleService.ts` | manual/agent/risk/review/drift 入口守门、生成 cycle、提案合并、持久化 | 触发入口、金融策略、周期持久化、Agent 入口仍需要继续解耦 |
+| `src/daa/modules/workbench/workbenchRebalanceCycleService.ts` | manual/agent/risk/review/drift 入口守门、生成 cycle、提案合并、持久化 | 触发入口、金融策略、周期持久化、投资助理入口仍需要继续解耦 |
 | `src/daa/automation/automationAuthority.ts` | 自动/手动执行授权 | 只覆盖执行阶段, 不覆盖是否应该生成建议 |
 | `src/daa/automation/autoRebalanceExecution.ts` | 自动执行硬上限、风控、执行通知 | 执行策略正确, 但缺少上游 policy decision 输入 |
-| `src/daa/agent/autopilotOrchestrator.ts` | Agent 运行、目标权重 override、生成调仓周期 | Agent 是触发源, 还不是正式的投资意图层 |
+| `src/daa/agent/autopilotOrchestrator.ts` | 投资助理运行、目标权重 override、生成调仓周期 | 投资助理是触发源, 还不是正式的投资意图层 |
 | `app/api/daa/cron/daily-analysis/route.ts` | 每小时 cron + `policy.review.scheduledTimeUtc` 小时守门 + 组合复盘 | 定期复盘已经从交易理由里拆出, 但 route 仍可继续瘦身 |
 | `app/api/daa/cron/drift-check/route.ts` | 固定 cron 收集 drift signal, 触发 policy evaluation 和通知 | signal/notification/auto execute 仍在同一 route 内 |
 | `src/daa/config/systemConfig.ts` | 保存 `policy.review`、`policy.drift`、`policy.throttle`、`policy.execution` | 配置源已收敛, 后续重点是模块边界 |
@@ -47,7 +47,7 @@ Portfolio State -> Signals -> Intent -> Policy Decision -> Proposal Plan -> Auth
 2. `policy.throttle.proposalDedupeWindowHours` 与 `policy.throttle.autoExecutionCooldownHours` 已拆开, 但还可以继续做成 per-signal / per-intent 粒度。
 3. `policy.review.frequency` 已表达为定期复盘, 不是天然交易理由。
 4. `policy.review.scheduledTimeUtc` 控制 daily-analysis 复盘窗口；drift-check 仍是独立实时/准实时监控。
-5. Agent 现在通过 target weight override 进入 `generateWorkbenchRebalanceCycle`, 它的身份更像触发器, 不是可审计的投资意图。
+5. 投资助理现在通过 target weight override 进入 `generateWorkbenchRebalanceCycle`, 它的身份更像触发器, 不是可审计的投资意图。
 6. `RebalanceCycle` 直接承载 trigger、proposal、risk、execution, 缺少明确的 policy decision 快照。
 
 ## 3. 目标架构
@@ -65,7 +65,7 @@ flowchart TD
   G --> H["Execution Gateway"]
   H --> I["Post-Trade Review"]
   I --> B
-  D <--> J["AI Agent / Thesis Memory"]
+  D <--> J["Review Workflow / Judgment Memory"]
   E --> K["Audit Log / Policy Decision Snapshot"]
 ```
 
@@ -144,7 +144,7 @@ type InvestmentIntent = {
 
 - drift 不再直接生成 cycle, 而是生成 `InvestmentIntent`。
 - 定期复盘使用 `scheduled_review`，只表达复盘窗口，不表达交易理由。
-- Agent 不直接交易, 先提交 intent 和 evidence。
+- 投资助理不直接交易, 先提交 intent 和 evidence。
 
 #### PolicyDecision
 
@@ -185,7 +185,6 @@ src/daa/modules/signals/
   driftSignalService.ts
   riskSignalService.ts
   cashSignalService.ts
-  agentSignalAdapter.ts
   signalTypes.ts
 
 src/daa/modules/intents/
@@ -393,7 +392,7 @@ daa_rebalance_cycles.proposal_plan_id
 | --- | --- |
 | `/api/daa/cron/daily-analysis` | 执行 scheduled portfolio review, 不直接表达交易触发 |
 | `/api/daa/cron/drift-check` | 执行 signal collection + policy evaluation, 不再直接 drift generate cycle |
-| `/api/daa/cron/cognitive-agent` | 生成/更新 Agent intent, 不直接交易 |
+| `/api/daa/cron/cognitive-agent` | 生成/更新投资助理 intent, 不直接交易 |
 
 新增内部服务:
 
@@ -436,7 +435,7 @@ execute -> execution authority + gateway
    NAV、现金、风险暴露、数据健康
 
 2. Signals
-   drift、risk、cash、market、agent thesis
+   drift、risk、cash、market、投资助理判断
 
 3. Policy Decision
    当前为什么行动/不行动、action score、no-trade band 状态
@@ -538,7 +537,6 @@ src/daa/modules/portfolio-state/portfolioDataHealth.ts
 src/daa/modules/signals/driftSignalService.ts
 src/daa/modules/signals/riskSignalService.ts
 src/daa/modules/signals/cashSignalService.ts
-src/daa/modules/signals/agentSignalAdapter.ts
 src/daa/modules/signals/signalCollector.ts
 ```
 
@@ -546,7 +544,7 @@ src/daa/modules/signals/signalCollector.ts
 
 - `driftedAssets` 检测从 cron route 移出。
 - `riskTriggeredAssets` 检测从 drift-check route 移出。
-- Agent thesis/target plan 转为 `AgentThesisSignal`。
+- 投资判断/目标权重计划转为 `AgentThesisSignal`。
 
 验收:
 
@@ -566,7 +564,7 @@ src/daa/modules/intents/intentStore.ts
 
 - drift signal -> drift intent。
 - scheduled review -> review intent。
-- agent target weight override -> agent intent。
+- 投资助理目标权重 override -> 投资助理 intent。
 - risk event -> risk reduction intent。
 
 验收:
@@ -663,7 +661,7 @@ trigger input -> runPolicyEvaluation -> proposalPlan -> create cycle
 
 - `/api/daa/workbench/rebalance/generate` 返回结构不破。
 - cycle 持久化增加 policy snapshot。
-- 旧 dashboard 可读新 cycle。
+- 旧工作站读模型可读新 cycle。
 
 ### Step 9: Cron 入口切换
 
@@ -671,7 +669,7 @@ trigger input -> runPolicyEvaluation -> proposalPlan -> create cycle
 
 - `daily-analysis` 调 `runPolicyEvaluation({ source: "scheduled_review" })`。
 - `drift-check` 调 `runPolicyEvaluation({ source: "drift_monitor" })`。
-- `cognitive-agent` 只生成/更新 agent intent, 再触发 policy evaluation。
+- `cognitive-agent` 只生成/更新投资助理 intent, 再触发 policy evaluation。
 
 验收:
 
@@ -756,7 +754,7 @@ src/daa/__tests__/workbenchRiskConsistency.test.ts
 - drift-check 只记录 signal/policy, 不直接误报旧 cycle。
 - daily-analysis 到点只做 review, policy 决定是否生成 proposal。
 - manual generate 可绕过自动冷静期, 但不能绕过风险执行守门。
-- agent intent 低置信度只 observe。
+- 投资助理 intent 低置信度只 observe。
 
 ### 9.3 Build Gates
 
@@ -847,7 +845,7 @@ docker compose up -d --build
 8. refactor: move automation authority into execution authority
 9. refactor: adapt rebalance cycle generation to policy decisions
 10. refactor: route cron jobs through policy evaluation
-11. refactor: expose policy decisions in dashboard read model
+11. refactor: expose policy decisions in workbench read model
 12. refactor: remove drift cooldown and scheduled-review trade-trigger paths
 ```
 
@@ -859,7 +857,7 @@ docker compose up -d --build
 2. `daily-analysis` 不再被描述为定期交易触发, 而是 scheduled review。
 3. `RebalanceCycle` 记录 `policyDecisionId` 和 `policySnapshot`。
 4. 前端能展示 action score、no-trade band 状态、policy skipped reason。
-5. Agent 输出变成 InvestmentIntent, 不直接等同调仓触发。
+5. 投资助理输出变成 InvestmentIntent, 不直接等同调仓触发。
 6. 自动执行只能消费通过 policy 和 execution authority 的 proposal plan。
 7. 配置保存只写当前 `policy` 语义字段。
 8. 所有 cron、route、policy、execution 测试通过。
@@ -876,7 +874,7 @@ docker compose up -d --build
 ```text
 把 drift 从 trigger 降级为 signal。
 把 scheduled review 固定为复盘日程，而不是交易触发器。
-把 Agent 从 trigger source 升级为 intent author。
+把投资助理从 trigger source 升级为 intent author。
 把 cooldown 从全局硬挡板拆成 proposal 去重和 execution 冷静期。
 把 cycle 从决策主体降级为 proposal/execution 容器。
 ```

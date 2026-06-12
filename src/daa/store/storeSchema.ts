@@ -25,16 +25,16 @@ type DaaStoreState = {
   marketCacheSchemaInit: Promise<void> | null;
 };
 
-const STORE_GLOBAL_KEY_ = "__daa_store_pg_state_v0__";
+const DAA_STORE_GLOBAL_STATE_KEY = "__daa_store_pg_state_v0__";
 
 
 function getStoreState(): DaaStoreState {
-  const g = globalThis as typeof globalThis & { [STORE_GLOBAL_KEY_]?: Partial<DaaStoreState> };
-  const state = g[STORE_GLOBAL_KEY_] ?? {};
+  const g = globalThis as typeof globalThis & { [DAA_STORE_GLOBAL_STATE_KEY]?: Partial<DaaStoreState> };
+  const state = g[DAA_STORE_GLOBAL_STATE_KEY] ?? {};
   state.schemaInit ??= null;
   state.runtimeMigrationInit ??= null;
   state.marketCacheSchemaInit ??= null;
-  g[STORE_GLOBAL_KEY_] = state;
+  g[DAA_STORE_GLOBAL_STATE_KEY] = state;
   return state as DaaStoreState;
 }
 

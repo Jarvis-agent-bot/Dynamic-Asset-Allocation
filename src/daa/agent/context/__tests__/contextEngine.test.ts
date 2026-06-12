@@ -133,7 +133,7 @@ describe("createInvestigateContextManager", () => {
   it("创建预配置的 ContextManager", () => {
     const cm = createInvestigateContextManager({
       system: "你是研究分析师",
-      thesis: "AAPL 看多论点",
+      thesis: "AAPL 看多判断",
       portfolio: "AAPL: 权重10%",
       memory: "历史记忆",
       tools: "工具列表",
@@ -142,7 +142,7 @@ describe("createInvestigateContextManager", () => {
 
     const result = cm.build(10000);
     expect(result.prompt).toContain("你是研究分析师");
-    expect(result.prompt).toContain("AAPL 看多论点");
+    expect(result.prompt).toContain("AAPL 看多判断");
     expect(result.prompt).toContain("<memory-context>");
     expect(result.prompt).toContain("历史记忆");
     expect(result.prompt).toContain("</memory-context>");

@@ -3,7 +3,7 @@ import type {
   DaaChatIntentKind,
   DaaChatMessage,
   DaaChatSession,
-  DaaChatSessionMemory,
+  DaaChatSessionState,
   DaaChatSessionPreview,
 } from "./chatTypes";
 
@@ -92,7 +92,7 @@ export function mapMessageRow(row: Record<string, unknown>): DaaChatMessage {
   };
 }
 
-export function mapMemoryRow(row: Record<string, unknown>): DaaChatSessionMemory {
+export function mapSessionStateRow(row: Record<string, unknown>): DaaChatSessionState {
   return {
     sessionId: normalizeChatText(row.session_id),
     summaryText: normalizeChatText(row.summary_text),

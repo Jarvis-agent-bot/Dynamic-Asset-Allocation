@@ -92,13 +92,13 @@ export function PortfolioTemplateDialog(props: {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DaaSurfaceDialogShell
-        accent="cyan"
+        accent="primary"
         className="max-w-lg"
         title="选择组合模板"
         description="选择一个经典配置方案，一键应用为目标权重"
         footer={
           <div className="flex justify-end gap-2">
-            <DaaSurfaceActionButton tone="slate" onClick={() => props.onOpenChange(false)}>
+            <DaaSurfaceActionButton tone="neutral" onClick={() => props.onOpenChange(false)}>
               取消
             </DaaSurfaceActionButton>
             <DaaSurfaceActionButton
@@ -117,7 +117,7 @@ export function PortfolioTemplateDialog(props: {
               key={tpl.id}
               type="button"
               onClick={() => setSelected(tpl.id)}
-              className={`w-full rounded-[12px] border px-4 py-3 text-left transition-colors ${
+              className={`w-full rounded-[var(--radius-md)] border px-4 py-3 text-left transition-colors ${
                 selected === tpl.id
                   ? "border-[var(--primary)]/40 bg-[var(--primary-bg)]"
                   : "border-[var(--border)] hover:border-[var(--primary)]/20 hover:bg-[var(--surface)]"
@@ -131,7 +131,7 @@ export function PortfolioTemplateDialog(props: {
                     {Object.entries(tpl.weights).map(([key, pct]) => (
                       <span
                         key={key}
-                        className="rounded-full bg-[var(--elevated)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)]"
+                        className="rounded-[var(--radius-sm)] bg-[var(--elevated)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)]"
                       >
                         {key.replace(/^US:/, "")} {pct}%
                       </span>

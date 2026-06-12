@@ -11,7 +11,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 registerTool(
   {
     name: "compute_correlation",
-    description: "计算多个资产之间的相关性矩阵（Pearson 系数）。适合发现分散化不足或意外的资产联动。",
+    description: "计算多个资产之间的相关性矩阵（Pearson 系数）。适合发现分散化不足或异常的资产联动。",
     category: "analyze",
     parameters: {
       symbols: { type: "string", description: "逗号分隔的资产代码列表（如 AAPL,MSFT,GLD）", required: true },

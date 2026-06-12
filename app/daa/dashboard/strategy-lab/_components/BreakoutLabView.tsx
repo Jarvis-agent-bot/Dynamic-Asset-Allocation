@@ -4,13 +4,12 @@ import { useMemo, useState } from "react";
 import { Play } from "lucide-react";
 
 import {
-  DaaSurfaceMetricCard,
   DaaSurfacePanel,
   DaaSurfaceActionButton,
   DaaSurfaceEmptyState,
   daaSurfaceFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { WorkbenchErrorNotice } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import { useBreakoutLab, type BreakoutConfigState } from "./useBreakoutLab";
 import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
 import type { StrategyLabInitialData } from "./strategyLabInitialData";
@@ -97,6 +96,32 @@ function r2(n: number | null | undefined): string {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}`;
 }
 
+function BreakoutSummaryMetric({
+  label,
+  value,
+  index,
+}: {
+  label: string;
+  value: string;
+  index: number;
+}) {
+  const borderClasses = [
+    index % 2 === 0 ? "border-r border-[var(--border)]" : "",
+    index < 6 ? "border-b border-[var(--border)]" : "",
+    index % 4 === 3 ? "sm:border-r-0" : "sm:border-r sm:border-[var(--border)]",
+    index >= 4 ? "sm:border-b-0" : "sm:border-b sm:border-[var(--border)]",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className={`min-w-0 bg-[var(--card)] px-3 py-2.5 ${borderClasses}`}>
+      <div className="truncate text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">{label}</div>
+      <div className="mt-1 font-[var(--font-mono)] text-[20px] leading-none text-[var(--text)]">{value}</div>
+    </div>
+  );
+}
+
 export function BreakoutLabView({
   dateDefaults,
   initialData,
@@ -111,12 +136,12 @@ export function BreakoutLabView({
     setConfig((prev) => ({ ...prev, [k]: v }));
   const assets = initialData?.assets ?? [];
   const filteredAssets = useMemo(() => {
-    const q = assetFilter.trim().toLowerCase();
-    if (!q) return assets;
+    const normalizedAssetFilter = assetFilter.trim().toLowerCase();
+    if (!normalizedAssetFilter) return assets;
     return assets.filter((asset) =>
-      asset.symbol.toLowerCase().includes(q)
-      || asset.assetKey.toLowerCase().includes(q)
-      || asset.assetClass.toLowerCase().includes(q)
+      asset.symbol.toLowerCase().includes(normalizedAssetFilter)
+      || asset.assetKey.toLowerCase().includes(normalizedAssetFilter)
+      || asset.assetClass.toLowerCase().includes(normalizedAssetFilter)
     );
   }, [assetFilter, assets]);
 
@@ -129,9 +154,9 @@ export function BreakoutLabView({
 
   return (
     <div className="space-y-5">
-      <div className="sticky top-[64px] z-20 -mx-1 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.25)] backdrop-blur sm:px-4">
+      <div className="sticky top-[52px] z-20 -mx-1 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 sm:px-4">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
-          <span className="rounded-full bg-[var(--elevated)] px-2 py-0.5 font-[var(--font-mono)] text-[11px]">
+          <span className="rounded-[var(--radius-sm)] bg-[var(--elevated)] px-2 py-0.5 font-[var(--font-mono)] text-[11px]">
             {lab.parsedAssets.length} 标的 · 放量突破
           </span>
           <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">{config.startDate} → {config.endDate}</span>
@@ -148,10 +173,9 @@ export function BreakoutLabView({
         </DaaSurfaceActionButton>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-      {/* 配置面板 */}
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="space-y-4">
-        <DaaSurfacePanel title="标的选择" subtitle="从当前资产池选择要纳入放量突破回测的标的。">
+        <DaaSurfacePanel title="标的选择" subtitle="从资产池选择。">
           <div className="space-y-3">
             <input
               type="text"
@@ -162,7 +186,7 @@ export function BreakoutLabView({
             />
             <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-2">
               {filteredAssets.length === 0 ? (
-                <div className="px-3 py-4 text-center text-xs text-[var(--faint)]">
+                <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-2.5 py-2 text-xs text-[var(--faint)]">
                   {assets.length === 0 ? "资产池为空，请先到持仓页添加资产" : "未找到匹配资产"}
                 </div>
               ) : (
@@ -171,7 +195,7 @@ export function BreakoutLabView({
                   return (
                     <label
                       key={asset.assetKey}
-                      className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--elevated)]"
+                      className="flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--elevated)]"
                     >
                       <input
                         type="checkbox"
@@ -182,7 +206,7 @@ export function BreakoutLabView({
                       <span className="font-[var(--font-mono)] text-xs text-[var(--text)]">{asset.symbol}</span>
                       <span className="text-[11px] text-[var(--faint)]">{asset.assetClass}</span>
                       {asset.holdingQty > 0 ? (
-                        <span className="ml-auto rounded-full border border-[var(--success-border)] bg-[var(--success-bg)] px-2 py-0.5 text-[9px] font-semibold text-[var(--success)]">持仓</span>
+                        <span className="ml-auto rounded-[var(--radius-sm)] border border-[var(--success-border)] bg-[var(--success-bg)] px-2 py-0.5 text-[9px] font-semibold text-[var(--success)]">持仓</span>
                       ) : null}
                     </label>
                   );
@@ -205,7 +229,7 @@ export function BreakoutLabView({
             </label>
           </div>
           <div className="mt-3">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">常用区间</div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">常用区间</div>
             <div className="flex flex-wrap gap-2">
               {DATE_PRESETS.map((preset) => (
                 <button
@@ -219,7 +243,7 @@ export function BreakoutLabView({
                       endDate: formatDateInput(endDate),
                     }));
                   }}
-                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-bg)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-bg)]"
+                  className="inline-flex min-h-10 items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-bg)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-bg)]"
                 >
                   {preset.label}
                 </button>
@@ -266,7 +290,7 @@ export function BreakoutLabView({
                   key={mode}
                   type="button"
                   onClick={() => set("exitMode", mode)}
-                  className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
+                  className={`rounded-[var(--radius-md)] border px-2 py-2 text-left text-xs transition ${
                     config.exitMode === mode
                       ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--border-strong)]"
@@ -285,25 +309,28 @@ export function BreakoutLabView({
 
       </div>
 
-      {/* 结果区 */}
       <div className="space-y-5">
-        <DashboardErrorNotice title="回测失败" description={error} />
+        <WorkbenchErrorNotice title="回测失败" description={error} />
 
         {running ? (
-          <DaaSurfaceEmptyState title="回测运行中…" description="正在获取 OHLCV 并逐笔回放放量突破信号。" className="px-5 py-16" />
+          <DaaSurfaceEmptyState title="回测运行中…" description="正在回放突破信号。" className="px-4 py-4" />
         ) : null}
 
         {result && !running ? (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <DaaSurfaceMetricCard label="组合收益" value={pct(port?.totalReturnPct)} />
-              <DaaSurfaceMetricCard label="最大回撤" value={pct(port?.maxDrawdownPct ? -port.maxDrawdownPct : 0)} />
-              <DaaSurfaceMetricCard label="期望值/笔" value={`${r2(agg?.expectancy)}R`} />
-              <DaaSurfaceMetricCard label="盈利因子" value={agg?.profitFactor != null && Number.isFinite(agg.profitFactor) ? agg.profitFactor.toFixed(2) : "—"} />
-              <DaaSurfaceMetricCard label="胜率" value={agg ? `${agg.winRate.toFixed(0)}%` : "—"} />
-              <DaaSurfaceMetricCard label="成交笔数" value={agg ? String(agg.trades) : "—"} />
-              <DaaSurfaceMetricCard label="平均盈利" value={`${r2(agg?.avgWinR)}R`} />
-              <DaaSurfaceMetricCard label="平均亏损" value={`${r2(agg?.avgLossR)}R`} />
+            <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] sm:grid-cols-4">
+              {[
+                ["组合收益", pct(port?.totalReturnPct)],
+                ["最大回撤", pct(port?.maxDrawdownPct ? -port.maxDrawdownPct : 0)],
+                ["期望值/笔", `${r2(agg?.expectancy)}R`],
+                ["盈利因子", agg?.profitFactor != null && Number.isFinite(agg.profitFactor) ? agg.profitFactor.toFixed(2) : "—"],
+                ["胜率", agg ? `${agg.winRate.toFixed(0)}%` : "—"],
+                ["成交笔数", agg ? String(agg.trades) : "—"],
+                ["平均盈利", `${r2(agg?.avgWinR)}R`],
+                ["平均亏损", `${r2(agg?.avgLossR)}R`],
+              ].map(([label, value], index) => (
+                <BreakoutSummaryMetric key={label} label={label} value={value} index={index} />
+              ))}
             </div>
 
             {result.benchmark ? (
@@ -312,7 +339,7 @@ export function BreakoutLabView({
                   <span className="text-[var(--muted)]">本策略组合：<b className="text-[var(--text)]">{pct(port?.totalReturnPct)}</b></span>
                   <span className="text-[var(--muted)]">买入持有 {result.benchmark.symbol}：<b className="text-[var(--text)]">{pct(result.benchmark.buyHoldReturnPct)}</b></span>
                   {beatBenchmark != null ? (
-                    <span className={beatBenchmark >= 0 ? "text-[var(--success)]" : "text-rose-400"}>
+                    <span className={beatBenchmark >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}>
                       {beatBenchmark >= 0 ? "跑赢" : "跑输"} {pctAbs(beatBenchmark)}
                     </span>
                   ) : null}
@@ -321,7 +348,7 @@ export function BreakoutLabView({
             ) : null}
 
             {agg?.exitReasonCounts ? (
-              <DaaSurfacePanel title="出场原因分布" subtitle="MA离场占比过高 = 突破后回踩被震出，利润被切碎">
+              <DaaSurfacePanel title="出场原因分布" subtitle="检查止损、止盈和均线离场。">
                 <div className="flex flex-wrap gap-3 text-xs">
                   {Object.entries(agg.exitReasonCounts).map(([k, v]) => (
                     <span key={k} className="rounded bg-[var(--elevated)] px-2 py-1 text-[var(--text)]">{k}: {v}</span>
@@ -344,14 +371,14 @@ export function BreakoutLabView({
                     </tr>
                   </thead>
                   <tbody className="text-[var(--text)]">
-                    {result.perSymbol.map((s) => (
-                      <tr key={s.assetKey} className="border-t border-[var(--border)]">
-                        <td className="py-1 pr-3 font-mono">{s.assetKey}</td>
-                        <td className="py-1 pr-3">{s.trades}</td>
-                        <td className="py-1 pr-3">{s.winRate.toFixed(0)}%</td>
-                        <td className="py-1 pr-3">{r2(s.expectancy)}</td>
-                        <td className="py-1 pr-3">{Number.isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : "∞"}</td>
-                        <td className={`py-1 pr-3 ${s.totalR >= 0 ? "text-[var(--success)]" : "text-rose-400"}`}>{r2(s.totalR)}</td>
+                    {result.perSymbol.map((symbolResult) => (
+                      <tr key={symbolResult.assetKey} className="border-t border-[var(--border)]">
+                        <td className="py-1 pr-3 font-mono">{symbolResult.assetKey}</td>
+                        <td className="py-1 pr-3">{symbolResult.trades}</td>
+                        <td className="py-1 pr-3">{symbolResult.winRate.toFixed(0)}%</td>
+                        <td className="py-1 pr-3">{r2(symbolResult.expectancy)}</td>
+                        <td className="py-1 pr-3">{Number.isFinite(symbolResult.profitFactor) ? symbolResult.profitFactor.toFixed(2) : "∞"}</td>
+                        <td className={`py-1 pr-3 ${symbolResult.totalR >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>{r2(symbolResult.totalR)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -374,8 +401,8 @@ export function BreakoutLabView({
         {!result && !running ? (
           <DaaSurfaceEmptyState
             title="等待回测"
-            description="在左侧选择标的、区间和放量突破参数，点击顶部「运行回测」。"
-            className="px-5 py-20"
+            description="选择参数后运行。"
+            className="px-4 py-4"
           />
         ) : null}
       </div>

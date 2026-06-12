@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { toast } from "sonner";
 
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
-import { getSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
+import { getSystemConfig } from "@/src/daa/modules/store/workbenchStoreApiClient";
 import { applyWorkbenchTargetWeights } from "@/src/daa/modules/workbench/targetAllocationApply";
 import { runBacktest, getBacktestHistory } from "@/src/daa/modules/strategyLab/strategyLabApi";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -43,7 +43,7 @@ export const FREQUENCY_OPTIONS = [
 export const BASE_CURRENCY_OPTIONS = ["USD", "HKD", "CNY"] as const;
 
 export function strategyLabel(key: string): string {
-  return STRATEGY_OPTIONS.find((s) => s.key === key)?.label ?? key;
+  return STRATEGY_OPTIONS.find((strategyOption) => strategyOption.key === key)?.label ?? key;
 }
 
 export type ConfigState = {
@@ -206,14 +206,14 @@ export function useStrategyLab(
         baseCurrency: config.baseCurrency,
         minOrderNotional: config.minOrderNotional,
       };
-      const res = await runBacktest(params);
+      const backtestResult = await runBacktest(params);
       // 丢弃过期回测响应，避免并发提交时旧结果覆盖新结果。
       if (reqId !== runReqIdRef.current) return;
-      setResult(res);
+      setResult(backtestResult);
       void loadHistory();
-    } catch (e) {
+    } catch (error) {
       if (reqId !== runReqIdRef.current) return;
-      setError(e instanceof Error ? e.message : "回测执行失败");
+      setError(error instanceof Error ? error.message : "回测执行失败");
     } finally {
       if (reqId === runReqIdRef.current) setRunning(false);
     }
@@ -230,7 +230,7 @@ export function useStrategyLab(
     try {
       await applyWorkbenchTargetWeights(result.targetWeights, {
         source: "strategy_lab_apply",
-        reason: "应用策略实验室回测结果为目标权重",
+        reason: "应用策略测试台回测结果为目标权重",
         payload: {
           targetWeights: result.targetWeights,
           warnings: result.warnings || [],
@@ -250,44 +250,44 @@ export function useStrategyLab(
     setConfig((prev) => ({
       ...prev,
       selectedAssets: prev.selectedAssets.includes(assetKey)
-        ? prev.selectedAssets.filter((k) => k !== assetKey)
+        ? prev.selectedAssets.filter((selectedAssetKey) => selectedAssetKey !== assetKey)
         : [...prev.selectedAssets, assetKey],
     }));
   }, []);
 
-  const toggleStrategy = useCallback((key: string) => {
+  const toggleStrategy = useCallback((strategyKey: string) => {
     setConfig((prev) => ({
       ...prev,
-      selectedStrategies: prev.selectedStrategies.includes(key)
-        ? prev.selectedStrategies.filter((k) => k !== key)
-        : [...prev.selectedStrategies, key],
+      selectedStrategies: prev.selectedStrategies.includes(strategyKey)
+        ? prev.selectedStrategies.filter((selectedStrategyKey) => selectedStrategyKey !== strategyKey)
+        : [...prev.selectedStrategies, strategyKey],
     }));
   }, []);
 
   const reuseHistoryParams = useCallback((item: StrategyLabHistoryItem) => {
-    const p = item.params;
-    if (!p) return;
+    const historyParams = item.params;
+    if (!historyParams) return;
     setConfig({
-      selectedAssets: Array.isArray(p.assets) ? [...p.assets] : [],
-      selectedStrategies: Array.isArray(p.strategies) && p.strategies.length > 0 ? [...p.strategies] : ["equalWeight"],
-      startDate: p.startDate || dateDefaults.rebalanceStartDate,
-      endDate: p.endDate || dateDefaults.rebalanceEndDate,
-      rebalanceFrequency: p.rebalanceFrequency || "monthly",
-      initialCapital: Number.isFinite(p.initialCapital) && p.initialCapital > 0 ? p.initialCapital : 100_000,
-      baseCurrency: p.baseCurrency || "USD",
-      minOrderNotional: Math.max(0, Number(p.minOrderNotional) || createDefaultConfig(dateDefaults, initialData).minOrderNotional),
+      selectedAssets: Array.isArray(historyParams.assets) ? [...historyParams.assets] : [],
+      selectedStrategies: Array.isArray(historyParams.strategies) && historyParams.strategies.length > 0 ? [...historyParams.strategies] : ["equalWeight"],
+      startDate: historyParams.startDate || dateDefaults.rebalanceStartDate,
+      endDate: historyParams.endDate || dateDefaults.rebalanceEndDate,
+      rebalanceFrequency: historyParams.rebalanceFrequency || "monthly",
+      initialCapital: Number.isFinite(historyParams.initialCapital) && historyParams.initialCapital > 0 ? historyParams.initialCapital : 100_000,
+      baseCurrency: historyParams.baseCurrency || "USD",
+      minOrderNotional: Math.max(0, Number(historyParams.minOrderNotional) || createDefaultConfig(dateDefaults, initialData).minOrderNotional),
     });
     toast.message("已载入历史参数，可直接重新运行");
   }, [dateDefaults, initialData]);
 
   const filteredAssets = useMemo(() => {
     if (!assetFilter.trim()) return assets;
-    const q = assetFilter.trim().toLowerCase();
+    const normalizedAssetFilter = assetFilter.trim().toLowerCase();
     return assets.filter(
-      (a) =>
-        a.symbol.toLowerCase().includes(q) ||
-        a.assetKey.toLowerCase().includes(q) ||
-        a.assetClass.toLowerCase().includes(q),
+      (asset) =>
+        asset.symbol.toLowerCase().includes(normalizedAssetFilter) ||
+        asset.assetKey.toLowerCase().includes(normalizedAssetFilter) ||
+        asset.assetClass.toLowerCase().includes(normalizedAssetFilter),
     );
   }, [assets, assetFilter]);
 

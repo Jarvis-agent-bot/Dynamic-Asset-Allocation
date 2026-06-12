@@ -12,7 +12,7 @@ import type {
 } from "./storeTypes";
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
 
-const RAW_PAYLOAD_SELECT_COLUMNS_ = [
+const EXTERNAL_PAYLOAD_RAW_SELECT_COLUMNS = [
   "id",
   "provider",
   "resource",
@@ -28,7 +28,7 @@ const RAW_PAYLOAD_SELECT_COLUMNS_ = [
   "created_at",
 ].join(", ");
 
-const EXTERNAL_REQUEST_LOG_SELECT_COLUMNS_ = [
+const EXTERNAL_REQUEST_LOG_SELECT_COLUMNS = [
   "id",
   "provider",
   "resource",
@@ -137,7 +137,7 @@ export async function appendDaaExternalRequestLog(input: {
       [id, provider, resource, subjectKey, endpointHost, httpStatus, errorCode, errorMessage, latencyMs, retryCount, cacheStatus, caller, rawRefId, createdAt],
     );
     const res = await query(
-      `SELECT ${EXTERNAL_REQUEST_LOG_SELECT_COLUMNS_} FROM daa_external_request_log_v1 WHERE id = $1 LIMIT 1`,
+      `SELECT ${EXTERNAL_REQUEST_LOG_SELECT_COLUMNS} FROM daa_external_request_log_v1 WHERE id = $1 LIMIT 1`,
       [id],
     );
     return mapExternalRequestLogRow(res.rows[0] as Record<string, unknown>);
@@ -161,7 +161,7 @@ export async function listDaaExternalRequestLogs(input: {
     const providerClause = provider ? `AND provider = $${params.push(provider)}` : "";
     const itemParams = [...params, limit];
     const itemsRes = await query(
-      `SELECT ${EXTERNAL_REQUEST_LOG_SELECT_COLUMNS_}
+      `SELECT ${EXTERNAL_REQUEST_LOG_SELECT_COLUMNS}
        FROM daa_external_request_log_v1
        WHERE created_at >= NOW() - ($1::INT * INTERVAL '1 hour')
          ${providerClause}
@@ -245,7 +245,7 @@ export async function appendDaaExternalPayloadRaw(input: {
       [id, provider, resource, subjectKey, requestUrl, JSON.stringify(requestJson), responseStatus, JSON.stringify(responseHeadersJson), payloadJson == null ? null : JSON.stringify(payloadJson), payloadText, fetchedAt, expireAt],
     );
     const res = await query(
-      `SELECT ${RAW_PAYLOAD_SELECT_COLUMNS_} FROM daa_external_payload_raw_v1 WHERE id = $1 LIMIT 1`,
+      `SELECT ${EXTERNAL_PAYLOAD_RAW_SELECT_COLUMNS} FROM daa_external_payload_raw_v1 WHERE id = $1 LIMIT 1`,
       [id],
     );
     return mapExternalPayloadRawRow(res.rows[0] as Record<string, unknown>);
@@ -269,7 +269,7 @@ export async function getLatestDaaExternalPayloadRaw(input: {
       ? `AND expire_at > $${params.push(toIsoString(input.nowIso, new Date().toISOString()))}`
       : "";
     const result = await query(
-      `SELECT ${RAW_PAYLOAD_SELECT_COLUMNS_}
+      `SELECT ${EXTERNAL_PAYLOAD_RAW_SELECT_COLUMNS}
        FROM daa_external_payload_raw_v1
        WHERE provider = $1 AND resource = $2 AND subject_key = $3
          ${freshClause}

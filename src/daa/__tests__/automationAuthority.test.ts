@@ -36,7 +36,7 @@ describe("automation-authority snapshots", () => {
           "checks": [
             {
               "id": "brain-mode-simulate-rebalance",
-              "message": "自动驾驶模式允许「执行模拟调仓」。",
+              "message": "「自动复核」授权等级允许「执行模拟调仓」。",
               "passed": true,
             },
             {
@@ -79,11 +79,11 @@ describe("automation-authority snapshots", () => {
             "checks": [
               {
                 "id": "brain-mode-action",
-                "message": "自动驾驶模式允许「运行认知循环」。",
+                "message": "「自动复核」授权等级允许「运行投资复核」。",
                 "passed": true,
               },
             ],
-            "reason": "大脑动作授权通过。",
+            "reason": "投资助理动作授权通过。",
             "requiresConfirmation": false,
           },
           "simulateRebalance": {
@@ -91,11 +91,11 @@ describe("automation-authority snapshots", () => {
             "checks": [
               {
                 "id": "brain-mode-action",
-                "message": "自动驾驶模式允许「执行模拟调仓」。",
+                "message": "「自动复核」授权等级允许「执行模拟调仓」。",
                 "passed": true,
               },
             ],
-            "reason": "大脑动作授权通过。",
+            "reason": "投资助理动作授权通过。",
             "requiresConfirmation": false,
           },
         },
@@ -104,7 +104,7 @@ describe("automation-authority snapshots", () => {
           "checks": [
             {
               "id": "brain-mode-simulate-rebalance",
-              "message": "自动驾驶模式允许「执行模拟调仓」。",
+              "message": "「自动复核」授权等级允许「执行模拟调仓」。",
               "passed": true,
             },
             {
@@ -153,7 +153,7 @@ describe("automation-authority snapshots", () => {
         "checks": [
           {
             "id": "brain-mode-simulate-rebalance",
-            "message": "顾问模式下未开放「执行模拟调仓」。",
+            "message": "「仅建议」授权等级未开放「执行模拟调仓」。",
             "passed": false,
           },
           {
@@ -187,7 +187,7 @@ describe("automation-authority snapshots", () => {
             "passed": true,
           },
         ],
-        "reason": "顾问模式下未开放「执行模拟调仓」。",
+        "reason": "「仅建议」授权等级未开放「执行模拟调仓」。",
         "requiresConfirmation": false,
       }
     `);

@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Reflect 节点（DeepSeek checkpoint — 只在 conviction 变化时有意义）
+ * 投资助理复核工作流 — Reflect 节点（DeepSeek checkpoint — 只在 conviction 变化时有意义）
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";

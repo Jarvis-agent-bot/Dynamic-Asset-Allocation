@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent OS — LangGraph 工作流协调器
+ * 投资助理复核工作流 — LangGraph 工作流协调器
  *
  * 完整循环：observe → prioritize → investigate ⇄ reflect → review → learn → surface → END
  *
@@ -46,7 +46,7 @@ function buildCognitiveGraph() {
     .addEdge("observe", "prioritize")
     .addConditionalEdges("prioritize", (state: CognitiveState) => {
       if (state.currentTarget && state.currentThread) return "investigate";
-      return "review"; // 无调查目标 → 跳到复盘
+      return "review"; // 无复核目标 → 跳到复盘
     })
     .addConditionalEdges("investigate", (state: CognitiveState) => {
       if (state.investigateResult?.thesisChanged) return "reflect";

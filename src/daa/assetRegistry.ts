@@ -1,5 +1,5 @@
 /**
- * 全局资产名称登记表 —— TG 推送 / Agent 日报 / UI 标签的唯一中文名源头。
+ * 全局资产名称登记表 —— TG 推送 / 复核简报 / UI 标签的唯一中文名源头。
  *
  * - 候选池资产：直接用 `featuredAssetsCatalog` 里的 `displayNameZh`
  * - 常见持仓 / 非候选池资产：这里维护一份中文名覆盖表
@@ -11,7 +11,7 @@
  */
 
 import { parseDaaAssetKey } from "./assetKey";
-import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "./modules/workbench/featuredAssetsCatalog";
+import { WORKBENCH_FEATURED_ASSETS_CATALOG } from "./modules/workbench/featuredAssetsCatalog";
 
 /** 常见资产中文名补充。ticker 全大写匹配。 */
 const ASSET_NAME_ZH_OVERRIDES: Record<string, string> = {
@@ -98,7 +98,7 @@ function normSymbol(symbol: string): string {
  */
 const NAME_ZH_BY_SYMBOL: Map<string, string> = (() => {
   const map = new Map<string, string>();
-  for (const item of WORKBENCH_FEATURED_ASSETS_CATALOG_) {
+  for (const item of WORKBENCH_FEATURED_ASSETS_CATALOG) {
     const sym = normSymbol(item.symbol);
     map.set(sym, item.displayNameZh);
   }

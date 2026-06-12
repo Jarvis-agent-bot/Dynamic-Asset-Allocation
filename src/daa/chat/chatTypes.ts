@@ -87,7 +87,7 @@ export type DaaChatPendingAction =
       expiresAt: string;
     };
 
-export type DaaChatSessionMemory = {
+export type DaaChatSessionState = {
   sessionId: string;
   summaryText: string;
   updatedAt: string;

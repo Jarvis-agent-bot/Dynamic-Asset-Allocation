@@ -11,7 +11,7 @@ import { requireCronAuth } from "@/src/daa/cron/auth";
 import { extractDividendsFromRawPayloads } from "@/src/daa/modules/dividend/dividendExtractor";
 import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getMarketIndicatorRefreshSymbols } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
-import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
+import { WORKBENCH_FEATURED_ASSETS_CATALOG } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import {
   getDaaSystemConfig,
   listDaaAssetUniverse,
@@ -119,7 +119,7 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
               currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
             };
           }),
-          ...WORKBENCH_FEATURED_ASSETS_CATALOG_.map((row) => ({
+          ...WORKBENCH_FEATURED_ASSETS_CATALOG.map((row) => ({
             market: row.market,
             symbol: row.symbol,
             currency: row.currency,

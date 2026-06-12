@@ -2,7 +2,7 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 import { SectionCard, type SettingsConfigSetter } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 import { SettingsHumanFactorSection } from "@/app/daa/dashboard/settings/_components/SettingsHumanFactorSection";
-import { SettingsAiAnalysisBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsAiAnalysisBlock";
+import { SettingsModelRoutingBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsModelRoutingBlock";
 import { SettingsFxFeedBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsFxFeedBlock";
 import { SettingsMarketContextBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsMarketContextBlock";
 import { SettingsNewsResearchBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsNewsResearchBlock";
@@ -17,16 +17,9 @@ export function SettingsDataSourcesSection(props: {
   return (
     <section id="settings-data-sources" className="scroll-mt-28">
       <SectionCard title="数据源与模型">
-        <div style={{ display: "grid", gap: 18 }}>
-          <SettingsAiAnalysisBlock config={config} setConfig={setConfig} />
-          <div
-            style={{
-              display: "grid",
-              gap: 18,
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              alignItems: "start",
-            }}
-          >
+        <div className="grid gap-4">
+          <SettingsModelRoutingBlock config={config} setConfig={setConfig} />
+          <div className="grid items-start gap-4 xl:grid-cols-3">
             <SettingsPriceFeedBlock config={config} setConfig={setConfig} />
             <SettingsNewsResearchBlock config={config} setConfig={setConfig} />
             <SettingsFxFeedBlock config={config} setConfig={setConfig} />

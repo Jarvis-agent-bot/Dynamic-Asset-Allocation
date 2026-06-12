@@ -38,7 +38,7 @@ type HomeAction = {
   hint: string;
   Icon: ComponentType<{ className?: string }>;
   onClick: () => void;
-  tone: "cyan" | "green" | "amber";
+  tone: "primary" | "success" | "warning";
 };
 
 function isTerminalCycle(cycle: RebalanceCycle | null | undefined) {
@@ -54,10 +54,10 @@ function cycleStatusLabel(cycle: RebalanceCycle | null | undefined) {
 }
 
 function cycleStatusTone(cycle: RebalanceCycle | null | undefined) {
-  if (!cycle) return "slate" as const;
-  if (cycle.status === "completed") return "green" as const;
-  if (cycle.status === "cancelled") return "slate" as const;
-  return "amber" as const;
+  if (!cycle) return "neutral" as const;
+  if (cycle.status === "completed") return "success" as const;
+  if (cycle.status === "cancelled") return "neutral" as const;
+  return "warning" as const;
 }
 
 function resolvePrimaryAction(input: {
@@ -74,7 +74,7 @@ function resolvePrimaryAction(input: {
       hint: "让组合进入可配置状态",
       Icon: WalletCards,
       onClick: input.onDeposit,
-      tone: "green",
+      tone: "success",
     };
   }
   if (input.maxDriftPct >= 5) {
@@ -83,7 +83,7 @@ function resolvePrimaryAction(input: {
       hint: `最大偏离 ${formatPercent(input.maxDriftPct)}，已超过策略阈值`,
       Icon: Gauge,
       onClick: input.onOpenRebalance,
-      tone: "amber",
+      tone: "warning",
     };
   }
   if (input.latestCycle && !isTerminalCycle(input.latestCycle) && input.latestCycle.proposals.length > 0) {
@@ -92,7 +92,7 @@ function resolvePrimaryAction(input: {
       hint: `${input.latestCycle.proposals.length} 条建议等待确认`,
       Icon: Activity,
       onClick: input.onOpenRebalance,
-      tone: "amber",
+      tone: "warning",
     };
   }
   return {
@@ -100,13 +100,13 @@ function resolvePrimaryAction(input: {
     hint: "更新价格、现金与配置偏离",
     Icon: RefreshCcw,
     onClick: input.onRefresh,
-    tone: "cyan",
+    tone: "primary",
   };
 }
 
 function toneClass(tone: HomeAction["tone"]) {
-  if (tone === "green") return "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]";
-  if (tone === "amber") return "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]";
+  if (tone === "success") return "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]";
+  if (tone === "warning") return "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]";
   return "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
 }
 
@@ -161,13 +161,13 @@ function resolveMaxDriftReason(input: {
   if (plannedPct != null && Math.abs(plannedPct - input.row.targetWeightPct) <= 0.05) {
     const reason = readIntentReason(plan, input.row.assetKey) || compactReason(plan?.summary) || compactReason(plan?.reason);
     const baseline = baselinePct != null ? `原目标 ${formatPercent(baselinePct)} -> ` : "";
-    return `${baseline}Agent 目标 ${formatPercent(plannedPct)}${reason ? `；${reason}` : ""}`;
+    return `${baseline}目标建议 ${formatPercent(plannedPct)}${reason ? `；${reason}` : ""}`;
   }
 
   const triggerReason = compactReason(input.latestCycle?.triggerReason, 120);
   if (triggerReason) return `最近周期记录：${triggerReason}`;
 
-  return "当前只记录了目标权重数值，未找到对应的 Agent 或调仓周期原因。";
+  return "当前只记录了目标权重数值，未找到对应的调仓周期原因。";
 }
 
 export function PortfolioHomeOverview(props: {
@@ -197,11 +197,15 @@ export function PortfolioHomeOverview(props: {
   const latestCycleStatus = cycleStatusLabel(props.latestCycle);
   const allocationRows = props.rows
     .filter((row) => row.holdingQty > 0 || row.actualWeightPct > 0 || row.targetWeightHint > 0)
-    .sort((a, b) => (b.actualWeightPct || b.targetWeightPct) - (a.actualWeightPct || a.targetWeightPct));
+    .sort(
+      (leftRow, rightRow) =>
+        (rightRow.actualWeightPct || rightRow.targetWeightPct) -
+        (leftRow.actualWeightPct || leftRow.targetWeightPct),
+    );
   const maxAllocationPct = Math.max(1, ...allocationRows.map((row) => row.actualWeightPct || row.targetWeightPct));
   const maxDriftRow = props.rows
     .filter((row) => row.gapPct != null)
-    .sort((a, b) => Math.abs(b.gapPct ?? 0) - Math.abs(a.gapPct ?? 0))[0];
+    .sort((leftRow, rightRow) => Math.abs(rightRow.gapPct ?? 0) - Math.abs(leftRow.gapPct ?? 0))[0];
   const maxDriftPct = Math.abs(maxDriftRow?.gapPct ?? 0);
   const maxDriftReason = resolveMaxDriftReason({ row: maxDriftRow, latestCycle: props.latestCycle });
   const priceIssueCount = props.rows.filter((row) => row.priceStatus === "missing" || row.priceStatus === "stale").length;
@@ -221,18 +225,16 @@ export function PortfolioHomeOverview(props: {
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--card),var(--surface)_58%,var(--elevated))] shadow-[0_18px_46px_rgba(15,23,42,0.08)]">
-      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--primary),var(--amber),transparent)]" />
+    <section className="relative overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]">
       <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.42fr)]">
-        <div className="border-b border-[var(--border)] p-5 sm:p-6 xl:border-b-0 xl:border-r">
+        <div className="border-b border-[var(--border)] p-4 sm:p-5 xl:border-b-0 xl:border-r">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">
                 资产中枢 · 权益走势
               </div>
-              <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-2">
-                <div className="font-[var(--font-mono)] text-[34px] leading-none tracking-[-0.03em] text-[var(--text)] sm:text-[42px]">
+              <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
+                <div className="font-[var(--font-mono)] text-[28px] leading-none text-[var(--text)] sm:text-[32px]">
                   {formatCurrency(props.totalEquity, props.baseCurrency)}
                 </div>
                 <div className="pb-1 text-xs leading-5 text-[var(--muted)]">
@@ -242,7 +244,7 @@ export function PortfolioHomeOverview(props: {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <DaaSurfaceStatusPill tone={props.priceStreamConnected ? "green" : "slate"}>
+              <DaaSurfaceStatusPill tone={props.priceStreamConnected ? "success" : "neutral"}>
                 {props.priceStreamConnected ? "实时价格" : "价格离线"}
               </DaaSurfaceStatusPill>
               <DaaSurfaceStatusPill tone={cycleStatusTone(props.latestCycle)}>
@@ -251,24 +253,22 @@ export function PortfolioHomeOverview(props: {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-3">
+          <div className="mt-4 grid overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] md:grid-cols-3">
             {portfolioMetrics.map((item) => (
               <div
                 key={item.label}
-                className="flex min-h-[86px] items-center justify-between rounded-[14px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left"
+                className="flex min-h-[58px] items-center justify-between border-b border-[var(--border)] px-4 py-2.5 text-left last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
               >
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
-                    <item.Icon className="h-4 w-4 text-[var(--primary)]" />
-                    {item.label}
-                  </div>
-                  <div className="mt-2 font-[var(--font-mono)] text-2xl text-[var(--text)]">{item.value}</div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <item.Icon className="h-4 w-4 shrink-0 text-[var(--primary)]" />
+                  <span className="text-xs font-medium text-[var(--muted)]">{item.label}</span>
                 </div>
+                <div className="font-[var(--font-mono)] text-lg text-[var(--text)]">{item.value}</div>
               </div>
             ))}
           </div>
 
-          <div className="mt-5 rounded-[16px] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+          <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-3.5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
@@ -282,20 +282,20 @@ export function PortfolioHomeOverview(props: {
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {props.equityDelta?.dayChangePct != null ? (
                   <span className={cn(
-                    "rounded-full border px-2.5 py-1 font-[var(--font-mono)]",
+                    "rounded-[var(--radius-sm)] border px-2.5 py-1 font-[var(--font-mono)]",
                     props.equityDelta.dayChangePct >= 0
                       ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]"
-                      : "border-[rgba(239,68,68,0.22)] bg-[rgba(239,68,68,0.12)] text-[rgb(248,113,113)]",
+                      : "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
                   )}>
                     当日 {props.equityDelta.dayChangePct >= 0 ? "+" : ""}{props.equityDelta.dayChangePct.toFixed(2)}%
                   </span>
                 ) : null}
                 {props.equityDelta?.weekChangePct != null ? (
                   <span className={cn(
-                    "rounded-full border px-2.5 py-1 font-[var(--font-mono)]",
+                    "rounded-[var(--radius-sm)] border px-2.5 py-1 font-[var(--font-mono)]",
                     props.equityDelta.weekChangePct >= 0
                       ? "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]"
-                      : "border-[rgba(239,68,68,0.22)] bg-[rgba(239,68,68,0.12)] text-[rgb(248,113,113)]",
+                      : "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
                   )}>
                     近 7 天 {props.equityDelta.weekChangePct >= 0 ? "+" : ""}{props.equityDelta.weekChangePct.toFixed(2)}%
                   </span>
@@ -313,26 +313,26 @@ export function PortfolioHomeOverview(props: {
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] p-5 sm:p-6">
-          <div className={cn("inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]", toneClass(primaryAction.tone))}>
+        <div className="bg-[var(--surface)] p-4 sm:p-5">
+          <div className={cn("inline-flex rounded-[var(--radius-sm)] border px-3 py-1 text-[11px] font-semibold uppercase tracking-normal", toneClass(primaryAction.tone))}>
             下一步
           </div>
           <div className="mt-4 flex items-start gap-3">
-            <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border", toneClass(primaryAction.tone))}>
+            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] border", toneClass(primaryAction.tone))}>
               <primaryAction.Icon className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-lg font-semibold tracking-[-0.01em] text-[var(--text)]">{primaryAction.label}</div>
+              <div className="text-lg font-semibold text-[var(--text)]">{primaryAction.label}</div>
               <div className="mt-1 text-sm leading-5 text-[var(--muted)]">{primaryAction.hint}</div>
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-2">
-            <DaaSurfaceActionButton tone={primaryAction.tone === "amber" ? "warning" : primaryAction.tone === "green" ? "success" : "primary"} onClick={primaryAction.onClick} className="justify-center">
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <DaaSurfaceActionButton tone={primaryAction.tone === "warning" ? "warning" : primaryAction.tone === "success" ? "success" : "primary"} onClick={primaryAction.onClick} className="justify-center">
               <primaryAction.Icon className="h-3.5 w-3.5" />
               {primaryAction.label}
             </DaaSurfaceActionButton>
-            <DaaSurfaceActionButton tone="slate" onClick={props.onRefresh} disabled={props.refreshing} className="justify-center">
+            <DaaSurfaceActionButton tone="neutral" onClick={props.onRefresh} disabled={props.refreshing} className="justify-center">
               <RefreshCcw className={cn("h-3.5 w-3.5", props.refreshing ? "animate-spin" : "")} />
               {props.refreshing ? "刷新中" : "刷新"}
             </DaaSurfaceActionButton>
@@ -355,7 +355,7 @@ export function PortfolioHomeOverview(props: {
       </div>
 
       <div className="grid gap-px border-t border-[var(--border)] bg-[var(--border)] lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
-        <div className="bg-[var(--surface)] p-5 sm:p-6 lg:col-span-2">
+        <div className="bg-[var(--surface)] p-4 sm:p-5 lg:col-span-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
@@ -366,9 +366,9 @@ export function PortfolioHomeOverview(props: {
                 展示全部持仓与目标篮子，当前权重优先；无持仓时显示目标权重。
               </div>
             </div>
-            <DaaSurfaceStatusPill tone="slate">{allocationRows.length} 项</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone="neutral">{allocationRows.length} 项</DaaSurfaceStatusPill>
           </div>
-          <div className="mt-5 grid gap-3 xl:grid-cols-2">
+          <div className="mt-4 grid gap-3 xl:grid-cols-2">
             {allocationRows.length > 0 ? allocationRows.map((row) => {
               const pct = row.actualWeightPct || row.targetWeightPct;
               const widthPct = Math.max(6, Math.min(100, (pct / maxAllocationPct) * 100));
@@ -376,19 +376,19 @@ export function PortfolioHomeOverview(props: {
               return (
                 <div
                   key={row.assetKey}
-                  className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5"
+                  className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5"
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-[var(--text)]">{row.symbol}</div>
                     <div className="truncate text-[11px] text-[var(--muted)]">{row.assetClass || row.market}</div>
                   </div>
                   <div className="min-w-0">
-                    <div className="h-2 overflow-hidden rounded-full bg-[var(--elevated)]">
-                      <div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary),var(--success))]"
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    </div>
+                    <progress
+                      aria-label={`${row.symbol} 组合权重`}
+                      className="block h-2 w-full appearance-none overflow-hidden rounded-[var(--radius-sm)] bg-[var(--elevated)] accent-[var(--primary)] [&::-moz-progress-bar]:bg-[var(--primary)] [&::-webkit-progress-bar]:bg-[var(--elevated)] [&::-webkit-progress-value]:bg-[var(--primary)]"
+                      max={100}
+                      value={widthPct}
+                    />
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--muted)]">
                       <span>当前 {formatPercent(row.actualWeightPct)}</span>
                       <span>目标 {formatPercent(row.targetWeightPct)}</span>
@@ -405,14 +405,14 @@ export function PortfolioHomeOverview(props: {
                 </div>
               );
             }) : (
-              <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] px-4 py-5 text-sm text-[var(--muted)] xl:col-span-2">
+              <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border-strong)] px-3 py-3 text-sm text-[var(--muted)] xl:col-span-2">
                 暂无配置资产，记录入金后可在下方资产列表维护配置。
               </div>
             )}
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] p-5 sm:p-6">
+        <div className="bg-[var(--surface)] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
               <Gauge className="h-4 w-4 text-[var(--amber)]" />
@@ -420,9 +420,9 @@ export function PortfolioHomeOverview(props: {
             </div>
             <DaaSurfaceStatusPill tone={cycleStatusTone(props.latestCycle)}>{latestCycleStatus}</DaaSurfaceStatusPill>
           </div>
-          <div className="mt-5 space-y-3">
-            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--card)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">最大偏离</div>
+          <div className="mt-4 space-y-3">
+            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">最大偏离</div>
               <div className="mt-2 flex items-end justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-[var(--text)]">{maxDriftRow?.symbol ?? "暂无偏离"}</div>
@@ -437,17 +437,17 @@ export function PortfolioHomeOverview(props: {
                   {maxDriftRow ? formatPercent(maxDriftRow.gapPct ?? 0) : "--"}
                 </div>
               </div>
-              <div className="mt-3 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">
+              <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">
                 {maxDriftReason}
               </div>
             </div>
             <button
               type="button"
               onClick={props.onOpenRebalance}
-              className="group flex w-full items-center justify-between rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]"
+              className="group flex w-full items-center justify-between rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]"
             >
               <div className="flex items-center gap-3">
-                <div className={cn("flex h-9 w-9 items-center justify-center rounded-[10px] border", toneClass(primaryAction.tone))}>
+                <div className={cn("flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] border", toneClass(primaryAction.tone))}>
                   <Activity className="h-4 w-4" />
                 </div>
                 <div>
@@ -462,7 +462,7 @@ export function PortfolioHomeOverview(props: {
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] p-5 sm:p-6">
+        <div className="bg-[var(--surface)] p-4 sm:p-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
             {priceIssueCount > 0 ? (
               <AlertTriangle className="h-4 w-4 text-[var(--amber)]" />
@@ -471,10 +471,10 @@ export function PortfolioHomeOverview(props: {
             )}
             数据健康
           </div>
-          <div className="mt-5 space-y-3 text-sm">
+          <div className="mt-4 space-y-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[var(--muted)]">价格状态</span>
-              <DaaSurfaceStatusPill tone={priceIssueCount > 0 ? "amber" : "green"}>
+              <DaaSurfaceStatusPill tone={priceIssueCount > 0 ? "warning" : "success"}>
                 {priceIssueCount > 0 ? `${priceIssueCount} 项待更新` : "正常"}
               </DaaSurfaceStatusPill>
             </div>

@@ -28,12 +28,12 @@ describe("parseReactResponse", () => {
       result: {
         thesisChanged: false,
         evidenceType: "neutral",
-        evidenceSummary: "证据不足，保持观察。",
+        evidenceSummary: "依据不足，保持观察。",
       },
     });
 
     expect(parsed?.action).toBe("result");
-    expect(parsed && "result" in parsed ? parsed.result.evidenceSummary : null).toBe("证据不足，保持观察。");
+    expect(parsed && "result" in parsed ? parsed.result.evidenceSummary : null).toBe("依据不足，保持观察。");
   });
 
   it("兼容无 action 包装的最终结论", () => {

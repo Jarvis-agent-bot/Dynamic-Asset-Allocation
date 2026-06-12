@@ -1,5 +1,5 @@
 /**
- * POST /api/daa/agent/bootstrap — 初始化 Thesis（扫描持仓和观察列表生成初始论点）
+ * POST /api/daa/agent/bootstrap — 建立初始投资判断（扫描持仓和观察列表）
  */
 
 export const runtime = "nodejs";

@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
  * @returns Record<symbol, number[]>
  */
 export function useSparklines(symbols: string[], days: number = 30): Record<string, number[]> {
-  const [data, setData] = useState<Record<string, number[]>>({});
+  const [sparklineSeriesBySymbol, setSparklineSeriesBySymbol] = useState<Record<string, number[]>>({});
   const fetchedKey = useRef("");
 
   useEffect(() => {
@@ -29,13 +29,13 @@ export function useSparklines(symbols: string[], days: number = 30): Record<stri
     });
 
     fetch(`/api/daa/market/sparklines?${params}`)
-      .then((r) => (r.ok ? r.json() : null))
+      .then((response) => (response.ok ? response.json() : null))
       .then((json) => {
         const sparklines = json?.data?.sparklines ?? json?.sparklines ?? {};
-        if (typeof sparklines === "object") setData(sparklines);
+        if (typeof sparklines === "object") setSparklineSeriesBySymbol(sparklines);
       })
       .catch(() => {});
   }, [symbols.join(","), days]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return data;
+  return sparklineSeriesBySymbol;
 }

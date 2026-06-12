@@ -4,7 +4,7 @@
 
 **面向个人投资者的 AI-Native 动态资产配置与再平衡金融系统**
 
-观察 → 研究论点 → 目标权重计划 → 本地模拟执行 → 复盘学习 → 对话协同
+观察 → 投资判断复核 → 目标权重计划 → 本地模拟执行 → 复盘学习 → 对话协同
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
@@ -21,41 +21,41 @@
 
 - **单组合**：硬编码 `'default'` 账户，不做多租户
 - **本地模拟执行**：默认执行边界是本地 `sim` / `crypto_paper`，不会向真实券商下单
-- **AI-Native**：Cognitive Agent 每天主动追问"我现在最可能错在哪里"，不是被动问答
-- **显式自动驾驶**：手动交易/手动调仓仍走确认交互；当用户开启 Autopilot 与自动执行开关时，系统可以按权限矩阵自动生成并执行本地模拟调仓
+- **AI-Native**：投资助理每天主动追问"我现在最可能错在哪里"，不是被动问答
+- **显式自动复核**：手动交易/手动调仓仍走确认交互；当用户开启自动复核与自动执行开关时，系统可以按权限矩阵自动生成并执行本地模拟调仓
 - **可追溯边界**：自动执行必须经过 Authority、Money/Valuation、风控和本地执行网关四层约束
 
 ## 核心能力
 
-### 🧠 Cognitive Agent（AI 核心）
+### 🧠 投资助理复核链路（AI 核心）
 
-基于 LangGraph 的 6 节点认知 Agent：`observe → prioritize → investigate ⇄ reflect → review → surface`。
+基于 LangGraph 的 6 节点投资复核链路：`observe → prioritize → investigate ⇄ reflect → review → surface`。
 
-- **Thesis-driven**：维护一组持续演化的投资论点，每天审视并证伪
-- **记忆三层**：pgvector 语义 + pg_trgm 关键字 + 实体图（6 kind）
+- **Investment-judgment-driven**：维护一组持续演化的投资判断，每天审视并证伪
+- **经验库三层检索**：pgvector 语义 + pg_trgm 关键字 + 实体图（6 kind）
 - **16 个工具**：observe / analyze / meta / act 四类，链式调用
-- **日报 5 面板**：今日意外、认知缺口、改观条件、论点冲突、风险暴露
-- **策略顾问**：在 Autopilot 模式下输出本轮 `targetAllocationPlan`，只作为临时目标权重覆盖，不永久改写系统配置
+- **每日复核 5 面板**：需要复核的变化、复核优先级、改观条件、判断不一致、风险暴露
+- **目标权重建议**：在自动复核授权下输出本轮 `targetAllocationPlan`，只作为临时目标权重覆盖，不永久改写系统配置
 
 > 详见 **[docs/COGNITIVE_AGENT.md](./docs/COGNITIVE_AGENT.md)**
 
 ### 📊 再平衡引擎
 
-- 漂移检测（日历 / Agent / 阈值三路触发）
+- 漂移检测（日历 / 投资助理 / 阈值三路触发）
 - 四维信号融合（技术 25% + 估值 20% + 新闻 20% + 人类 35%）
 - 纯算法订单生成（`src/core/rebalanceCore.ts`）
-- 风控预检 + 执行摘要 + 人工勾选 / Autopilot 自动执行
+- 风控预检 + 执行摘要 + 人工勾选 / 自动复核执行
 - 自动执行统一经过 `AutomationAuthority`，默认只允许本地模拟执行网关
 
 ### 💬 双通道对话
 
 Web UI + Telegram Bot，14 种意图，可查组合/市场/风险、发起调仓、确认执行。所有写操作 10 分钟 TTL 待确认。
 
-注意：上面的 TTL 待确认适用于对话里的人工写操作。Autopilot 是另一条显式配置路径：只有当 `brain.mode=autopilot`、`policy.execution.autoGenerateEnabled=true`、`policy.execution.autoExecuteEnabled=true` 且 Authority / 风控 / 本地执行网关都通过时，才会自动执行本地模拟调仓。
+注意：上面的 TTL 待确认适用于对话里的人工写操作。自动复核执行是另一条显式配置路径：只有当 `brain.mode=autopilot`、`policy.execution.autoGenerateEnabled=true`、`policy.execution.autoExecuteEnabled=true` 且 Authority / 风控 / 本地执行网关都通过时，才会自动执行本地模拟调仓。
 
 ### 💵 Money / Valuation Domain
 
-组合级金额不由 UI、Agent、通知或 cron 各自计算，而由 Money/Valuation Domain 输出：
+组合级金额不由 UI、投资助理、通知或 cron 各自计算，而由 Money/Valuation Domain 输出：
 
 - `baseCurrency`：账户基准货币，默认 USD
 - `holdingsValue`：按持仓、行情和 FX 计算的基准货币持仓市值
@@ -79,7 +79,7 @@ Web UI + Telegram Bot，14 种意图，可查组合/市场/风险、发起调仓
 | 后端 | PostgreSQL + pgvector + pg_trgm · 本地账号会话 |
 | LLM | DeepSeek（主） · OpenAI 兼容（备） |
 | Embedding | Ollama BGE-M3（本地，零成本） · SiliconFlow · OpenAI |
-| Agent | LangGraph.js 1.2 |
+| 复核工作流 | LangGraph.js 1.2 |
 | 测试 | Vitest · Playwright |
 | 部署 | Docker Compose（5 容器） |
 
@@ -135,7 +135,7 @@ pnpm gates         # 完整门控（test + typecheck + build）
 | 文档 | 面向 | 内容 |
 |------|------|------|
 | **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | 技术读者 / 贡献者 | 代码分层、模块职责、自动化权限、Money Domain、数据流、核心约束 |
-| **[docs/COGNITIVE_AGENT.md](./docs/COGNITIVE_AGENT.md)** | 想理解 Agent 原理 | 工作流、记忆三层、16 工具、日报 5 面板、配置参数 |
+| **[docs/COGNITIVE_AGENT.md](./docs/COGNITIVE_AGENT.md)** | 想理解投资助理复核链路 | 工作流、经验库三层检索、16 工具、每日复核 5 面板、配置参数 |
 | **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** | 运维 / 部署 | 容器拓扑、环境变量、14 个 Cron、数据保留、故障排查 |
 | **[CLAUDE.md](./CLAUDE.md)** | AI 助手 / 新贡献者 | 规范清单（快速扫读） |
 | [.env.example](./.env.example) | 所有人 | 环境变量模板 |
@@ -150,12 +150,12 @@ pnpm gates         # 完整门控（test + typecheck + build）
 
 ## 当前默认自动化边界
 
-默认配置面向“个人本地自动驾驶”：
+默认配置面向“个人本地自动复核”：
 
 | 配置 | 默认值 | 含义 |
 |------|--------|------|
-| `brain.mode` | `autopilot` | 允许运行认知循环、初始化论点和本地模拟执行 |
-| `policy.execution.autoGenerateEnabled` | `true` | 允许 cron / Agent / drift 自动生成再平衡周期 |
+| `brain.mode` | `autopilot` | 允许运行复核循环、建立初始投资判断和本地模拟执行 |
+| `policy.execution.autoGenerateEnabled` | `true` | 允许 cron / 投资助理 / drift 自动生成再平衡周期 |
 | `policy.execution.autoExecuteEnabled` | `true` | 允许通过 Authority 后自动执行本地模拟调仓 |
 | `policy.execution.maxSingleOrderPctOfNav` | `0.1` | 单笔自动执行不超过 NAV 的 10% |
 

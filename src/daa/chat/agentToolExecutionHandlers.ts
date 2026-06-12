@@ -65,7 +65,7 @@ export function createAssistantExecutionHandlers(input: DaaAgentToolContext): Ma
       });
     if (!permission.allowed) {
       return {
-        text: `${permission.reason}\n如需继续，请到设置页调整大脑授权等级。`,
+        text: `${permission.reason}\n如需继续，请到设置页调整投资助理授权等级。`,
         intentKind: "confirm_action",
         pendingAction: null,
       };

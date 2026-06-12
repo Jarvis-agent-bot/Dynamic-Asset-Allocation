@@ -4,7 +4,6 @@ import {
   FieldLabel,
   NumberInput,
   SectionCard,
-  settingsGridCols3Style,
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
@@ -203,7 +202,7 @@ export function SettingsRiskSection(props: {
   return (
     <section id="settings-risk" className="scroll-mt-28">
       <SectionCard title="风控参数">
-        <div style={settingsGridCols3Style}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {fields.map((field) => (
             <div key={field.label}>
               <FieldLabel>{field.label}</FieldLabel>
@@ -211,7 +210,7 @@ export function SettingsRiskSection(props: {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 12, color: "var(--muted)", fontSize: 12 }}>
+        <div className="mt-3 text-xs leading-6 text-[var(--muted)]">
           历史研究与执行摘要共享同一套执行口径：单笔 NAV 上限、手续费、滑点与成交时点。当前成交时点固定为 T+1 close。
         </div>
       </SectionCard>

@@ -20,7 +20,7 @@ function buildUnknownReply(input: {
     };
   }
   return {
-    text: `我已经接入了组合查询、认知循环控制、模拟执行与 Agent 摘要能力，但这条话暂时还没有稳定映射到结构化动作。\n\n${buildAssistantHelpText()}`,
+    text: `我已经接入了组合查询、投资复核控制、模拟执行与投资助理摘要能力，但这条话暂时还没有稳定映射到结构化动作。\n\n${buildAssistantHelpText()}`,
     intentKind: "unknown",
     pendingAction: input.pendingAction,
   };
@@ -36,7 +36,7 @@ async function answerWithAssistantLlm(input: {
     const pendingAction = input.runtimeContext.storedPendingAction;
     const prompt = [
       "你是 DAA 的私有投资助手，只能基于给定上下文回答，不要虚构订单或不存在的数据。",
-      "回答要求：中文、直接、可操作；如果问题涉及系统能力、模型路由、权限边界、认知链路，请优先根据「系统能力与配置摘要」回答；如果上下文不足，再明确说不足。",
+      "回答要求：中文、直接、可操作；如果问题涉及系统能力、模型路由、权限边界、投资复核链路，请优先根据「系统能力与配置摘要」回答；如果上下文不足，再明确说不足。",
       "",
       "系统能力与配置摘要：",
       normalizeText(input.runtimeContext.systemDigest) || "暂无",
@@ -44,14 +44,14 @@ async function answerWithAssistantLlm(input: {
       "系统上下文：",
       buildContextDigest(input.runtimeContext.readModel),
       "",
-      "认知大脑数据：",
+      "投资助理复核数据：",
       normalizeText(input.runtimeContext.brainContextDigest) || "暂无",
       "",
       "最近复盘经验：",
       normalizeText(input.runtimeContext.learningDigest) || "暂无",
       "",
-      "会话记忆：",
-      normalizeText(input.runtimeContext.sessionMemory?.summaryText) || "暂无",
+      "会话摘要：",
+      normalizeText(input.runtimeContext.sessionState?.summaryText) || "暂无",
       `待确认动作：${describePendingAction(pendingAction)}`,
       "",
       "最近对话：",

@@ -13,7 +13,7 @@ import { getDaaSystemConfig, patchDaaSystemConfig } from "@/src/daa/store/daaSto
 import type { DaaAssistantRuntimeContext } from "./agentContext";
 
 function formatLatestRunSummary(latestRun: Awaited<ReturnType<typeof getLatestRun>>): string {
-  if (!latestRun) return "最近尚未运行认知循环。";
+  if (!latestRun) return "最近尚未运行投资复核。";
   return [
     `最近运行：${latestRun.status}`,
     `时间：${new Date(latestRun.createdAt).toLocaleString("zh-CN")}`,
@@ -38,12 +38,12 @@ export async function buildAssistantBrainStatusText(runtimeContext: DaaAssistant
   const baseCurrency = runtimeContext.readModel.bootstrap.baseCurrency;
 
   return [
-    `当前模式：全权大脑 / ${describeBrainModeSummary(runtimeContext.systemConfig)}。`,
-    "通道权限：Web 对话和 Telegram 机器人共用同一套工具、上下文和大脑授权矩阵；Telegram 额外需要 webhook secret 与 allowlist 通过。",
-    `可见范围：组合 ${holdings} 个持仓，总权益 ${Number(totalEquity || 0).toFixed(2)} ${baseCurrency}；同时可读系统配置、LLM 路由、认知 Agent 状态、活跃论点、会话记忆、复盘学习与日报摘要。`,
-    `工具底座：共 ${totalTools} 个 Agent 工具，其中 observe ${observeTools} / analyze ${analyzeTools} / meta ${metaTools} / act ${actTools}。`,
+    `当前授权：投资助理 / ${describeBrainModeSummary(runtimeContext.systemConfig)}。`,
+    "通道权限：Web 对话和 Telegram 机器人共用同一套工具、上下文和投资助理授权矩阵；Telegram 额外需要 webhook secret 与 allowlist 通过。",
+    `可见范围：组合 ${holdings} 个持仓，总权益 ${Number(totalEquity || 0).toFixed(2)} ${baseCurrency}；同时可读系统配置、LLM 路由、投资助理复核状态、活跃投资判断、会话摘要、复盘学习与简报摘要。`,
+    `工具底座：共 ${totalTools} 个投资助理工具，其中 observe ${observeTools} / analyze ${analyzeTools} / meta ${metaTools} / act ${actTools}。`,
     `动作边界：${buildBrainBoundaryText(runtimeContext.systemConfig)}`,
-    `认知状态：当前活跃论点 ${theses.length} 个。${formatLatestRunSummary(latestRun)}`,
+    `复核状态：当前活跃投资判断 ${theses.length} 个。${formatLatestRunSummary(latestRun)}`,
     "当前模型与权限摘要：",
     runtimeContext.systemDigest,
   ].join("\n");
@@ -63,21 +63,21 @@ export async function runAssistantBootstrap(runtimeContext: DaaAssistantRuntimeC
     }));
 
   if (focusAssets.length === 0) {
-    return "当前没有持仓或观察列表，无法初始化论点。请先同步组合或添加观察资产后再执行。";
+    return "当前没有持仓或观察列表，无法建立初始投资判断。请先同步组合或添加观察资产后再执行。";
   }
 
   const existing = await getActiveTheses().catch(() => []);
   if (existing.length > 0) {
     const result = await ensureAssetThesisCoverage(focusAssets);
     return result.created > 0
-      ? `已补齐研究覆盖，新增 ${result.created} 个研究论点。当前活跃论点 ${existing.length + result.created} 个。${result.errors.length > 0 ? `\n附带告警：${result.errors.slice(0, 3).join("；")}` : ""}`
-      : `当前已有 ${existing.length} 个活跃论点，持仓和观察列表覆盖已齐备。`;
+      ? `已补齐研究覆盖，新增 ${result.created} 个投资判断。当前活跃投资判断 ${existing.length + result.created} 个。${result.errors.length > 0 ? `\n附带告警：${result.errors.slice(0, 3).join("；")}` : ""}`
+      : `当前已有 ${existing.length} 个活跃投资判断，持仓和观察列表覆盖已齐备。`;
   }
 
   const result = await bootstrapTheses(focusAssets);
   return result.created > 0
-    ? `已完成论点初始化，新增 ${result.created} 个研究论点。${result.errors.length > 0 ? `\n附带告警：${result.errors.slice(0, 3).join("；")}` : ""}`
-    : `初始化未产生新论点。${result.errors.length > 0 ? `\n原因：${result.errors.slice(0, 3).join("；")}` : ""}`;
+    ? `已建立初始投资判断，新增 ${result.created} 个投资判断。${result.errors.length > 0 ? `\n附带告警：${result.errors.slice(0, 3).join("；")}` : ""}`
+    : `本次未建立新的投资判断。${result.errors.length > 0 ? `\n原因：${result.errors.slice(0, 3).join("；")}` : ""}`;
 }
 
 export async function runAssistantCognitiveCycle(runtimeContext?: DaaAssistantRuntimeContext): Promise<string> {
@@ -87,7 +87,7 @@ export async function runAssistantCognitiveCycle(runtimeContext?: DaaAssistantRu
       reason: "assistant_chat_manual_autopilot",
     });
     return [
-      "已手动触发一轮 Autopilot 大脑闭环。",
+      "已手动触发一轮自动复核闭环。",
       result.skipped ? `状态：已跳过，原因：${result.reason || "未知"}` : `runId: ${result.cognitiveRun.runId || "-"}`,
       `目标权重池：${result.targetWeightPool.persistedCount > 0 ? `已写入 ${result.targetWeightPool.persistedCount} 个` : result.targetWeightPool.reason || "未写入"}`,
       `主动调仓：${result.rebalance.created ? `已生成周期 ${result.rebalance.cycleId}` : result.rebalance.reason || "未触发"}`,
@@ -100,9 +100,9 @@ export async function runAssistantCognitiveCycle(runtimeContext?: DaaAssistantRu
 
   const result = await runCognitiveAgentCycle("manual");
   return [
-    "已手动触发一轮 Cognitive Agent 调查。",
+    "已手动触发一轮投资助理复核。",
     `runId: ${result.runId}`,
-    `更新论点：${result.thesesUpdated}`,
+    `更新投资判断：${result.thesesUpdated}`,
     `复核变化：${result.surprises.length}`,
     `Tokens：${result.totalTokens}`,
     `耗时：${result.durationMs}ms`,
@@ -129,7 +129,7 @@ export async function switchAssistantBrainMode(input: {
   } else if (
     current?.mode === next.mode
   ) {
-    return `当前已经是${getBrainModeLabel(next.mode)}模式，无需切换。`;
+    return `当前已经是「${getBrainModeLabel(next.mode)}」授权，无需切换。`;
   }
 
   try {
@@ -138,10 +138,10 @@ export async function switchAssistantBrainMode(input: {
       baseVersion: input.runtimeContext.systemConfigVersion,
     });
     return [
-      `已切换到${getBrainModeLabel(saved.config.brain?.mode ?? next.mode)}模式。`,
+      `已切换到「${getBrainModeLabel(saved.config.brain?.mode ?? next.mode)}」授权。`,
       `当前摘要：${describeBrainModeSummary(saved.config)}`,
       `动作边界：${buildBrainBoundaryText(saved.config)}`,
-      "如需微调，可继续说：关闭自动驾驶 / 切到操作员模式 / 查看大脑状态。",
+      "如需微调，可继续说：关闭自动复核 / 切到手动复核 / 查看投资助理状态。",
     ].join("\n");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || "");
@@ -152,7 +152,7 @@ export async function switchAssistantBrainMode(input: {
         baseVersion: latest.version,
       });
       return [
-        `配置有并发变更，已基于最新版本重新切换到${getBrainModeLabel(saved.config.brain?.mode ?? next.mode)}模式。`,
+        `配置有并发变更，已基于最新版本重新切换到「${getBrainModeLabel(saved.config.brain?.mode ?? next.mode)}」授权。`,
         `当前摘要：${describeBrainModeSummary(saved.config)}`,
         `动作边界：${buildBrainBoundaryText(saved.config)}`,
       ].join("\n");

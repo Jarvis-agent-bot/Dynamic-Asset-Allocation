@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Learn 节点（Phase 2: 策略学习 — review 后提炼调查策略模板）
+ * 投资助理复核工作流 — Learn 节点（Phase 2: 策略学习 — review 后提炼复核策略模板）
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
@@ -8,7 +8,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 export async function learnNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
   try {
-    // 前置条件：本次 cycle 有实际调查产出
+    // 前置条件：本次 cycle 有实际复核产出
     if ((state.thesesUpdated ?? 0) === 0 && (state.memoriesCreated ?? 0) === 0) {
       return {}; // 无有效产出，跳过学习
     }

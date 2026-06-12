@@ -1,5 +1,5 @@
 /**
- * act/createThesis — 创建新研究论点
+ * act/createThesis — 创建新投资判断
  *
  * 从 prioritizeNode 中解耦出来，作为独立工具。
  * 需要审批确认（requiresApproval: true）。
@@ -23,11 +23,11 @@ function normalizeAssetKeysFromLlm(raw: string): string[] {
 registerTool(
   {
     name: "create_thesis",
-    description: "创建一个新的研究论点（投资假说）。包含标题、论点文本、关联资产和标签。创建后自动进入调查队列。",
+    description: "创建一个新的投资判断。包含标题、判断正文、关联资产和标签。创建后自动进入复核队列。",
     category: "act",
     parameters: {
-      title: { type: "string", description: "论点标题", required: true },
-      thesisText: { type: "string", description: "论点描述", required: true },
+      title: { type: "string", description: "投资判断标题", required: true },
+      thesisText: { type: "string", description: "投资判断正文", required: true },
       assetKeys: { type: "string", description: "关联资产（逗号分隔，格式 MARKET::SYMBOL，如 US::AAPL,US::MSFT）", required: true },
       tags: { type: "string", description: "标签（逗号分隔，如 macro,tech）" },
     },
@@ -62,7 +62,7 @@ registerTool(
       if (existing) {
         return {
           toolName: "create_thesis", category: "act", success: false, data: null, outputFields: {},
-          error: `已存在类似论点: "${existing.title}"（ID: ${existing.id}）`,
+          error: `已存在类似投资判断: "${existing.title}"（ID: ${existing.id}）`,
           latencyMs: Date.now() - t0,
         };
       }

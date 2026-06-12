@@ -4,9 +4,9 @@ import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { fetchFredMacroSnapshot, type FredMacroSnapshot } from "@/src/market/fredClient";
 import type { FredMacroInput } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
-  MARKET_INDICATOR_KEY_BY_CONFIG_KEY_,
-  MARKET_INDICATOR_KEYS_,
-  MARKET_INDICATOR_META_CATALOG_,
+  MARKET_INDICATOR_KEY_BY_CONFIG_KEY,
+  MARKET_INDICATOR_KEYS,
+  MARKET_INDICATOR_META_CATALOG,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import { buildMarketContextFromIndicators } from "@/src/daa/modules/marketContext/marketContextOverlay";
 import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
@@ -50,7 +50,7 @@ type ComputedIndicatorRow = {
 
 type FredPolicyIndicatorKey = "ppi_inflation" | "fed_policy_rate" | "fed_balance_sheet";
 
-const FRED_POLICY_INDICATOR_KEYS_: FredPolicyIndicatorKey[] = [
+const FRED_POLICY_INDICATOR_KEYS: FredPolicyIndicatorKey[] = [
   "ppi_inflation",
   "fed_policy_rate",
   "fed_balance_sheet",
@@ -153,7 +153,7 @@ function buildExpireAt(refreshIntervalMinutes: number, generatedAt: string): str
 }
 
 function mapStoredIndicatorSnapshotToView(row: DaaStoreMarketIndicatorSnapshot): DaaMarketIndicatorSnapshot {
-  const meta = MARKET_INDICATOR_META_CATALOG_[row.key];
+  const meta = MARKET_INDICATOR_META_CATALOG[row.key];
   return {
     key: row.key,
     label: meta.label,
@@ -211,7 +211,7 @@ function finalizeIndicatorRow(input: {
   reason: string;
   componentsJson?: Record<string, unknown>;
 }): ComputedIndicatorRow {
-  const meta = MARKET_INDICATOR_META_CATALOG_[input.key];
+  const meta = MARKET_INDICATOR_META_CATALOG[input.key];
   const generatedAt = new Date().toISOString();
   return {
     snapshot: {
@@ -258,7 +258,7 @@ function buildUnavailableFredIndicatorRow(key: FredPolicyIndicatorKey, reason: s
     trend1dPct: null,
     trend7dPct: null,
     trend30dPct: null,
-    reason: `${MARKET_INDICATOR_META_CATALOG_[key].label} 暂不可用：${reason}`,
+    reason: `${MARKET_INDICATOR_META_CATALOG[key].label} 暂不可用：${reason}`,
     componentsJson: {
       unavailable: true,
       reason,
@@ -292,7 +292,7 @@ function buildFredPolicyIndicatorRows(input: {
   fredConfigured: boolean;
 }): ComputedIndicatorRow[] {
   const rows: ComputedIndicatorRow[] = [];
-  for (const key of FRED_POLICY_INDICATOR_KEYS_) {
+  for (const key of FRED_POLICY_INDICATOR_KEYS) {
     if (!isFredPolicyIndicatorEnabled(input.config, key)) continue;
 
     if (!input.fredConfigured) {
@@ -465,7 +465,7 @@ async function computeRatioIndicator(input: {
     ? input.highReason
     : percentileScore <= 25
       ? input.lowReason
-      : `${MARKET_INDICATOR_META_CATALOG_[input.key].label} 位于中性区间，风格切换不明显`;
+      : `${MARKET_INDICATOR_META_CATALOG[input.key].label} 位于中性区间，风格切换不明显`;
   return finalizeIndicatorRow({
     key: input.key,
     scorePct: score,
@@ -501,7 +501,7 @@ async function computeRealizedVolIndicator(input: {
     ? input.highReason
     : score <= 25
       ? input.lowReason
-      : `${MARKET_INDICATOR_META_CATALOG_[input.key].label} 位于中性区间，波动环境未见极端`;
+      : `${MARKET_INDICATOR_META_CATALOG[input.key].label} 位于中性区间，波动环境未见极端`;
   return finalizeIndicatorRow({
     key: input.key,
     scorePct: score,
@@ -678,7 +678,7 @@ function hasFreshCoverage(input: {
   const nowMs = Date.now();
   return Object.entries(input.config.indicators).every(([configKey, row]) => {
     if (!row?.enabled) return true;
-    const key = MARKET_INDICATOR_KEY_BY_CONFIG_KEY_[configKey as keyof DaaMarketIndicatorsConfig["indicators"]];
+    const key = MARKET_INDICATOR_KEY_BY_CONFIG_KEY[configKey as keyof DaaMarketIndicatorsConfig["indicators"]];
     const snapshot = input.snapshots.find((item) => item.key === key);
     if (!snapshot) return false;
     if (input.allowStale) return true;
@@ -810,7 +810,7 @@ export async function listMarketIndicatorHistorySeries(input: {
     scope: input.scope,
   });
   const grouped = {} as Record<DaaMarketIndicatorKey, DaaMarketIndicatorSnapshot[]>;
-  for (const key of MARKET_INDICATOR_KEYS_) grouped[key] = [];
+  for (const key of MARKET_INDICATOR_KEYS) grouped[key] = [];
   for (const row of rows) {
     grouped[row.key].push(mapStoredIndicatorSnapshotToView(row));
   }

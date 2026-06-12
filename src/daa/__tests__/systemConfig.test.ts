@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 import {
-  MARKET_INDICATOR_CONFIG_KEYS_,
+  MARKET_INDICATOR_CONFIG_KEYS,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 
 describe("system-config-normalization", () => {
@@ -10,7 +10,7 @@ describe("system-config-normalization", () => {
     const normalized = normalizeSystemConfig({});
 
     expect(Object.keys(normalized.dataSources.marketIndicators.indicators).sort()).toEqual(
-      [...MARKET_INDICATOR_CONFIG_KEYS_].sort(),
+      [...MARKET_INDICATOR_CONFIG_KEYS].sort(),
     );
     expect(normalized.dataSources.marketIndicators.indicators.marketBreadth).toEqual({
       enabled: true,

@@ -1,7 +1,7 @@
 /**
- * meta/queryThesisHistory — 查询论点完整历史
+ * meta/queryThesisHistory — 查询投资判断完整历史
  *
- * 包含 conviction 变化轨迹、证据链、复盘记录。
+ * 包含 conviction 变化轨迹、依据链、复盘记录。
  * 用于 Agent 自省和决策回顾。
  */
 
@@ -12,10 +12,10 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 registerTool(
   {
     name: "query_thesis_history",
-    description: "查询指定论点的完整历史（证据链、conviction 变化、复盘记录）。适合回顾过去的判断依据和演化过程。",
+    description: "查询指定投资判断的完整历史（依据链、conviction 变化、复盘记录）。适合回顾过去的判断依据和演化过程。",
     category: "meta",
     parameters: {
-      threadId: { type: "string", description: "论点 ID", required: true },
+      threadId: { type: "string", description: "投资判断 ID", required: true },
     },
     outputSchema: {
       evidenceCount: "number",
@@ -36,18 +36,18 @@ registerTool(
 
       const result = await thesisStore.getThesisWithEvidence(threadId);
       if (!result) {
-        return { toolName: "query_thesis_history", category: "meta", success: false, data: null, outputFields: {}, error: `论点 ${threadId} 不存在`, latencyMs: Date.now() - t0 };
+        return { toolName: "query_thesis_history", category: "meta", success: false, data: null, outputFields: {}, error: `投资判断 ${threadId} 不存在`, latencyMs: Date.now() - t0 };
       }
 
       const { thread, evidence } = result;
       const accuracyAvg = await thesisStore.getThesisAccuracyAvg(threadId);
 
-      // 按时间排序证据
+      // 按时间排序依据
       const sortedEvidence = [...evidence].sort((a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       );
 
-      // conviction 变化轨迹（从证据中推断）
+      // conviction 变化轨迹（从依据中推断）
       const convictionChanges = sortedEvidence
         .filter(e => e.source === "agent_reasoning")
         .slice(-10)

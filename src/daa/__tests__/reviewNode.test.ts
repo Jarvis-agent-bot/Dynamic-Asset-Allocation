@@ -22,7 +22,7 @@ vi.mock("@/src/daa/agent/store/thesisStore", () => ({
 vi.mock("@/src/daa/agent/helpers/llm", () => ({
   callDeepSeekJson: vi.fn(async () => ({
     data: {
-      actualOutcome: "价格上涨，论点部分兑现",
+      actualOutcome: "价格上涨，投资判断部分兑现",
       accuracyScore: 75,
       lesson: null,
       shouldInvalidate: false,

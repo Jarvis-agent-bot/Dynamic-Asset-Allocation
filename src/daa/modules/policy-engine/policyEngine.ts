@@ -64,8 +64,8 @@ export function evaluatePortfolioPolicy(input: {
     reasons.push("定期复盘只在 action score 达标时生成调仓提案。");
   } else if (input.triggerSource === "agent_trigger") {
     reasons.push(hasAgentExecutableProposal
-      ? "Agent 目标权重计划进入全自动执行评估。"
-      : "Agent 投资意图进入策略评估。");
+      ? "投资助理目标权重计划进入全自动执行评估。"
+      : "投资助理投资意图进入策略评估。");
   } else if (band.state === "entered_outer") {
     reasons.push(`最大偏移 ${band.maxAbsDriftPct.toFixed(2)}% 已进入行动外圈。`);
   }

@@ -1,7 +1,7 @@
-# Cognitive Agent OS — 设计与实现
+# Investment Review Assistant OS — 设计与实现
 
-> 面向：想理解 Agent 工作原理、调参、扩展能力的读者
-> 范围：工作流、记忆系统、工具注册、日报生成、配置与可调参数
+> 面向：想理解投资助理复核链路、调参、扩展能力的读者
+> 范围：工作流、经验库检索系统、工具注册、每日复核简报生成、配置与可调参数
 > 系统整体架构见 [ARCHITECTURE.md](./ARCHITECTURE.md)；部署见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 
 ---
@@ -10,23 +10,23 @@
 
 传统投资助手问的是"**该买什么？**" → LLM 给出建议 → 用户决策。
 
-Cognitive Agent 问的是"**我现在最可能错在哪里？**"：
+投资助理问的是"**我现在最可能错在哪里？**"：
 
-- 系统维护一组持续演化的**投资论点（Thesis）**
-- 每个 thesis 绑定 assetKeys、conviction、失效条件、复盘时间
-- 每天 Agent 审视所有 thesis，选出最需要调查的几个，收集证据，反思，复盘，生成日报
+- 系统维护一组持续演化的**投资判断（内部 thesis 契约）**
+- 每个投资判断绑定 assetKeys、conviction、失效条件、复盘时间
+- 每天投资助理审视所有投资判断，选出最需要复核的几个，收集依据，反思，复盘，生成每日复核简报
 
 这个取向来自 Karl Popper 的"证伪主义" —— 好的判断不是"被证实"，而是"**迟迟没被证伪**"。
 
-Agent 的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
+投资助理的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
 
-- **今日意外** — 什么新事实与现有认知矛盾？
-- **认知缺口** — 哪些持仓久未调查？
+- **需要复核的变化** — 什么新事实需要检查原判断？
+- **复核优先级** — 哪些持仓久未复核？
 - **改观条件** — 什么会让我改变看法？
-- **论点冲突** — 我是否在自相矛盾？
-- **风险暴露** — 如果论点失效，组合损失多大？
+- **判断不一致** — 我是否在自相矛盾？
+- **风险暴露** — 如果投资判断失效，组合损失多大？
 
-架构灵感来自 Nous Research 的 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（工作流形态）+ MemGPT / Mem0（记忆管理）。
+架构灵感来自 Nous Research 的 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（工作流形态）+ MemGPT / Mem0（经验管理）。
 
 ---
 
@@ -50,11 +50,11 @@ Agent 的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
        └───────┬───────┘
                ▼
        ┌───────────────┐
-       │    review     │  ← LLM：复盘审计师（仅到期 thesis）
+       │    review     │  ← LLM：复盘审计师（仅到期投资判断）
        └───────┬───────┘
                ▼
        ┌───────────────┐
-       │    surface    │  ← LLM：日报编辑 + 策略顾问 → TG 推送
+       │    surface    │  ← LLM：复核简报编辑 + 目标权重建议 → TG 推送
        └───────┬───────┘
                ▼
              END
@@ -66,12 +66,12 @@ Agent 的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
 
 | 节点 | 文件 | LLM | 职责 |
 |------|------|-----|------|
-| `observe` | [observeNode.ts](../src/daa/agent/nodes/observeNode.ts) | ❌ | 加载持仓 + 市场指标 + 新闻 + **DB 配置** + **记忆衰减** + **归档 stale uncertain thesis** |
-| `prioritize` | [prioritizeNode.ts](../src/daa/agent/nodes/prioritizeNode.ts) | ✅ fast tier | 选本次 cycle 最需调查的 thesis（数量由 `maxInvestigationTargets` 配置）+ 可能创建新研究线索 |
-| `investigate` | [investigateNode.ts](../src/daa/agent/nodes/investigateNode.ts) | ✅ ReAct 循环 | 并行证据收集（Promise.allSettled）+ 多轮工具调用 + Context Engine 压缩 + 更新 thesis |
-| `reflect` | [reflectNode.ts](../src/daa/agent/nodes/reflectNode.ts) | ✅ | conviction 变化时反思 + 生成记忆（含 thesis 关联 + 实体图自动抽取） |
-| `review` | [reviewNode.ts](../src/daa/agent/nodes/reviewNode.ts) | ✅ | 到期 thesis 复盘（含真实价格变动 ground truth）+ 评分 |
-| `surface` | [surfaceNode.ts](../src/daa/agent/nodes/surfaceNode.ts) | ✅ + 策略顾问 | 生成 DailyBriefing（5 面板）+ 风险建模（纯计算）+ 冲突检测 + 目标权重计划 + TG 推送 |
+| `observe` | [observeNode.ts](../src/daa/agent/nodes/observeNode.ts) | ❌ | 加载持仓 + 市场指标 + 新闻 + **DB 配置** + **经验记录衰减** + **归档 stale uncertain 投资判断** |
+| `prioritize` | [prioritizeNode.ts](../src/daa/agent/nodes/prioritizeNode.ts) | ✅ fast tier | 选本次 cycle 最需复核的投资判断（数量由 `maxInvestigationTargets` 配置）+ 可能创建新复核线索 |
+| `investigate` | [investigateNode.ts](../src/daa/agent/nodes/investigateNode.ts) | ✅ ReAct 循环 | 并行依据收集（Promise.allSettled）+ 多轮工具调用 + Context Engine 压缩 + 更新投资判断 |
+| `reflect` | [reflectNode.ts](../src/daa/agent/nodes/reflectNode.ts) | ✅ | conviction 变化时反思 + 生成经验记录（含投资判断关联 + 实体图自动抽取） |
+| `review` | [reviewNode.ts](../src/daa/agent/nodes/reviewNode.ts) | ✅ | 到期投资判断复盘（含真实价格变动 ground truth）+ 评分 |
+| `surface` | [surfaceNode.ts](../src/daa/agent/nodes/surfaceNode.ts) | ✅ + 目标权重建议 | 生成每日复核简报（DailyBriefing，5 面板）+ 风险建模（纯计算）+ 判断不一致检测 + 目标权重计划 + TG 推送 |
 
 ### 2.2 健壮性机制
 
@@ -79,13 +79,13 @@ Agent 的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
 - **熔断**：连续 LLM 失败达 `circuitBreakerThreshold`（默认 3）自动跳过剩余 LLM 调用，保留确定性输出
 - **结构校验**：所有 LLM 输出经 `validateShape()` 校验，失败按字段降级（保留有效部分）
 - **Few-shot 示例**：每个 prompt 包含示例 JSON 输出
-- **Thesis 去重**：创建前 `findSimilarThesis(assetKeys, title)` 检查
-- **Uncertain 清理**：`observe` 节点每次 cycle 归档 `updatedAt > 7 days` 的 uncertain thesis（防止调查型 thesis 堆积）
+- **投资判断去重**：创建前 `findSimilarThesis(assetKeys, title)` 检查
+- **Uncertain 清理**：`observe` 节点每次 cycle 归档 `updatedAt > 7 days` 的 uncertain 投资判断（防止临时复核线索堆积）
 - **降级容错**：所有 LLM 失败 `logSwallowed` + 使用默认/上次结果，不中断 cycle
 
 ---
 
-## 3. 记忆系统（三层架构）
+## 3. 经验库检索系统（三层架构）
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -118,9 +118,9 @@ Agent 的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
 | `relevance_tags` | 含关联 thesis UUID + thesis.tags |
 | `last_accessed` | 每次召回刷新 |
 
-**生成时机**：
+**经验记录生成时机**：
 - `reflectNode` — conviction 变化时，记 `lesson`
-- `investigateNode` — 证据充分时，记 `fact`（观察型）
+- `investigateNode` — 依据充分时，记 `fact`（观察型）
 - `reviewNode` — 复盘有 lesson 时，记 `lesson`
 
 **召回排序**（[memoryStore.ts](../src/daa/agent/store/memoryStore.ts)）：
@@ -178,7 +178,7 @@ daa_thesis_entity_link   (thesis_id, entity_id, weight)
 
 **自动抽取**：`createMemory` 和 `createResearchThread` 在 store 层自动调用 extractor + link。**无需调用方手动处理。**
 
-**查询 Agent Tool**：`query_entity_history(kind, value, limit)` 返回该实体关联的所有记忆 + 论点 + 协同出现的其他实体。
+**查询工具**：`query_entity_history(kind, value, limit)` 返回该实体关联的所有经验记录 + 投资判断 + 协同出现的其他实体。
 
 **回填**：`/api/daa/cron/entity-backfill`（每日 03:40 UTC）幂等补齐存量数据的实体链接。
 
@@ -200,7 +200,7 @@ threadTags = [thread.id, ...thread.tags]
 
 ---
 
-## 4. Agent Tools（16 个，V2 动态注册）
+## 4. 复核工具（16 个，V2 动态注册）
 
 借鉴 Hermes Agent 自注册模式：每个工具文件 import 时调用 `registerTool()`。`src/daa/agent/tools/index.ts` 统一 import，`cognitiveGraph.ts` 只需 import 一次。
 
@@ -210,7 +210,7 @@ threadTags = [thread.id, ...thread.tags]
 |----------|------|------|------|
 | `observe` | 6 | 只读查询 | 技术/估值/新闻/人类信号、市场 regime、持仓集中度 |
 | `analyze` | 3 | 计算分析 | 回测 thesis、相关性、再平衡模拟 |
-| `meta` | 5 | 自省反思 | 论点历史、历史决策、自评准确率、**关键字搜索**、**实体图查询** |
+| `meta` | 5 | 自省反思 | 投资判断历史、历史决策、自评准确率、**关键字搜索**、**实体图查询** |
 | `act` | 2 | 写入（需审批） | 建议目标权重、创建 thesis |
 
 ### 4.2 工具清单
@@ -225,20 +225,20 @@ observe/
 └─ query_portfolio_concentration HHI / 单资产占比
 
 analyze/
-├─ backtest_thesis               指定窗口回测论点
+├─ backtest_thesis               指定窗口回测投资判断
 ├─ compute_correlation           资产对相关性
 └─ simulate_rebalance            What-if 调仓模拟
 
 meta/
-├─ query_thesis_history          论点证据链 + conviction 轨迹 + 复盘
-├─ query_past_decisions          最近 N 次 Agent run 的决策摘要
+├─ query_thesis_history          投资判断依据链 + conviction 轨迹 + 复盘
+├─ query_past_decisions          最近 N 次投资助理 run 的决策摘要
 ├─ evaluate_self_accuracy        回测自己历史 thesis 准确率
-├─ search_past_reasoning         【pg_trgm】按关键字搜记忆 + 证据
+├─ search_past_reasoning         【pg_trgm】按关键字搜经验记录 + 依据
 └─ query_entity_history          【实体图】"关于 NVDA 学到过什么"
 
 act/（requiresApproval=true）
 ├─ suggest_target_weight         建议目标权重调整
-└─ create_thesis                 创建新研究线索
+└─ create_thesis                 创建新复核线索（内部仍沿用 thesis 契约）
 ```
 
 ### 4.3 链式调用
@@ -256,24 +256,24 @@ act/（requiresApproval=true）
 
 ---
 
-## 5. 日报（DailyBriefing）5 面板
+## 5. 每日复核简报（DailyBriefing）5 面板
 
-Agent cycle 的最终产出，经 `formatBriefingForTelegram` 推送到 TG + 前端 `/daa/dashboard/today` 展示。
+投资助理 cycle 的最终产出，经 `formatBriefingForTelegram` 推送到 TG + 前端 `/daa/dashboard/today` 展示。
 
-### 5.1 今日意外（Surprises）
+### 5.1 需要复核的变化（Surprises）
 
-**问**：今天什么事实最不符合现有认知？
+**问**：今天什么事实最需要检查原判断？
 
 - LLM 从本次 cycle 的 surprises + 工具调用结果中总结
 - 每条含：title / description / relatedThesisId / **severityScore 1-10** / suggestedAction
 - **过滤规则**：`severityScore < 3` 的占位条目被丢弃（避免"市场与预期一致"的噪声）
 - TG 显示最多 3 条
 
-### 5.2 认知缺口（Cognition Gaps）
+### 5.2 复核优先级（Cognition Gaps）
 
-**问**：哪些高权重持仓久未调查？
+**问**：哪些高权重持仓久未复核？
 
-- 系统预计算：`(thesis × asset)` 展开，硬门槛 `权重 > 5% 或 停滞天数 ≥ 7`
+- 系统预计算：`(投资判断 × asset)` 展开，硬门槛 `权重 > 5% 或 停滞天数 ≥ 7`
 - LLM 按清单输出单 assetKey 条目
 - **去重**：同 assetKey 只保留 `daysSinceLastInvestigation` 最大的一条
 - TG 显示最多 3 条
@@ -282,36 +282,36 @@ Agent cycle 的最终产出，经 `formatBriefingForTelegram` 推送到 TG + 前
 
 **问**：什么会让我改变现在的判断？
 
-- 针对当前 high/medium conviction 的 thesis 生成失效条件
+- 针对当前 high/medium conviction 的投资判断生成失效条件
 - 每条含：thesisTitle / currentConviction / **具体可监测的条件** / monitoringIndicators
-- Prompt 要求基于本次调查的**具体数据**，不接受泛泛而谈
-- 避免逐字重复上次日报（对比 `previousBriefing`）
+- Prompt 要求基于本次复核的**具体数据**，不接受泛泛而谈
+- 避免逐字重复上次复核简报（对比 `previousBriefing`）
 
-### 5.4 论点冲突（Thesis Conflicts）
+### 5.4 判断不一致（Thesis Conflicts）
 
 **问**：我是否在自相矛盾？
 
-- **纯计算**，无 LLM：遍历所有 thesis 对，找 assetKeys 交集 + conviction 方向对立
-- **仅保留** `conviction != uncertain` 的论点，避免调查型临时假设造成假冲突
-- 方向判定：`aBullish = (high || medium)`，两边 bullish 不同方向才算冲突
+- **纯计算**，无 LLM：遍历所有投资判断对，找 assetKeys 交集 + conviction 方向对立
+- **仅保留** `conviction != uncertain` 的投资判断，避免临时假设造成误报
+- 方向判定：`aBullish = (high || medium)`，两边 bullish 不同方向才算判断不一致
 - Severity：overlapping ≥ 2 资产 → high；含 high conviction → high；否则 medium
 
 ### 5.5 风险暴露（Thesis Failure Impact）
 
-**问**：如果论点错了，组合损失多大？
+**问**：如果投资判断错了，组合损失多大？
 
-- **纯计算**，无 LLM：每个 high/medium thesis 的失效影响
+- **纯计算**，无 LLM：每个 high/medium 投资判断的失效影响
 - 公式：`estimatedLossPct = 总暴露权重 × lossMultiplier`
   - high conviction → `lossMultiplier = 0.5`
   - medium conviction → `lossMultiplier = 0.3`
 - Risk level：`> 15%` critical / `> 10%` high / `> 5%` medium / else low
 - **显示时明确标注**"假设情景·暴露×30%/50% 经验系数"，避免被误读为 VaR
 
-### 5.6 策略顾问（目标权重计划，Autopilot 默认启用）
+### 5.6 目标权重建议（自动复核授权默认启用）
 
-Autopilot 模式不再自动修改系统配置或风险护栏。Agent 的唯一主动调仓输出是本轮 `targetAllocationPlan`，系统只把它转换成本次周期的临时目标权重覆盖。
+自动复核授权不再自动修改系统配置或风险护栏。投资助理的唯一主动调仓输出是本轮 `targetAllocationPlan`，系统只把它转换成本次周期的临时目标权重覆盖。
 
-LLM 基于持仓 + 论点 + 意外 + 缺口输出：
+LLM 基于持仓 + 投资判断 + 需要复核的变化 + 复核优先级输出：
 
 | 建议类型 | 安全约束 |
 |---------|---------|
@@ -322,7 +322,7 @@ LLM 基于持仓 + 论点 + 意外 + 缺口输出：
 
 目标权重计划只作用于本次 cycle，不写入 `systemConfig.strategy.targetWeights`，避免把一次性事件判断永久固化为配置。
 
-Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权限矩阵：
+自动复核执行不需要用户逐笔确认；它依赖显式配置和权限矩阵：
 
 - `brain.mode=autopilot`
 - `policy.enabled=true`
@@ -338,14 +338,14 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 
 ## 6. 配置与可调参数
 
-所有 Agent 参数通过 `systemConfig.cognitiveAgent`（Settings UI 可改），落库 `daa_system_config_v2`。
+所有投资助理复核参数通过 `systemConfig.cognitiveAgent`（Settings UI 可改），落库 `daa_system_config_v2`。
 
 | 参数 | 默认值 | 含义 |
 |------|--------|------|
-| `enabled` | `true` | 启用 Cognitive Agent |
-| `maxInvestigationTargets` | `3` | 每次 cycle 最多调查几个 thesis |
-| `reviewIntervalDays` | `14` | 新 thesis 默认复盘间隔 |
-| `memoryRecallLimit` | `5` | 每次调查召回记忆条数 |
+| `enabled` | `true` | 启用投资助理复核 |
+| `maxInvestigationTargets` | `3` | 每次 cycle 最多复核几个投资判断 |
+| `reviewIntervalDays` | `14` | 新投资判断默认复盘间隔 |
+| `memoryRecallLimit` | `5` | 每次复核召回经验记录数 |
 | `memoryDecayRate` | `0.97` | 每日衰减率 |
 | `circuitBreakerThreshold` | `3` | 连续 LLM 失败次数触发熔断 |
 | `schedule` | `"daily"` | `daily` / `2x_daily` / `every_6h` / `manual_only` |
@@ -358,12 +358,12 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 
 | 端点 | 用途 |
 |------|------|
-| `POST /api/daa/agent/run` | 手动触发一次 Agent cycle |
-| `POST /api/daa/agent/bootstrap` | 扫描持仓初始化初始 theses |
-| `GET /api/daa/agent/theses` | 活跃论点 + 最新 briefing |
-| `GET /api/daa/agent/thesis/[id]` | 论点详情（证据链 + 复盘历史） |
-| `GET /api/daa/agent/memories` | 分页列出记忆（支持 type 过滤） |
-| `DELETE /api/daa/agent/memories?id=xxx` | 删除单条记忆 |
+| `POST /api/daa/agent/run` | 手动触发一次投资助理复核 cycle |
+| `POST /api/daa/agent/bootstrap` | 扫描持仓建立初始投资判断 |
+| `GET /api/daa/agent/theses` | 活跃投资判断 + 最新 briefing |
+| `GET /api/daa/agent/thesis/[id]` | 投资判断详情（依据链 + 复盘历史） |
+| `GET /api/daa/agent/memories` | 分页列出经验记录（支持 type 过滤；路径保留兼容命名） |
+| `DELETE /api/daa/agent/memories?id=xxx` | 删除单条经验记录 |
 | `POST /api/daa/cron/cognitive-agent` | 自门控 cron（每小时触发，按 schedule 派生窗口过滤） |
 | `POST /api/daa/cron/entity-backfill` | 实体图幂等回填（每日 03:40 UTC） |
 
@@ -371,12 +371,13 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 
 ## 8. UI 入口
 
-- `/daa/dashboard/today` — Agent 日报主视图（5 面板）
-- `/daa/dashboard/today/thesis/[id]` — 论点详情（证据时间线 + 复盘历史）
-- `/daa/dashboard/today/memories` — 记忆浏览器（分页 + 类型过滤 + 删除）
-- `/daa/dashboard/settings` — 认知 Agent 配置面板
+- `/daa/dashboard/today` — 今日复核工作台
+- `/daa/dashboard/today/thesis/[id]` — 投资判断详情（依据时间线 + 复盘历史）
+- `/daa/dashboard/today/experience-library` — 经验库（分页 + 类型过滤 + 删除）
+- `/daa/dashboard/today/memories` — 旧路径兼容重定向
+- `/daa/dashboard/settings` — 投资助理自动复核配置
 
-前端组件：`app/daa/dashboard/today/_components/AgentBriefingView.tsx`。
+前端组件：`app/daa/dashboard/today/_components/TodayBriefingView.tsx`、`app/daa/dashboard/today/_components/AssistantCommandPanel.tsx`。
 
 ---
 
@@ -386,7 +387,7 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 - 查看最近 10 次 run：`SELECT id, created_at, total_tokens, duration_ms FROM daa_agent_runs ORDER BY created_at DESC LIMIT 10;`
 - 看某次 run 的完整 briefing：`SELECT briefing FROM daa_agent_runs WHERE id = $id;`
 - 实体图统计：`SELECT kind, COUNT(*) FROM daa_agent_entity GROUP BY kind;`
-- 记忆衰减 dry-run：调 `applyMemoryDecay(0.97)` 前先 `SELECT id, strength, last_accessed FROM daa_agent_memory`
+- 经验记录衰减 dry-run：调 `applyMemoryDecay(0.97)` 前先 `SELECT id, strength, last_accessed FROM daa_agent_memory`
 
 ---
 
@@ -398,8 +399,8 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 | 状态类型 | [`src/daa/agent/cognitiveState.ts`](../src/daa/agent/cognitiveState.ts) |
 | Prompt 模板 | [`src/daa/agent/cognitivePrompts.ts`](../src/daa/agent/cognitivePrompts.ts) |
 | 节点实现 | [`src/daa/agent/nodes/*.ts`](../src/daa/agent/nodes/) |
-| Thesis Store | [`src/daa/agent/store/thesisStore.ts`](../src/daa/agent/store/thesisStore.ts) |
-| Memory Store | [`src/daa/agent/store/memoryStore.ts`](../src/daa/agent/store/memoryStore.ts) |
+| 投资判断 Store（内部 thesis 契约） | [`src/daa/agent/store/thesisStore.ts`](../src/daa/agent/store/thesisStore.ts) |
+| 经验库 Store（内部 memory 契约） | [`src/daa/agent/store/memoryStore.ts`](../src/daa/agent/store/memoryStore.ts) |
 | Entity Extractor | [`src/daa/agent/entities/entityExtractor.ts`](../src/daa/agent/entities/entityExtractor.ts) |
 | Entity Store | [`src/daa/agent/entities/entityStore.ts`](../src/daa/agent/entities/entityStore.ts) |
 | Entity Backfill | [`src/daa/agent/entities/entityBackfill.ts`](../src/daa/agent/entities/entityBackfill.ts) |

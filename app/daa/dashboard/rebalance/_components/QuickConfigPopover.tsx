@@ -9,7 +9,7 @@ import {
   DaaSurfaceActionButton,
   daaSurfaceFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { getSystemConfig, patchSystemConfig } from "@/src/daa/modules/store/dashboardStoreApiClient";
+import { getSystemConfig, patchSystemConfig } from "@/src/daa/modules/store/workbenchStoreApiClient";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export function QuickConfigPopover(props: {
@@ -89,7 +89,7 @@ export function QuickConfigPopover(props: {
         type="button"
         onClick={() => setOpen(!open)}
         aria-label="打开快速调参"
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
+        className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
         title="快速调参"
       >
         <Settings2 className="h-4 w-4" />
@@ -101,14 +101,14 @@ export function QuickConfigPopover(props: {
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
           {/* Popover */}
-          <div className="absolute right-0 top-full z-50 mt-2 w-[320px] rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+          <div className="absolute right-0 top-full z-50 mt-2 w-[320px] rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]">
             <div className="border-b border-[var(--border)] px-4 py-3">
               <div className="text-sm font-semibold text-[var(--text)]">快速调参</div>
               <div className="mt-0.5 text-xs text-[var(--faint)]">调整关键策略参数，无需前往设置页</div>
             </div>
             <div className="space-y-3 px-4 py-3">
               <div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">
                   漂移阈值 (%)
                 </label>
                 <input
@@ -122,7 +122,7 @@ export function QuickConfigPopover(props: {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">
                   最大单仓 (%)
                 </label>
                 <input
@@ -137,7 +137,7 @@ export function QuickConfigPopover(props: {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">
                     止损 (%)
                   </label>
                   <input
@@ -151,7 +151,7 @@ export function QuickConfigPopover(props: {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">
                     止盈 (%)
                   </label>
                   <input
@@ -177,7 +177,7 @@ export function QuickConfigPopover(props: {
                 完整设置
               </Link>
               <div className="flex gap-2">
-                <DaaSurfaceActionButton tone="slate" onClick={() => setOpen(false)}>
+                <DaaSurfaceActionButton tone="neutral" onClick={() => setOpen(false)}>
                   取消
                 </DaaSurfaceActionButton>
                 <DaaSurfaceActionButton tone="primary" onClick={() => void handleSave()} disabled={saving}>

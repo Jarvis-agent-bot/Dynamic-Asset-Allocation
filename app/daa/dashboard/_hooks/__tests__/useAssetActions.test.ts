@@ -2,7 +2,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { useAssetActions } from "../dashboard/useAssetActions";
+import { useAssetActions } from "../asset-workbench/useAssetActions";
 import type {
   AssetUniverseView,
   WorkbenchBootstrap,

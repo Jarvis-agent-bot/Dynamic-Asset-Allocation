@@ -18,7 +18,7 @@ import type {
   DaaStoreNewsRelatedAsset,
 } from "@/src/daa/store/storeTypes";
 import {
-  WORKBENCH_FEATURED_ASSETS_CATALOG_,
+  WORKBENCH_FEATURED_ASSETS_CATALOG,
   type WorkbenchFeaturedCatalogItem,
 } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
@@ -53,7 +53,7 @@ type ThemeRule = {
   keywords: string[];
 };
 
-const THEME_RULES_: ThemeRule[] = [
+const THEME_RULES: ThemeRule[] = [
   {
     key: "semiconductor",
     labelZh: "半导体",
@@ -101,8 +101,8 @@ const THEME_RULES_: ThemeRule[] = [
   },
 ];
 
-const FEATURED_BY_SYMBOL_: Map<string, WorkbenchFeaturedCatalogItem> = new Map(
-  WORKBENCH_FEATURED_ASSETS_CATALOG_.map((item) => [normalizeSymbol(item.symbol), item]),
+const FEATURED_ASSET_BY_SYMBOL: Map<string, WorkbenchFeaturedCatalogItem> = new Map(
+  WORKBENCH_FEATURED_ASSETS_CATALOG.map((item) => [normalizeSymbol(item.symbol), item]),
 );
 
 function normalizeSymbol(value: unknown): string {
@@ -146,7 +146,7 @@ function buildUniverseLookups(assetUniverse: DaaStoreAssetUniverseRow[]): {
 
 function detectTheme(event: NewsIntelligenceEventInput): { key: string; labelZh: string; reasons: string[] } {
   const sourceSymbol = normalizeSymbol(event.symbol);
-  const catalogItem = FEATURED_BY_SYMBOL_.get(sourceSymbol);
+  const catalogItem = FEATURED_ASSET_BY_SYMBOL.get(sourceSymbol);
   const text = [
     event.symbol,
     event.title,
@@ -158,8 +158,8 @@ function detectTheme(event: NewsIntelligenceEventInput): { key: string; labelZh:
     ...(event.llmDrivers?.bearish ?? []),
   ].filter(Boolean).join(" ").toLowerCase();
 
-  const matched = THEME_RULES_.find((rule) => rule.key === catalogItem?.themeKey)
-    ?? THEME_RULES_.find((rule) => rule.keywords.some((keyword) => text.includes(keyword.toLowerCase())));
+  const matched = THEME_RULES.find((rule) => rule.key === catalogItem?.themeKey)
+    ?? THEME_RULES.find((rule) => rule.keywords.some((keyword) => text.includes(keyword.toLowerCase())));
 
   if (matched) {
     return {
@@ -193,7 +193,7 @@ function inferRelatedAssets(input: {
 }): DaaStoreNewsRelatedAsset[] {
   const sourceSymbol = normalizeSymbol(input.event.symbol);
   const out = new Map<string, DaaStoreNewsRelatedAsset>();
-  const sourceCatalogItem = FEATURED_BY_SYMBOL_.get(sourceSymbol);
+  const sourceCatalogItem = FEATURED_ASSET_BY_SYMBOL.get(sourceSymbol);
   if (sourceCatalogItem) {
     const source = toRelatedAsset(
       sourceCatalogItem,
@@ -204,7 +204,7 @@ function inferRelatedAssets(input: {
     out.set(source.assetKey, source);
   }
 
-  for (const item of WORKBENCH_FEATURED_ASSETS_CATALOG_) {
+  for (const item of WORKBENCH_FEATURED_ASSETS_CATALOG) {
     if (item.themeKey !== input.themeKey) continue;
     const related = toRelatedAsset(
       item,
@@ -340,9 +340,9 @@ function buildDiscoveryCandidates(input: {
       scorePct,
       confidence: confidenceFromScore(scorePct),
       status: "new",
-      reasonZh: `${asset.displayNameZh || asset.symbol} 与「${input.graph.themeLabelZh}」事件相关，建议进入研究候选池；系统不会自动加入观察列表或交易。`,
+      reasonZh: `${asset.displayNameZh || asset.symbol} 与「${input.graph.themeLabelZh}」事件相关，建议进入复核候选池；系统不会自动加入观察列表或交易。`,
       riskNotesZh: [
-        "候选发现只代表研究线索，不代表买入信号。",
+        "候选发现只代表复核线索，不代表买入信号。",
         "加入观察列表或建仓仍需经过人工确认与策略风控。",
       ],
       evidenceRefs: [

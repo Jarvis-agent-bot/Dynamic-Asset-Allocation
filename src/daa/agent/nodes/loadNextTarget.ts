@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Next Target 辅助节点
+ * 投资助理复核工作流 — Next Target 辅助节点
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";

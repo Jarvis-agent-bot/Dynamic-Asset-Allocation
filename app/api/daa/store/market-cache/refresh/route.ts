@@ -1,7 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
-import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
+import { WORKBENCH_FEATURED_ASSETS_CATALOG } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
@@ -74,7 +74,7 @@ async function buildDefaultTargets(includeFeatured: boolean): Promise<MarketPric
   }
 
   if (includeFeatured) {
-    for (const row of WORKBENCH_FEATURED_ASSETS_CATALOG_) {
+    for (const row of WORKBENCH_FEATURED_ASSETS_CATALOG) {
       const key = `${row.market}::${normalizeUpper(row.symbol)}`;
       if (out.has(key)) continue;
       out.set(key, {

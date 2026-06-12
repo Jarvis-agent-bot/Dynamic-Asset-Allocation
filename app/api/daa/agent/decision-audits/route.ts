@@ -1,7 +1,7 @@
 /**
  * GET /api/daa/agent/decision-audits
  *
- * 查询 AI Agent 决策审计记录，支持按 run / cycle / asset 复盘。
+ * 查询投资助理决策审计记录，支持按 run / cycle / asset 复盘。
  */
 
 export const runtime = "nodejs";

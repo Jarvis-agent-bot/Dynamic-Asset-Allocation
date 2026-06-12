@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — LangGraph 状态定义
+ * 投资助理复核工作流 — LangGraph 状态定义
  */
 
 import { Annotation } from "@langchain/langgraph";
@@ -127,15 +127,15 @@ export const CognitiveStateAnnotation = Annotation.Root({
   newsIntelligence: Annotation<NewsIntelligenceSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   activeTheses: Annotation<ResearchThread[]>({ reducer: (_, b) => b, default: () => [] }),
 
-  // 调查队列（prioritize 节点填充）
+  // 复核队列（prioritize 节点填充）
   investigationQueue: Annotation<InvestigationTarget[]>({ reducer: (_, b) => b, default: () => [] }),
   newThreadSuggestions: Annotation<NewThreadSuggestion[]>({ reducer: (_, b) => b, default: () => [] }),
 
-  // 当前调查目标（循环控制）
+  // 当前复核目标（循环控制）
   currentTarget: Annotation<InvestigationTarget | null>({ reducer: (_, b) => b, default: () => null }),
   currentThread: Annotation<ResearchThread | null>({ reducer: (_, b) => b, default: () => null }),
 
-  // 调查结果
+  // 复核结果
   investigateResult: Annotation<InvestigateOutput | null>({ reducer: (_, b) => b, default: () => null }),
 
   // ReAct 循环计数（每次 investigate 重置）
@@ -144,7 +144,7 @@ export const CognitiveStateAnnotation = Annotation.Root({
   // 记忆
   retrievedMemories: Annotation<AgentMemory[]>({ reducer: (_, b) => b, default: () => [] }),
 
-  // Phase 2: 匹配到的调查策略（prioritizeNode 填充，investigateNode 消费）
+  // Phase 2: 匹配到的复核策略（prioritizeNode 填充，investigateNode 消费）
   matchedStrategies: Annotation<Array<{
     id: string;
     name: string;
@@ -186,7 +186,7 @@ export const CognitiveStateAnnotation = Annotation.Root({
     thesisStalenessDays?: number;
   } | null>({ reducer: (_, b) => b, default: () => null }),
 
-  // Phase 4: 子 agent 调查结果（append reducer — 并行子 agent 各自追加）
+  // Phase 4: 子 agent 复核结果（append reducer — 并行子 agent 各自追加）
   subAgentResults: Annotation<Array<{
     threadId: string;
     threadTitle: string;

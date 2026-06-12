@@ -10,7 +10,7 @@ function patchMap(patches: ExecutedTargetWeightPatch[]): Record<string, number> 
 }
 
 describe("buildExecutedTargetWeightPatches", () => {
-  it("Agent 目标权重成交后优先写回持久目标", () => {
+  it("目标权重建议成交后优先写回持久目标", () => {
     const patches = buildExecutedTargetWeightPatches({
       cycle: {
         agentDecisionSnapshot: {
@@ -31,7 +31,7 @@ describe("buildExecutedTargetWeightPatches", () => {
             suggestedQty: 1,
             suggestedNotional: 100,
             price: 100,
-            reason: "Agent 目标入场",
+            reason: "目标建议入场",
             selected: true,
             hfContribution: null,
             targetWeightPct: 5,

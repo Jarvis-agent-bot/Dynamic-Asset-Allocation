@@ -17,7 +17,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 // Secret key definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const SECRET_KEY_DEFS_ = [
+export const DAA_SECRET_KEY_DEFINITIONS = [
   { key: "llm_api_key", label: "LLM API Key (通用)", group: "llm", envVars: ["DAA_LLM_API_KEY", "OPENAI_API_KEY"], sensitive: true },
   { key: "llm_endpoint", label: "LLM Endpoint", group: "llm", envVars: ["DAA_LLM_ENDPOINT"], sensitive: false },
   { key: "llm_model", label: "LLM Model", group: "llm", envVars: ["DAA_LLM_MODEL"], sensitive: false },
@@ -39,7 +39,7 @@ export const SECRET_KEY_DEFS_ = [
   { key: "embedding_model", label: "Embedding Model", group: "embedding", envVars: ["DAA_EMBEDDING_MODEL"], sensitive: false },
 ] as const;
 
-export type DaaSecretKey = (typeof SECRET_KEY_DEFS_)[number]["key"];
+export type DaaSecretKey = (typeof DAA_SECRET_KEY_DEFINITIONS)[number]["key"];
 
 type DaaSecretStatus = {
   key: DaaSecretKey;
@@ -163,15 +163,15 @@ function resolveFromEnv(envVars: readonly string[]): string {
 
 /** Resolve a single secret value. Priority: env var > DB > empty. */
 export async function resolveSecret(key: DaaSecretKey): Promise<string> {
-  const def = SECRET_KEY_DEFS_.find((d) => d.key === key);
-  if (!def) return "";
+  const definition = DAA_SECRET_KEY_DEFINITIONS.find((item) => item.key === key);
+  if (!definition) return "";
 
   // env var takes priority
-  const envValue = resolveFromEnv(def.envVars);
+  const envValue = resolveFromEnv(definition.envVars);
   if (envValue) return envValue;
 
   // read-only keys (NEXT_PUBLIC_*) can't be stored in DB
-  if ("readOnly" in def && def.readOnly) return "";
+  if ("readOnly" in definition && definition.readOnly) return "";
 
   // try DB
   try {
@@ -208,24 +208,24 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
     logSwallowed("secretsManager.listSecretStatuses", err);
   }
 
-  return SECRET_KEY_DEFS_.map((def) => {
-    const envValue = resolveFromEnv(def.envVars);
-    const isReadOnly = "readOnly" in def && def.readOnly;
+  return DAA_SECRET_KEY_DEFINITIONS.map((definition) => {
+    const envValue = resolveFromEnv(definition.envVars);
+    const isReadOnly = "readOnly" in definition && definition.readOnly;
 
     if (envValue) {
       return {
-        key: def.key,
-        label: def.label,
-        group: def.group,
-        masked: maskValue(envValue, def.sensitive),
+        key: definition.key,
+        label: definition.label,
+        group: definition.group,
+        masked: maskValue(envValue, definition.sensitive),
         source: "env" as const,
-        sensitive: def.sensitive,
+        sensitive: definition.sensitive,
         readOnly: Boolean(isReadOnly),
         updatedAt: null,
       };
     }
 
-    const dbRow = dbRows.get(def.key);
+    const dbRow = dbRows.get(definition.key);
     if (dbRow) {
       let plaintext = "";
       try {
@@ -235,12 +235,12 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
       }
       if (plaintext) {
         return {
-          key: def.key,
-          label: def.label,
-          group: def.group,
-          masked: maskValue(plaintext, def.sensitive),
+          key: definition.key,
+          label: definition.label,
+          group: definition.group,
+          masked: maskValue(plaintext, definition.sensitive),
           source: "db" as const,
-          sensitive: def.sensitive,
+          sensitive: definition.sensitive,
           readOnly: Boolean(isReadOnly),
           updatedAt: dbRow.updated_at,
         };
@@ -248,12 +248,12 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
     }
 
     return {
-      key: def.key,
-      label: def.label,
-      group: def.group,
+      key: definition.key,
+      label: definition.label,
+      group: definition.group,
       masked: "",
       source: "empty" as const,
-      sensitive: def.sensitive,
+      sensitive: definition.sensitive,
       readOnly: Boolean(isReadOnly),
       updatedAt: null,
     };
@@ -262,9 +262,9 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
 
 /** Write a secret to DB (encrypted). */
 export async function writeSecret(key: DaaSecretKey, value: string): Promise<void> {
-  const def = SECRET_KEY_DEFS_.find((d) => d.key === key);
-  if (!def) throw new Error(`unknown secret key: ${key}`);
-  if ("readOnly" in def && def.readOnly) throw new Error(`secret ${key} is read-only`);
+  const definition = DAA_SECRET_KEY_DEFINITIONS.find((item) => item.key === key);
+  if (!definition) throw new Error(`unknown secret key: ${key}`);
+  if ("readOnly" in definition && definition.readOnly) throw new Error(`secret ${key} is read-only`);
 
   await ensureReady();
   const pool = daaPgPool();
@@ -287,9 +287,9 @@ export async function writeSecret(key: DaaSecretKey, value: string): Promise<voi
 
 /** Delete a secret from DB. */
 export async function deleteSecret(key: DaaSecretKey): Promise<void> {
-  const def = SECRET_KEY_DEFS_.find((d) => d.key === key);
-  if (!def) throw new Error(`unknown secret key: ${key}`);
-  if ("readOnly" in def && def.readOnly) throw new Error(`secret ${key} is read-only`);
+  const definition = DAA_SECRET_KEY_DEFINITIONS.find((item) => item.key === key);
+  if (!definition) throw new Error(`unknown secret key: ${key}`);
+  if ("readOnly" in definition && definition.readOnly) throw new Error(`secret ${key} is read-only`);
 
   await ensureReady();
   const pool = daaPgPool();

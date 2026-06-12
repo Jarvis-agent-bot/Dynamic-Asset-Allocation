@@ -12,9 +12,9 @@ export type DaaBrainAction =
   | "bootstrap_theses";
 
 const MODE_LABELS: Record<DaaBrainMode, string> = {
-  advisor: "顾问",
-  operator: "操作员",
-  autopilot: "自动驾驶",
+  advisor: "仅建议",
+  operator: "手动复核",
+  autopilot: "自动复核",
 };
 
 const ACTION_LABELS: Record<DaaBrainAction, string> = {
@@ -22,8 +22,8 @@ const ACTION_LABELS: Record<DaaBrainAction, string> = {
   generate_rebalance: "生成调仓建议",
   simulate_rebalance: "执行模拟调仓",
   simulate_trade: "执行模拟交易",
-  run_agent_cycle: "运行认知循环",
-  bootstrap_theses: "初始化论点",
+  run_agent_cycle: "运行投资复核",
+  bootstrap_theses: "建立初始投资判断",
 };
 
 const MODE_ACTIONS: Record<DaaBrainMode, ReadonlySet<DaaBrainAction>> = {
@@ -52,7 +52,7 @@ export function buildBrainConfigForMode(
 }
 
 export function getBrainModeLabel(mode: DaaBrainMode): string {
-  return MODE_LABELS[mode] || "操作员";
+  return MODE_LABELS[mode] || "手动复核";
 }
 
 function getBrainActionLabel(action: DaaBrainAction): string {
@@ -68,29 +68,29 @@ export function canBrainRunAction(systemConfig: DaaSystemConfig, action: DaaBrai
   if (!MODE_ACTIONS[brain.mode].has(action)) {
     return {
       allowed: false,
-      reason: `${getBrainModeLabel(brain.mode)}模式下未开放「${getBrainActionLabel(action)}」。`,
+      reason: `「${getBrainModeLabel(brain.mode)}」授权等级未开放「${getBrainActionLabel(action)}」。`,
     };
   }
 
   return {
     allowed: true,
-    reason: `${getBrainModeLabel(brain.mode)}模式允许「${getBrainActionLabel(action)}」。`,
+    reason: `「${getBrainModeLabel(brain.mode)}」授权等级允许「${getBrainActionLabel(action)}」。`,
   };
 }
 
 export function describeBrainModeSummary(systemConfig: DaaSystemConfig): string {
   const brain = resolveBrainConfig(systemConfig.brain);
-  return `${getBrainModeLabel(brain.mode)}模式；配置写入关闭；自动调仓只接受目标权重计划`;
+  return `${getBrainModeLabel(brain.mode)}授权；配置写入关闭；自动调仓只接受目标权重计划`;
 }
 
 export function buildBrainBoundaryText(systemConfig: DaaSystemConfig): string {
   const brain = resolveBrainConfig(systemConfig.brain);
   const modeLabel = getBrainModeLabel(brain.mode);
   if (brain.mode === "advisor") {
-    return `${modeLabel}模式：允许读取上下文、生成建议；不允许运行认知循环、初始化论点、模拟执行与配置写入。`;
+    return `${modeLabel}授权：允许读取上下文、生成建议；不允许运行投资复核、建立初始投资判断、模拟执行与配置写入。`;
   }
   if (brain.mode === "autopilot") {
-    return `${modeLabel}模式：允许运行认知循环、初始化论点与本地模拟执行；Agent 只能输出目标权重计划，不能自动修改系统配置。`;
+    return `${modeLabel}授权：允许运行投资复核、建立初始投资判断与本地模拟执行；投资助理只能输出目标权重计划，不能自动修改系统配置。`;
   }
-  return `${modeLabel}模式：允许运行认知循环、初始化论点与本地模拟执行；配置写入关闭，调仓执行仍遵守现有确认门禁。`;
+  return `${modeLabel}授权：允许运行投资复核、建立初始投资判断与本地模拟执行；配置写入关闭，调仓执行仍遵守现有确认门禁。`;
 }

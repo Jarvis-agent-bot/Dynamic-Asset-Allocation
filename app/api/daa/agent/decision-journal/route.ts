@@ -1,7 +1,7 @@
 /**
  * GET /api/daa/agent/decision-journal
  *
- * 聚合 Agent 决策记录，供前端展示“为什么这次目标权重这样变”。
+ * 聚合投资助理决策记录，供前端展示“为什么这次目标权重这样变”。
  */
 
 export const runtime = "nodejs";

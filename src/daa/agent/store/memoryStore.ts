@@ -1,5 +1,5 @@
 /**
- * Memory Store — Agent 长期记忆的持久化层（pgvector 语义检索）
+ * 经验库 Store — 经验库记录的持久化层（内部沿用 memory 契约，pgvector 语义检索）
  */
 
 import { randomUUID } from "node:crypto";
@@ -28,7 +28,7 @@ export async function createMemory(data: {
   sourceRunIds?: string[];
   relevanceTags?: string[];
   embedding?: number[];
-  /** 可选：关联的 thesis（用于实体图的 asset/ticker 抽取） */
+  /** 可选：关联的投资判断（用于实体图的 asset/ticker 抽取） */
   thread?: { id: string; assetKeys?: string[]; tags?: string[] };
 }): Promise<AgentMemory> {
   const ownerAccountId = getDaaAccountScopeId();
@@ -62,8 +62,8 @@ export async function createMemory(data: {
 }
 
 /**
- * 语义检索：通过 pgvector 余弦相似度搜索最相关的记忆。
- * P2-10: 支持 tags 参数优先召回与特定 thesis 关联的记忆。
+ * 语义检索：通过 pgvector 余弦相似度搜索最相关的经验记录。
+ * P2-10: 支持 tags 参数优先召回与特定投资判断关联的经验记录。
  */
 async function recallMemory(opts: {
   queryEmbedding?: number[];
@@ -78,7 +78,7 @@ async function recallMemory(opts: {
     if (opts.queryEmbedding && opts.queryEmbedding.length > 0) {
       try {
         const embStr = `[${opts.queryEmbedding.join(",")}]`;
-        // 2D: 按 similarity × strength 加权排序（强记忆 + 高相关性优先）
+        // 2D: 按 similarity × strength 加权排序（强经验记录 + 高相关性优先）
         const res = await query(
           `SELECT *, 1 - (embedding <=> $1::vector) AS similarity
            FROM daa_agent_memory

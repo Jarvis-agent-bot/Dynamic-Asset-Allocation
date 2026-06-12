@@ -12,7 +12,7 @@ import {
   Legend,
 } from "recharts";
 
-import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { WorkbenchEmptyState } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 
 /* ------------------------------------------------------------------ */
@@ -38,24 +38,12 @@ type EquityPoint = {
   equity: number;
 };
 
-/**
- * 图表配色常量 — 对应 CSS 变量的静态值。
- * Recharts 部分 prop（tick.fill、contentStyle 等）不支持 CSS var()，
- * 因此在此集中维护，与主题色保持同步。
- */
 const CHART_COLORS = {
-  /** var(--muted) — 坐标轴刻度文字 */
-  muted: "hsl(215 16% 57%)",
-  /** 网格线 */
-  grid: "hsla(215,16%,57%,0.12)",
-  /** var(--primary) / 主图线 */
-  primary: "hsl(199 89% 60%)",
-  /** var(--primary) 背景 */
-  primaryBgAlpha: "hsla(199,89%,60%,0.16)",
-  /** 基准线（标普500） */
-  benchmark: "hsl(160 60% 55%)",
-  /** 基准线（纳斯达克100） */
-  benchmark2: "hsl(280 55% 62%)",
+  muted: "var(--muted)",
+  grid: "var(--border)",
+  primary: "var(--primary)",
+  benchmark: "var(--success)",
+  benchmark2: "var(--indigo)",
 } as const;
 
 /** 基准 series key → 线条颜色（与后端 BENCHMARK_DEFS 的 key 对应） */
@@ -63,6 +51,11 @@ const BENCHMARK_LINE_COLORS: Record<string, string> = {
   benchmarkSpy: CHART_COLORS.benchmark,
   benchmarkQqq: CHART_COLORS.benchmark2,
 };
+
+function benchmarkLegendDotClass(benchmarkKey: string): string {
+  if (benchmarkKey === "benchmarkQqq") return "bg-[var(--indigo)]";
+  return "bg-[var(--success)]";
+}
 
 const TIME_RANGES = [
   { key: "1M", label: "1M", days: 30 },
@@ -93,40 +86,40 @@ function normalizeSnapshots(
   cashFlowEvents?: CashFlowEvent[],
 ): NormalizedPoint[] {
   const sorted = [...snapshots].sort(
-    (a, b) => Date.parse(a.ts) - Date.parse(b.ts),
+    (leftSnapshot, rightSnapshot) => Date.parse(leftSnapshot.ts) - Date.parse(rightSnapshot.ts),
   );
   const cutoff =
     days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
-  const filtered = cutoff ? sorted.filter((s) => s.ts >= cutoff) : sorted;
+  const filtered = cutoff ? sorted.filter((snapshot) => snapshot.ts >= cutoff) : sorted;
   if (filtered.length === 0) return [];
 
   // 创建基准数据的日期索引
   const benchmarkMap = new Map<string, number>();
   if (benchmarkData && benchmarkData.length > 0) {
     const sortedBench = [...benchmarkData].sort(
-      (a, b) => Date.parse(a.ts) - Date.parse(b.ts),
+      (leftBenchmarkPoint, rightBenchmarkPoint) => Date.parse(leftBenchmarkPoint.ts) - Date.parse(rightBenchmarkPoint.ts),
     );
-    const benchFiltered = cutoff ? sortedBench.filter((b) => b.ts >= cutoff) : sortedBench;
+    const benchFiltered = cutoff ? sortedBench.filter((benchmarkPoint) => benchmarkPoint.ts >= cutoff) : sortedBench;
     if (benchFiltered.length > 0) {
       const benchBase = benchFiltered[0].price > 0 ? benchFiltered[0].price : 1;
-      for (const bp of benchFiltered) {
-        const dateKey = bp.ts.slice(0, 10);
-        benchmarkMap.set(dateKey, +((bp.price / benchBase) * 100).toFixed(2));
+      for (const benchmarkPoint of benchFiltered) {
+        const dateKey = benchmarkPoint.ts.slice(0, 10);
+        benchmarkMap.set(dateKey, +((benchmarkPoint.price / benchBase) * 100).toFixed(2));
       }
     }
   }
 
   // 跳过 equity=0 的无效快照（如 ledger_reset 初始状态）
-  const meaningful = filtered.filter((s) => s.totalEquity > 0);
+  const meaningful = filtered.filter((snapshot) => snapshot.totalEquity > 0);
   if (meaningful.length === 0) return [];
 
   // 构建按时间排序的现金流 map（按日期聚合净现金流）
   const cfMap = new Map<string, number>();
   if (cashFlowEvents && cashFlowEvents.length > 0) {
-    for (const cf of cashFlowEvents) {
-      const dateKey = cf.ts.slice(0, 10);
+    for (const cashFlowEvent of cashFlowEvents) {
+      const dateKey = cashFlowEvent.ts.slice(0, 10);
       const prev = cfMap.get(dateKey) ?? 0;
-      const signed = cf.side === "deposit" ? cf.amount : -cf.amount;
+      const signed = cashFlowEvent.side === "deposit" ? cashFlowEvent.amount : -cashFlowEvent.amount;
       cfMap.set(dateKey, prev + signed);
     }
   }
@@ -144,18 +137,18 @@ function normalizeSnapshots(
   // 第一天的现金流不扣除（第一条快照就是入金后的基准）
   consumedDates.add(firstDate);
 
-  return meaningful.map((snap, i) => {
-    const dateKey = snap.ts.slice(0, 10);
+  return meaningful.map((snapshot, snapshotIndex) => {
+    const dateKey = snapshot.ts.slice(0, 10);
 
-    if (i === 0) {
+    if (snapshotIndex === 0) {
       const point: NormalizedPoint = {
-        label: snap.ts.slice(5, 10),
+        label: snapshot.ts.slice(5, 10),
         date: dateKey,
         portfolio: 100,
       };
       const benchVal = benchmarkMap.get(dateKey);
       if (benchVal != null) point.benchmark = benchVal;
-      prevEquity = snap.totalEquity;
+      prevEquity = snapshot.totalEquity;
       return point;
     }
 
@@ -167,13 +160,13 @@ function normalizeSnapshots(
     }
 
     // 子区间收益率：(当前 equity - 本期净现金流) / 上期 equity
-    const adjEquity = snap.totalEquity - netCashFlow;
+    const adjEquity = snapshot.totalEquity - netCashFlow;
     const subReturn = prevEquity > 0 && adjEquity > 0 ? adjEquity / prevEquity : 1;
     cumFactor *= subReturn;
-    prevEquity = snap.totalEquity;
+    prevEquity = snapshot.totalEquity;
 
     const point: NormalizedPoint = {
-      label: snap.ts.slice(5, 10),
+      label: snapshot.ts.slice(5, 10),
       date: dateKey,
       portfolio: +(cumFactor * 100).toFixed(2),
     };
@@ -189,15 +182,15 @@ function normalizeSnapshots(
 
 /** 构建实际权益金额曲线（不归一化） */
 function buildEquityCurve(snapshots: Snapshot[], days: number): EquityPoint[] {
-  const sorted = [...snapshots].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+  const sorted = [...snapshots].sort((leftSnapshot, rightSnapshot) => Date.parse(leftSnapshot.ts) - Date.parse(rightSnapshot.ts));
   const cutoff = days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
-  const filtered = cutoff ? sorted.filter((s) => s.ts >= cutoff) : sorted;
+  const filtered = cutoff ? sorted.filter((snapshot) => snapshot.ts >= cutoff) : sorted;
   return filtered
-    .filter((s) => s.totalEquity > 0)
-    .map((s) => ({
-      label: s.ts.slice(5, 10),
-      date: s.ts.slice(0, 10),
-      equity: +s.totalEquity.toFixed(2),
+    .filter((snapshot) => snapshot.totalEquity > 0)
+    .map((snapshot) => ({
+      label: snapshot.ts.slice(5, 10),
+      date: snapshot.ts.slice(0, 10),
+      equity: +snapshot.totalEquity.toFixed(2),
     }));
 }
 
@@ -224,7 +217,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
   } | null>(null);
 
   const selectedDays = useMemo(
-    () => TIME_RANGES.find((r) => r.key === range)?.days ?? 0,
+    () => TIME_RANGES.find((timeRange) => timeRange.key === range)?.days ?? 0,
     [range],
   );
 
@@ -232,10 +225,10 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
   React.useEffect(() => {
     const params = new URLSearchParams({ mode, days: String(selectedDays) });
     fetch(`/api/daa/read/performance-chart?${params}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        const d = j?.data ?? j;
-        if (d?.series) setServerData(d);
+      .then((response) => (response.ok ? response.json() : null))
+      .then((jsonPayload) => {
+        const chartPayload = jsonPayload?.data ?? jsonPayload;
+        if (chartPayload?.series) setServerData(chartPayload);
       })
       .catch(() => {});
   }, [mode, selectedDays]);
@@ -264,10 +257,10 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
 
   if (snapshots.length < 2) {
     return (
-      <DashboardEmptyState
+      <WorkbenchEmptyState
         title="暂无权益曲线"
-        description="入金并完成首次交易后，权益走势图将自动生成。"
-        className={`border-0 bg-transparent px-0 py-10 ${className ?? ""}`}
+        description="完成首次入金或交易后，这里会显示组合权益路径。"
+        className={`border-0 bg-transparent px-0 py-4 ${className ?? ""}`}
       />
     );
   }
@@ -282,64 +275,63 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
             {([
               { key: "equity", label: "金额" },
               { key: "twr", label: "收益率" },
-            ] as const).map((m) => (
+            ] as const).map((chartMode) => (
               <button
-                key={m.key}
+                key={chartMode.key}
                 type="button"
-                onClick={() => setMode(m.key)}
-                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                  mode === m.key
-                    ? "bg-[hsla(199,89%,60%,0.16)] text-[hsl(199,89%,60%)]"
+                onClick={() => setMode(chartMode.key)}
+                className={`rounded-[var(--radius-sm)] px-2.5 py-1 text-xs font-medium transition-colors ${
+                  mode === chartMode.key
+                    ? "bg-[var(--primary-bg)] text-[var(--primary)]"
                     : "text-[var(--muted)] hover:text-[var(--text)]"
                 }`}
               >
-                {m.label}
+                {chartMode.label}
               </button>
             ))}
           </div>
           <div className="flex gap-1">
-          {TIME_RANGES.map((r) => (
+          {TIME_RANGES.map((timeRange) => (
             <button
-              key={r.key}
+              key={timeRange.key}
               type="button"
-              onClick={() => setRange(r.key)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                range === r.key
-                  ? "bg-[hsla(199,89%,60%,0.16)] text-[hsl(199,89%,60%)]"
+              onClick={() => setRange(timeRange.key)}
+              className={`rounded-[var(--radius-sm)] px-2.5 py-1 text-xs font-medium transition-colors ${
+                range === timeRange.key
+                  ? "bg-[var(--primary-bg)] text-[var(--primary)]"
                   : "text-[var(--muted)] hover:text-[var(--text)]"
               }`}
             >
-              {r.label}
+              {timeRange.label}
             </button>
           ))}
           </div>
         </div>
         <div className="flex items-center gap-3">
           {mode === "equity" && equityChange ? (
-            <span className={`text-xs font-medium ${equityChange.change >= 0 ? "text-[var(--success)]" : "text-red-400"}`}>
+            <span className={`text-xs font-medium ${equityChange.change >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
               ${equityChange.last.toLocaleString(undefined, { maximumFractionDigits: 0 })} ({equityChange.pct >= 0 ? "+" : ""}{equityChange.pct.toFixed(2)}%)
             </span>
           ) : null}
           {mode === "twr" && returnPct !== null && (
             <span
               className={`text-xs font-medium ${
-                returnPct >= 0 ? "text-[var(--success)]" : "text-red-400"
+                returnPct >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"
               }`}
             >
               我的组合 {returnPct >= 0 ? "+" : ""}{returnPct}%
             </span>
           )}
-          {benchmarks.map((b) =>
-            b.changePct !== null ? (
+          {benchmarks.map((benchmark) =>
+            benchmark.changePct !== null ? (
               <span
-                key={b.key}
+                key={benchmark.key}
                 className="flex items-center gap-1 text-xs font-medium text-[var(--muted)]"
               >
                 <span
-                  className="inline-block h-2 w-2 rounded-full"
-                  style={{ background: BENCHMARK_LINE_COLORS[b.key] ?? CHART_COLORS.benchmark }}
+                  className={`inline-block h-2 w-2 rounded-[var(--radius-sm)] ${benchmarkLegendDotClass(benchmark.key)}`}
                 />
-                {b.label} {b.changePct >= 0 ? "+" : ""}{b.changePct}%
+                {benchmark.label} {benchmark.changePct >= 0 ? "+" : ""}{benchmark.changePct}%
               </span>
             ) : null,
           )}
@@ -398,13 +390,13 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
               dot={false}
               activeDot={{ r: 4, fill: CHART_COLORS.primary }}
             />
-            {benchmarks.map((b) => (
+            {benchmarks.map((benchmark) => (
               <Line
-                key={b.key}
+                key={benchmark.key}
                 type="monotone"
-                dataKey={b.key}
-                name={b.label}
-                stroke={BENCHMARK_LINE_COLORS[b.key] ?? CHART_COLORS.benchmark}
+                dataKey={benchmark.key}
+                name={benchmark.label}
+                stroke={BENCHMARK_LINE_COLORS[benchmark.key] ?? CHART_COLORS.benchmark}
                 strokeWidth={1.6}
                 dot={false}
                 strokeDasharray="4 2"

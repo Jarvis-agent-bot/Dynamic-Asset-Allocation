@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Observe 节点（代码驱动，不调 LLM）
+ * 投资助理复核工作流 — Observe 节点（代码驱动，不调 LLM）
  */
 
 import type { CognitiveState, CognitiveUpdate, PortfolioSnapshot, WatchlistSnapshot, MarketSnapshot, NewsSnapshot, NewsIntelligenceSnapshot } from "@/src/daa/agent/cognitiveState";
@@ -26,9 +26,9 @@ import {
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-/** low conviction 论点超过该天数未有效调查则归档（持仓/观察列表资产除外） */
+/** low conviction 判断超过该天数未有效复核则归档（持仓/观察列表资产除外） */
 const LOW_CONVICTION_STALE_DAYS = 30;
-/** 全局活跃论点上限；超限时从最弱、最陈旧的非持仓论点开始归档 */
+/** 全局活跃投资判断上限；超限时从最弱、最陈旧的非持仓判断开始归档 */
 const MAX_ACTIVE_THESES_GLOBAL = 60;
 
 export async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
@@ -55,7 +55,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       logSwallowed("cognitiveGraph.observe.config", e);
     }
 
-    // Feature E: 记忆衰减 — 在 cycle 开始时批量执行
+    // Feature E: 经验记录衰减 — 在 cycle 开始时批量执行
     try {
       const decayRate = agentConfig?.memoryDecayRate ?? 0.97;
       await memoryStore.applyMemoryDecay(decayRate);
@@ -179,7 +179,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.archiveStale", e);
     }
-    // 论点 GC：low conviction 久未调查归档 + 全局活跃总量兜底（防止复核积压无限增长）
+    // 投资判断 GC：low conviction 久未复核归档 + 全局活跃总量兜底（防止复核积压无限增长）
     try {
       const archivedLow = await thesisStore.archiveStaleLowConvictionTheses(LOW_CONVICTION_STALE_DAYS, focusAssetKeys);
       if (archivedLow.length > 0) {

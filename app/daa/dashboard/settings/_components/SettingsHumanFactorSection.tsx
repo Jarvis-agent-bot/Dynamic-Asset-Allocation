@@ -2,8 +2,7 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 import {
   CheckboxRow,
-  SectionCard,
-  settingsGridCols2Style,
+  SubsectionCard,
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
@@ -15,8 +14,8 @@ export function SettingsHumanFactorSection(props: {
 
   return (
     <section id="settings-human-factor" className="scroll-mt-28">
-      <SectionCard title="人因输入与基金池">
-        <div style={settingsGridCols2Style}>
+      <SubsectionCard title="人因输入与基金池">
+        <div className="grid gap-4 md:grid-cols-2">
           <CheckboxRow
             checked={config.dataSources.hfFund.enabled}
             onChange={(value) =>
@@ -36,21 +35,11 @@ export function SettingsHumanFactorSection(props: {
             启用人因信号
           </CheckboxRow>
 
-          <div
-            style={{
-              gridColumn: "1 / -1",
-              padding: "10px 12px",
-              borderRadius: 6,
-              background: "var(--elevated)",
-              border: "1px solid var(--border)",
-              fontSize: 12,
-              color: "var(--muted)",
-            }}
-          >
+          <div className="border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-xs leading-6 text-[var(--muted)] md:col-span-2">
             当前基金池数量：{config.dataSources.hfFund.funds.length}。后续若要增删基金，统一通过基金池管理入口维护。
           </div>
         </div>
-      </SectionCard>
+      </SubsectionCard>
     </section>
   );
 }

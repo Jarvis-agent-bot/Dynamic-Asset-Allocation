@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_SYSTEM_CONFIG_ } from "@/src/daa/config/systemConfig";
+import { DEFAULT_SYSTEM_CONFIG } from "@/src/daa/config/systemConfig";
 import { resolveMarketScopeForAsset } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import {
   buildMarketContextFromIndicators,
@@ -74,7 +74,7 @@ function makeIndicator(
 
 describe("market-context-overlay-v1", () => {
   it("会按单一市场内的启用权重聚合状态，并输出对应 scope", () => {
-    const config = structuredClone(DEFAULT_SYSTEM_CONFIG_.dataSources.marketIndicators);
+    const config = structuredClone(DEFAULT_SYSTEM_CONFIG.dataSources.marketIndicators);
     config.indicators.vix = { enabled: true, weight: 2 };
     config.indicators.qqqSpyRatio = { enabled: true, weight: 1 };
     config.indicators.btcEthRatio.enabled = false;
@@ -126,7 +126,7 @@ describe("market-context-overlay-v1", () => {
   });
 
   it("会把 PPI、政策利率和缩表汇总成独立宏观政策上下文，但不覆盖可交易市场主环境", () => {
-    const config = structuredClone(DEFAULT_SYSTEM_CONFIG_.dataSources.marketIndicators);
+    const config = structuredClone(DEFAULT_SYSTEM_CONFIG.dataSources.marketIndicators);
     for (const key of Object.keys(config.indicators) as Array<keyof typeof config.indicators>) {
       config.indicators[key].enabled = false;
     }

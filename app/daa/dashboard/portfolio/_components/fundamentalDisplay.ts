@@ -70,7 +70,7 @@ function byHistoricalPercentile(input: {
       label: "历史偏高",
       tone: "expensive",
       reason,
-      description: `${reason}。估值已经高于自身大部分历史样本，买入需要更强基本面证据。`,
+      description: `${reason}。估值已经高于自身大部分历史样本，买入需要更强基本面依据。`,
     };
   }
   return {
@@ -113,7 +113,7 @@ function byPeerPercentile(input: {
       label: "同业偏高",
       tone: "expensive",
       reason,
-      description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业估值已经偏高，买入需要更强基本面证据。`,
+      description: `${reason}${medianText}。这是 Yahoo 同业横截面估值判断，样本 ${input.sampleCount} 个；相对同业估值已经偏高，买入需要更强基本面依据。`,
     };
   }
   return {

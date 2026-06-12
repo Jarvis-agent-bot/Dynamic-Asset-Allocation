@@ -104,7 +104,7 @@ describe("auto-rebalance-execution-policy-gate", () => {
     expect(executeRebalanceViaGateway).not.toHaveBeenCalled();
   });
 
-  it("Agent 全自动触发会绕过 policy propose、单笔上限和风控 warn，直接进入执行网关", async () => {
+  it("投资助理全自动触发会绕过 policy propose、单笔上限和风控 warn，直接进入执行网关", async () => {
     const result = await executeAutoRebalanceCycle({
       cycle: {
         cycleId: "cycle-agent-auto",
@@ -117,7 +117,7 @@ describe("auto-rebalance-execution-policy-gate", () => {
           suggestedQty: 50,
           suggestedNotional: 50_000,
           price: 100,
-          reason: "Agent 全自动目标权重",
+          reason: "投资助理全自动目标权重",
           selected: true,
           hfContribution: null,
         }],
@@ -128,7 +128,7 @@ describe("auto-rebalance-execution-policy-gate", () => {
             status: "warn",
             current: 5,
             limit: 1,
-            message: "测试风险不再阻断 Agent 全自动执行",
+            message: "测试风险不再阻断投资助理全自动执行",
           }],
         },
         policySnapshot: policySnapshot("propose"),
@@ -152,7 +152,7 @@ describe("auto-rebalance-execution-policy-gate", () => {
     }));
   });
 
-  it("Agent 全自动触发仍会被执行层交易稳定器拦住同资产 24 小时重复操作", async () => {
+  it("投资助理全自动触发仍会被执行层交易稳定器拦住同资产 24 小时重复操作", async () => {
     vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce({
       account: { totalEquity: 100_000 },
       assetUniverse: [{

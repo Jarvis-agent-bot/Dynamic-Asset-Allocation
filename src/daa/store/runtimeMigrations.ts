@@ -139,7 +139,7 @@ async function ensureAccountStateSeed(query: QueryFn): Promise<void> {
   );
 }
 
-const MIGRATIONS_: Migration[] = [
+const STORE_RUNTIME_MIGRATIONS: Migration[] = [
   {
     id: "20260309_account_state",
     async apply(query) {
@@ -620,7 +620,7 @@ const MIGRATIONS_: Migration[] = [
     },
   },
 
-  // ── Cognitive Agent OS ──
+  // ── 投资助理复核工作流 ──
 
   {
     id: "20260409_pgvector_extension",
@@ -631,7 +631,7 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260409_cognitive_agent_tables",
     async apply(query) {
-      // 研究线索：Agent 的认知单元
+      // 投资判断：投资助理的复核单元
       await query(`
         CREATE TABLE IF NOT EXISTS daa_research_threads (
           owner_account_id TEXT NOT NULL DEFAULT 'default',
@@ -650,7 +650,7 @@ const MIGRATIONS_: Migration[] = [
         )
       `);
 
-      // 证据链：支撑或反驳 thesis 的每条证据
+      // 依据链：支撑或反驳 thesis 的每条依据
       await query(`
         CREATE TABLE IF NOT EXISTS daa_evidence_items (
           owner_account_id TEXT NOT NULL DEFAULT 'default',
@@ -666,7 +666,7 @@ const MIGRATIONS_: Migration[] = [
       `);
       await query(`CREATE INDEX IF NOT EXISTS idx_evidence_thread ON daa_evidence_items(thread_id, created_at DESC)`);
 
-      // Agent 运行记录
+      // 投资助理运行记录
       await query(`
         CREATE TABLE IF NOT EXISTS daa_agent_runs (
           owner_account_id TEXT NOT NULL DEFAULT 'default',
@@ -689,7 +689,7 @@ const MIGRATIONS_: Migration[] = [
       `);
       await query(`CREATE INDEX IF NOT EXISTS idx_agent_runs_created ON daa_agent_runs(created_at DESC)`);
 
-      // Agent 长期记忆（pgvector 语义检索）
+      // 投资助理经验库记录（内部沿用 memory 契约，pgvector 语义检索）
       await query(`
         CREATE TABLE IF NOT EXISTS daa_agent_memory (
           owner_account_id TEXT NOT NULL DEFAULT 'default',
@@ -748,7 +748,7 @@ const MIGRATIONS_: Migration[] = [
       await query(`ALTER TABLE daa_agent_memory ALTER COLUMN embedding TYPE vector(1024)`);
     },
   },
-  // ── Cognitive Agent V2: Tool System + Strategy Learning ──
+  // ── 投资助理复核工作流 V2: Tool System + Strategy Learning ──
   {
     id: "20260415_agent_tool_executions",
     async apply(query) {
@@ -773,7 +773,7 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260415_agent_strategies",
     async apply(query) {
-      // V2 策略学习表 — 存储从历史 run 中提炼的调查策略模板
+      // V2 策略学习表 — 存储从历史 run 中提炼的复核策略模板
       await query(`
         CREATE TABLE IF NOT EXISTS daa_agent_strategies (
           id                 TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -794,7 +794,7 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260419_pg_trgm_episodic",
     async apply(query) {
-      // pg_trgm 全文子串索引 — 为 Agent 记忆和证据内容提供关键字搜索能力
+      // pg_trgm 全文子串索引 — 为投资助理记忆和依据内容提供关键字搜索能力
       // 与 pgvector 语义搜索互补：向量召回靠语义，trigram 召回靠精确 ticker/数字/术语
       await query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
       await query(
@@ -1481,7 +1481,7 @@ const MIGRATIONS_: Migration[] = [
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {
   await ensureVersionTable(query);
-  for (const migration of MIGRATIONS_) {
+  for (const migration of STORE_RUNTIME_MIGRATIONS) {
     const existing = await query(
       "SELECT id FROM daa_schema_migrations_v1 WHERE id = $1 LIMIT 1",
       [migration.id],

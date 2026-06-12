@@ -3,11 +3,9 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import {
   CheckboxRow,
   FieldLabel,
-  MARKET_INDICATOR_ITEMS_,
+  MARKET_INDICATOR_ITEMS,
   NumberInput,
   SubsectionCard,
-  settingsGridCols2Style,
-  settingsGridCols3Style,
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
@@ -19,19 +17,12 @@ export function SettingsMarketContextBlock(props: {
 
   return (
     <SubsectionCard title="市场状态层">
-      <div
-        style={{
-          padding: 16,
-          borderRadius: 10,
-          border: "1px solid var(--border)",
-          background: "linear-gradient(180deg, var(--surface), var(--surface))",
-        }}
-      >
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+      <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex flex-col gap-3 border-b border-[var(--elevated)] px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>市场状态层</div>
-            <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-              现在按市场拆分为美股、港股 / 中概、加密、宏观防御与宏观政策环境，只影响对应市场的买入执行节奏、风险提示与 AI 解读语境。
+            <div className="text-sm font-semibold text-[var(--text)]">市场状态层</div>
+            <div className="mt-1 max-w-3xl text-xs leading-6 text-[var(--muted)]">
+              按美股、港股 / 中概、加密、宏观防御与政策环境拆分，用于调仓复核、风险提示和模型解读语境。
             </div>
           </div>
           <CheckboxRow
@@ -54,7 +45,7 @@ export function SettingsMarketContextBlock(props: {
           </CheckboxRow>
         </div>
 
-        <div style={{ ...settingsGridCols2Style, marginTop: 16 }}>
+        <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(220px,0.45fr)_1fr]">
           <div>
             <FieldLabel>缓存有效期（分钟）</FieldLabel>
             <NumberInput
@@ -78,82 +69,37 @@ export function SettingsMarketContextBlock(props: {
                 )
               }
             />
-            <div style={{ marginTop: 6, fontSize: 11, color: "var(--faint)", lineHeight: 1.5 }}>
-              控制市场状态快照多久算新鲜；定时任务触发频率由部署 cron 控制。
+            <div className="mt-1.5 text-[11px] leading-5 text-[var(--faint)]">
+              控制市场状态快照多久算新鲜；实际刷新频率由部署调度控制。
             </div>
           </div>
 
-          <div style={{ gridColumn: "1 / -1", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", padding: "10px 12px" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>市场划分说明</div>
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-              美股使用恐慌指数、成长/大盘比与市场广度；港股 / 中概使用港中概波动率与中概互联/大盘比；加密使用比特币/以太坊比与比特币波动率；宏观层使用金银比、收益率曲线、美元、信用、通胀代理、PPI、政策利率与美联储资产负债表。
+          <div className="rounded-[var(--radius-sm)] border border-[var(--elevated)] bg-[var(--elevated)]/40 px-3 py-2.5">
+            <div className="text-xs font-semibold text-[var(--text)]">市场划分说明</div>
+            <div className="mt-1.5 text-xs leading-6 text-[var(--muted)]">
+              美股看波动、成长风格和广度；港股 / 中概看波动和中概互联相对强弱；加密看 BTC/ETH 风格和 BTC 波动；宏观层看金银比、收益率曲线、美元、信用、通胀代理、PPI、政策利率与美联储资产负债表。
             </div>
           </div>
         </div>
 
-        <div
-          style={{
-            marginTop: 12,
-            padding: "10px 12px",
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            background: "var(--elevated)",
-            fontSize: 12,
-            color: "var(--muted)",
-            lineHeight: 1.7,
-          }}
-        >
+        <div className="border-t border-[var(--elevated)] px-4 py-3 text-xs leading-6 text-[var(--muted)]">
           数据源对照：VIX → ^VIX；QQQ/SPY → QQQ / SPY；FXI 波动率 → FXI；KWEB/FXI → KWEB / FXI；BTC/ETH → BTC-USD / ETH-USD；BTC 波动率 → BTC-USD；金银比 → GC=F / SI=F；收益率曲线 → IEF / SHY；美元 → UUP；信用利差 → HYG / LQD；通胀预期 → TIP / IEF；市场广度 → RSP / SPY；PPI / 政策利率 / 缩表 → FRED。
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div className="border-t border-[var(--elevated)] px-4 py-4">
           <FieldLabel>指标开关与权重</FieldLabel>
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
-            {MARKET_INDICATOR_ITEMS_.map((item) => (
+          <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--elevated)]">
+            {MARKET_INDICATOR_ITEMS.map((item) => (
               <div
                 key={item.key}
-                style={{
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  background: "var(--surface)",
-                  padding: 12,
-                }}
+                className="grid gap-3 border-b border-[var(--elevated)] px-3 py-3 last:border-b-0 lg:grid-cols-[minmax(180px,0.8fr)_minmax(220px,1fr)_minmax(140px,0.48fr)_96px] lg:items-start"
               >
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{item.label}</div>
-                    <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{item.hint}</div>
-                    <div style={{ marginTop: 6, fontSize: 11, color: "var(--faint)" }}>依赖：{item.dependencies}</div>
-                  </div>
-                  <CheckboxRow
-                    checked={config.dataSources.marketIndicators.indicators[item.key]?.enabled ?? false}
-                    onChange={(value) =>
-                      setConfig((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              dataSources: {
-                                ...prev.dataSources,
-                                marketIndicators: {
-                                  ...prev.dataSources.marketIndicators,
-                                  indicators: {
-                                    ...prev.dataSources.marketIndicators.indicators,
-                                    [item.key]: {
-                                      ...prev.dataSources.marketIndicators.indicators[item.key],
-                                      enabled: value,
-                                    },
-                                  },
-                                },
-                              },
-                            }
-                          : prev,
-                      )
-                    }
-                  >
-                    启用
-                  </CheckboxRow>
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text)]">{item.label}</div>
+                  <div className="mt-1 text-[11px] text-[var(--faint)]">依赖：{item.dependencies}</div>
                 </div>
-                <div style={{ marginTop: 12 }}>
+                <div className="text-xs leading-6 text-[var(--muted)]">{item.hint}</div>
+                <div>
                   <FieldLabel>权重</FieldLabel>
                   <NumberInput
                     value={config.dataSources.marketIndicators.indicators[item.key]?.weight ?? 0}
@@ -184,17 +130,46 @@ export function SettingsMarketContextBlock(props: {
                     }
                   />
                 </div>
+                <div className="lg:pt-6">
+                  <CheckboxRow
+                    checked={config.dataSources.marketIndicators.indicators[item.key]?.enabled ?? false}
+                    onChange={(value) =>
+                      setConfig((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              dataSources: {
+                                ...prev.dataSources,
+                                marketIndicators: {
+                                  ...prev.dataSources.marketIndicators,
+                                  indicators: {
+                                    ...prev.dataSources.marketIndicators.indicators,
+                                    [item.key]: {
+                                      ...prev.dataSources.marketIndicators.indicators[item.key],
+                                      enabled: value,
+                                    },
+                                  },
+                                },
+                              },
+                            }
+                          : prev,
+                      )
+                    }
+                  >
+                    启用
+                  </CheckboxRow>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div className="border-t border-[var(--elevated)] px-4 py-4">
           <FieldLabel>市场环境预算基准</FieldLabel>
-          <div style={{ marginBottom: 10, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
+          <div className="mb-3 text-xs leading-6 text-[var(--muted)]">
             这些系数作为资产预算倾斜的基础输入，用来把研究结论转成更保守或更积极的入场节奏。
           </div>
-          <div style={settingsGridCols3Style}>
+          <div className="grid gap-3 md:grid-cols-3">
             <div>
               <FieldLabel>过渡环境预算基准</FieldLabel>
               <NumberInput

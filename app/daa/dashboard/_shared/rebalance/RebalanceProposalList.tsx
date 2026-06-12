@@ -16,7 +16,7 @@ import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import type { RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
-import { cycleStatusTone, llmAdjustmentLabel, marketRegimeLabel, riskOverallTone, riskStatusLabel, signalActionLabel } from "./rebalanceLabels";
+import { allocationAdjustmentLabel, cycleStatusTone, marketRegimeLabel, riskOverallTone, riskStatusLabel, signalActionLabel } from "./rebalanceLabels";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 function assetBudgetStanceLabel(value: string | null | undefined): string {
@@ -33,6 +33,11 @@ function formatBudgetScale(value: number | null | undefined): string {
 function formatSignedCurrency(value: number, currency: string): string {
   if (Math.abs(value) < 0.01) return "0";
   return `${value > 0 ? "+" : ""}${formatCurrency(value, currency)}`;
+}
+
+function normalizeCycleSummaryNote(notes: string | null | undefined): string | null {
+  const summaryLine = notes?.split("\n").find((line) => line.includes("摘要"));
+  return summaryLine ? summaryLine.replace(/^.*摘要/, "系统摘要") : null;
 }
 
 export function RebalanceProposalList(props: {
@@ -56,11 +61,11 @@ export function RebalanceProposalList(props: {
 }) {
   // 预计算漂移 map 避免 O(N*M) 查找
   const driftMap = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const d of props.currentCycle?.driftSnapshot ?? []) {
-      m.set(d.assetKey, d.driftPct);
+    const driftByAssetKey = new Map<string, number>();
+    for (const driftSnapshot of props.currentCycle?.driftSnapshot ?? []) {
+      driftByAssetKey.set(driftSnapshot.assetKey, driftSnapshot.driftPct);
     }
-    return m;
+    return driftByAssetKey;
   }, [props.currentCycle?.driftSnapshot]);
 
   const visibleRiskItems = useMemo(
@@ -72,8 +77,8 @@ export function RebalanceProposalList(props: {
     if (!cycle || cycle.proposals.length > 0) return [];
     const rows = [
       cycle.triggerReason ? `触发原因：${cycle.triggerReason}` : null,
-      cycle.agentDecisionSnapshot?.summary ? `Agent 判断：${cycle.agentDecisionSnapshot.summary}` : null,
-      cycle.notes ? cycle.notes.split("\n").find((line) => line.includes("Agent摘要")) ?? null : null,
+      cycle.agentDecisionSnapshot?.summary ? `复核判断：${cycle.agentDecisionSnapshot.summary}` : null,
+      normalizeCycleSummaryNote(cycle.notes),
       visibleRiskItems[0]?.message ? `风控提示：${visibleRiskItems[0].message}` : null,
     ].filter(Boolean) as string[];
     return rows.length > 0 ? rows : ["本轮没有达到可执行金额、信念强度或风控条件，因此没有生成交易建议。"];
@@ -81,7 +86,7 @@ export function RebalanceProposalList(props: {
 
   return (
     <DaaSurfacePanel
-      accent={props.currentCycle ? cycleStatusTone(props.currentCycle.status) : "slate"}
+      accent={props.currentCycle ? cycleStatusTone(props.currentCycle.status) : "neutral"}
       title="建议审阅与执行"
       subtitle={props.currentCycle
         ? `周期 ${props.currentCycle.cycleId.slice(0, 8)} · 买入 ${props.buyProposalCount} · 卖出 ${props.sellProposalCount}`
@@ -94,7 +99,7 @@ export function RebalanceProposalList(props: {
             </DaaSurfaceStatusPill>
           ) : null}
           {props.selectedProposalNotional > 0 ? (
-            <DaaSurfaceStatusPill tone="cyan">
+            <DaaSurfaceStatusPill tone="primary">
               已选 {formatCurrency(props.selectedProposalNotional, props.bootstrap.baseCurrency)}
             </DaaSurfaceStatusPill>
           ) : null}
@@ -107,10 +112,10 @@ export function RebalanceProposalList(props: {
             {props.currentCycle ? (
               <div className="space-y-4">
           {props.isCurrentCycleTerminal ? (
-            <DaaSurfaceNoticeBox tone="slate" icon={<AlertCircle className="h-4 w-4" />} title="当前周期已终态" description="该周期只读；如需继续调仓，请生成新周期。" />
+            <DaaSurfaceNoticeBox tone="neutral" icon={<AlertCircle className="h-4 w-4" />} title="当前周期已终态" description="该周期只读；如需继续调仓，请生成新周期。" />
           ) : null}
           {props.currentCycle.triggerSource === "risk" ? (
-            <DaaSurfaceNoticeBox tone="amber" icon={<TriangleAlert className="h-4 w-4" />} title="风险触发建议待处理" description="该周期由止盈/止损阈值触发，请先看理由和风控，再决定是否执行。" />
+            <DaaSurfaceNoticeBox tone="warning" icon={<TriangleAlert className="h-4 w-4" />} title="风险触发建议待处理" description="该周期由止盈/止损阈值触发，请先看理由和风控，再决定是否执行。" />
           ) : null}
           <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-2 px-4 py-3")}>
             <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -119,13 +124,13 @@ export function RebalanceProposalList(props: {
             </div>
             {props.currentCycle.agentDecisionSnapshot?.summary ? (
               <div className="text-xs leading-5 text-[var(--muted)]">
-                Agent：{props.currentCycle.agentDecisionSnapshot.summary}
+                复核判断：{props.currentCycle.agentDecisionSnapshot.summary}
               </div>
             ) : null}
             {visibleRiskItems.length > 0 ? (
               <div className="space-y-1 border-t border-[var(--elevated)] pt-2 text-xs">
                 {visibleRiskItems.slice(0, 3).map((item) => (
-                  <div key={`${item.rule}-${item.message}`} className={item.status === "block" ? "text-red-300" : "text-amber-300"}>
+                  <div key={`${item.rule}-${item.message}`} className={item.status === "block" ? "text-[var(--danger)]" : "text-[var(--amber)]"}>
                     {item.status === "block" ? "阻断" : "警告"}：{item.message}
                   </div>
                 ))}
@@ -151,8 +156,8 @@ export function RebalanceProposalList(props: {
                     await props.onSelectAllProposals(false);
                     const cycle = props.currentCycle;
                     if (!cycle) return;
-                    for (const p of cycle.proposals.filter((x) => x.side === "BUY")) {
-                      void props.onToggleProposal(p.assetKey, p.side, true);
+                    for (const buyProposal of cycle.proposals.filter((proposal) => proposal.side === "BUY")) {
+                      void props.onToggleProposal(buyProposal.assetKey, buyProposal.side, true);
                     }
                   }}
                   disabled={!props.canEditCurrentCycle}
@@ -164,8 +169,8 @@ export function RebalanceProposalList(props: {
                     await props.onSelectAllProposals(false);
                     const cycle = props.currentCycle;
                     if (!cycle) return;
-                    for (const p of cycle.proposals.filter((x) => x.side === "SELL")) {
-                      void props.onToggleProposal(p.assetKey, p.side, true);
+                    for (const sellProposal of cycle.proposals.filter((proposal) => proposal.side === "SELL")) {
+                      void props.onToggleProposal(sellProposal.assetKey, sellProposal.side, true);
                     }
                   }}
                   disabled={!props.canEditCurrentCycle}
@@ -175,10 +180,10 @@ export function RebalanceProposalList(props: {
               </div>
 
               <div className="space-y-2">
-                {props.currentCycle.proposals.map((row) => {
-                  const proposalKey = `${row.assetKey}-${row.side}`;
+                {props.currentCycle.proposals.map((proposal) => {
+                  const proposalKey = `${proposal.assetKey}-${proposal.side}`;
                   const decisionExpanded = props.expandedProposalDecisionKeys[proposalKey] !== false;
-                  const decisionContext = row.decisionContext;
+                  const decisionContext = proposal.decisionContext;
                   const macroShadowDelta = decisionContext?.macroShadowDeltaNotional ?? 0;
                   const hasMacroShadowDelta = decisionContext?.macroShadowNotional != null && Math.abs(macroShadowDelta) >= 0.01;
                   const hasAssetBudgetContext = Boolean(decisionContext?.assetBudgetKey);
@@ -186,8 +191,8 @@ export function RebalanceProposalList(props: {
                     <div
                       key={proposalKey}
                       className={cn(
-                        "rounded-[14px] border px-4 py-3 transition-colors",
-                        row.selected
+                        "rounded-[var(--radius-md)] border px-4 py-3 transition-colors",
+                        proposal.selected
                           ? "border-[var(--primary-bg)] bg-[var(--primary-bg)]"
                           : "border-[var(--border)] bg-[var(--surface)]",
                       )}
@@ -196,43 +201,43 @@ export function RebalanceProposalList(props: {
                         <input
                           type="checkbox"
                           className="mt-1 h-4 w-4 shrink-0 accent-[var(--primary)]"
-                          checked={row.selected}
-                          onChange={(e) => void props.onToggleProposal(row.assetKey, row.side, e.target.checked)}
+                          checked={proposal.selected}
+                          onChange={(e) => void props.onToggleProposal(proposal.assetKey, proposal.side, e.target.checked)}
                           disabled={!props.canEditCurrentCycle}
-                          aria-label={`选中 ${row.symbol} 提案`}
+                          aria-label={`选中 ${proposal.symbol} 提案`}
                         />
                         <div className="min-w-0 flex-1 space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">{row.symbol}</span>
-                            <DaaSurfaceStatusPill tone={row.side === "BUY" ? "green" : "amber"}>{row.side === "BUY" ? "买入" : "卖出"}</DaaSurfaceStatusPill>
+                            <span className="font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">{proposal.symbol}</span>
+                            <DaaSurfaceStatusPill tone={proposal.side === "BUY" ? "success" : "warning"}>{proposal.side === "BUY" ? "买入" : "卖出"}</DaaSurfaceStatusPill>
                             {/* 金额直接显示 */}
-                            <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">{formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)}</span>
+                            <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">{formatCurrency(proposal.suggestedNotional, props.bootstrap.baseCurrency)}</span>
                             {hasMacroShadowDelta ? (
-                              <DaaSurfaceStatusPill tone={macroShadowDelta < 0 ? "amber" : "cyan"} className="max-w-full normal-case tracking-normal">
+                              <DaaSurfaceStatusPill tone={macroShadowDelta < 0 ? "warning" : "primary"} className="max-w-full normal-case tracking-normal">
                                 宏观影子 {formatCurrency(decisionContext?.macroShadowNotional ?? 0, props.bootstrap.baseCurrency)} ({formatSignedCurrency(macroShadowDelta, props.bootstrap.baseCurrency)})
                               </DaaSurfaceStatusPill>
                             ) : null}
                             {/* 漂移（仅超阈值时显示） */}
                             {(() => {
-                              const drift = driftMap.get(row.assetKey);
+                              const drift = driftMap.get(proposal.assetKey);
                               return drift && Math.abs(drift) >= 0.03 ? (
-                                <span className="text-xs text-amber-400">偏离 {(drift * 100).toFixed(1)}%</span>
+                                <span className="text-xs text-[var(--amber)]">偏离 {(drift * 100).toFixed(1)}%</span>
                               ) : null;
                             })()}
-                            {/* 冲突警告 */}
-                            {row.decisionContext?.signalConflict ? (
-                              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">冲突</span>
+                            {/* 判断不一致提示 */}
+                            {proposal.decisionContext?.signalConflict ? (
+                              <span className="rounded-[var(--radius-sm)] border border-[var(--danger-border)] bg-[var(--danger-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--danger)]">判断不一致</span>
                             ) : null}
                             {/* 跨币种标记 */}
-                            {row.currency !== props.bootstrap.baseCurrency ? <span className="text-[10px] text-[var(--faint)]">{row.currency}</span> : null}
+                            {proposal.currency !== props.bootstrap.baseCurrency ? <span className="text-[10px] text-[var(--faint)]">{proposal.currency}</span> : null}
                           </div>
-                          {row.reason ? (
-                            <div className="text-xs leading-5 text-[var(--muted)] line-clamp-1">{row.reason}</div>
+                          {proposal.reason ? (
+                            <div className="text-xs leading-5 text-[var(--muted)] line-clamp-1">{proposal.reason}</div>
                           ) : null}
 
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--faint)]">
-                            <span>数量 <span className="font-[var(--font-mono)] text-[var(--muted)]">{row.suggestedQty.toFixed(4)}</span></span>
-                            <span>价格 <span className="font-[var(--font-mono)] text-[var(--muted)]">{formatCurrency(row.price, row.currency)}</span></span>
+                            <span>数量 <span className="font-[var(--font-mono)] text-[var(--muted)]">{proposal.suggestedQty.toFixed(4)}</span></span>
+                            <span>价格 <span className="font-[var(--font-mono)] text-[var(--muted)]">{formatCurrency(proposal.price, proposal.currency)}</span></span>
                             <button
                               type="button"
                               onClick={() => props.setExpandedProposalDecisionKeys((prev) => ({ ...prev, [proposalKey]: !decisionExpanded }))}
@@ -244,45 +249,45 @@ export function RebalanceProposalList(props: {
                           </div>
                           {decisionExpanded ? (
                             <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-2.5 px-4 py-3.5")}>
-                              <div className="text-sm leading-6 text-[var(--text)]">{row.reason}</div>
-                              {row.hfContribution ? (
-                                <div className="text-xs text-[var(--muted)]">人因贡献：{row.hfContribution}</div>
+                              <div className="text-xs leading-5 text-[var(--text)]">{proposal.reason}</div>
+                              {proposal.hfContribution ? (
+                                <div className="text-xs text-[var(--muted)]">人因贡献：{proposal.hfContribution}</div>
                               ) : null}
-                              {row.decisionContext ? (
+                              {proposal.decisionContext ? (
                                 <div className="mt-3 space-y-1.5 border-t border-[var(--elevated)] pt-3 font-[var(--font-mono)] text-xs text-[var(--faint)]">
-                                  <div>资产信号立场：{signalActionLabel(row.decisionContext.signalAction)} · 评分 {row.decisionContext.signalScore ?? "—"}</div>
-                                  <div>AI：{llmAdjustmentLabel(row.decisionContext.llmAdjustment)} · 置信度 {row.decisionContext.llmConfidence ?? "—"}%</div>
-                                  {row.decisionContext.llmRationale ? (
-                                    <div className="text-[var(--muted)]">AI 理由：{row.decisionContext.llmRationale}</div>
+                                  <div>资产信号立场：{signalActionLabel(proposal.decisionContext.signalAction)} · 评分 {proposal.decisionContext.signalScore ?? "—"}</div>
+                                  <div>策略建议：{allocationAdjustmentLabel(proposal.decisionContext.llmAdjustment)} · 置信度 {proposal.decisionContext.llmConfidence ?? "—"}%</div>
+                                  {proposal.decisionContext.llmRationale ? (
+                                    <div className="text-[var(--muted)]">建议理由：{proposal.decisionContext.llmRationale}</div>
                                   ) : null}
                                   <div className="flex flex-wrap items-center gap-1.5">
-                                    <span>市场环境：{marketRegimeLabel(row.decisionContext.effectiveMarketRegime)} · 执行倍数 {((row.decisionContext.finalQtyMultiplier ?? 1) * 100).toFixed(0)}%</span>
-                                    {row.decisionContext.llmMarketRegime && row.decisionContext.effectiveMarketRegime && row.decisionContext.llmMarketRegime !== row.decisionContext.effectiveMarketRegime ? (
-                                      <span className="text-amber-400/80">(AI判断: {marketRegimeLabel(row.decisionContext.llmMarketRegime)})</span>
+                                    <span>市场环境：{marketRegimeLabel(proposal.decisionContext.effectiveMarketRegime)} · 执行倍数 {((proposal.decisionContext.finalQtyMultiplier ?? 1) * 100).toFixed(0)}%</span>
+                                    {proposal.decisionContext.llmMarketRegime && proposal.decisionContext.effectiveMarketRegime && proposal.decisionContext.llmMarketRegime !== proposal.decisionContext.effectiveMarketRegime ? (
+                                      <span className="text-[var(--amber)]">(市场判断: {marketRegimeLabel(proposal.decisionContext.llmMarketRegime)})</span>
                                     ) : null}
                                   </div>
                                   {hasAssetBudgetContext ? (
-                                    <div className="space-y-1.5 rounded-[10px] border border-[var(--primary-bg)] bg-[var(--primary-bg)] px-3 py-2 font-sans text-[11px] leading-5 text-[var(--muted)]">
+                                    <div className="space-y-1.5 rounded-[var(--radius-md)] border border-[var(--primary-bg)] bg-[var(--primary-bg)] px-3 py-2 font-sans text-[11px] leading-5 text-[var(--muted)]">
                                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                        <span className="font-semibold text-[var(--text)]">资产预算：{row.decisionContext.assetBudgetLabel || row.decisionContext.assetBudgetKey}</span>
-                                        <span>{assetBudgetStanceLabel(row.decisionContext.assetBudgetStance)} · 影子系数 {formatBudgetScale(row.decisionContext.assetBudgetScale)}</span>
+                                        <span className="font-semibold text-[var(--text)]">资产预算：{proposal.decisionContext.assetBudgetLabel || proposal.decisionContext.assetBudgetKey}</span>
+                                        <span>{assetBudgetStanceLabel(proposal.decisionContext.assetBudgetStance)} · 影子系数 {formatBudgetScale(proposal.decisionContext.assetBudgetScale)}</span>
                                         <span className="text-[var(--faint)]">仅供审阅，不影响本次执行金额</span>
                                       </div>
-                                      {row.decisionContext.macroShadowNotional != null ? (
+                                      {proposal.decisionContext.macroShadowNotional != null ? (
                                         <div>
-                                          原始执行 {formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)} → 宏观影子 {formatCurrency(row.decisionContext.macroShadowNotional, props.bootstrap.baseCurrency)}
-                                          {Math.abs(row.decisionContext.macroShadowDeltaNotional ?? 0) >= 0.01
-                                            ? `（${formatSignedCurrency(row.decisionContext.macroShadowDeltaNotional ?? 0, props.bootstrap.baseCurrency)}）`
+                                          原始执行 {formatCurrency(proposal.suggestedNotional, props.bootstrap.baseCurrency)} → 宏观影子 {formatCurrency(proposal.decisionContext.macroShadowNotional, props.bootstrap.baseCurrency)}
+                                          {Math.abs(proposal.decisionContext.macroShadowDeltaNotional ?? 0) >= 0.01
+                                            ? `（${formatSignedCurrency(proposal.decisionContext.macroShadowDeltaNotional ?? 0, props.bootstrap.baseCurrency)}）`
                                             : ""}
                                         </div>
                                       ) : null}
-                                      {row.decisionContext.macroShadowReason ? (
-                                        <div className="text-[var(--faint)]">{row.decisionContext.macroShadowReason}</div>
+                                      {proposal.decisionContext.macroShadowReason ? (
+                                        <div className="text-[var(--faint)]">{proposal.decisionContext.macroShadowReason}</div>
                                       ) : null}
                                     </div>
                                   ) : null}
-                                  {(row.decisionContext.conflictFlags ?? []).length > 0 ? (
-                                    <div className="text-amber-400/80">冲突：{row.decisionContext.conflictFlags.join(" / ")}</div>
+                                  {(proposal.decisionContext.conflictFlags ?? []).length > 0 ? (
+                                    <div className="text-[var(--amber)]">判断不一致：{proposal.decisionContext.conflictFlags.join(" / ")}</div>
                                   ) : null}
                                 </div>
                               ) : null}
@@ -299,7 +304,7 @@ export function RebalanceProposalList(props: {
             <div className="space-y-3">
               <DaaSurfaceEmptyState title="当前周期没有可执行建议" description="系统已完成检查，但本轮没有留下可执行买卖单。" />
               <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-2 px-4 py-3")}>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">为什么是空的</div>
+                <div className="text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">为什么是空的</div>
                 <ul className="space-y-1.5 text-xs leading-5 text-[var(--muted)]">
                   {emptyCycleReasons.map((reason) => (
                     <li key={reason}>{reason}</li>

@@ -17,8 +17,7 @@ const QUADRANTS: Array<{
   assets: string;
   growthDir: string;
   inflationDir: string;
-  activeBg: string;
-  activeText: string;
+  activeClassName: string;
   position: string;
 }> = [
   {
@@ -27,8 +26,7 @@ const QUADRANTS: Array<{
     assets: "股票, 周期品",
     growthDir: "高增长",
     inflationDir: "低通胀",
-    activeBg: "bg-emerald-600",
-    activeText: "text-white",
+    activeClassName: "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]",
     position: "rounded-tl-[var(--radius-lg)]",
   },
   {
@@ -37,8 +35,7 @@ const QUADRANTS: Array<{
     assets: "大宗商品, TIPS",
     growthDir: "高增长",
     inflationDir: "高通胀",
-    activeBg: "bg-amber-600",
-    activeText: "text-white",
+    activeClassName: "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]",
     position: "rounded-tr-[var(--radius-lg)]",
   },
   {
@@ -47,8 +44,7 @@ const QUADRANTS: Array<{
     assets: "债券, 防御股",
     growthDir: "低增长",
     inflationDir: "低通胀",
-    activeBg: "bg-indigo-600",
-    activeText: "text-white",
+    activeClassName: "border-[var(--indigo-border)] bg-[var(--indigo-bg)] text-[var(--indigo)]",
     position: "rounded-bl-[var(--radius-lg)]",
   },
   {
@@ -57,8 +53,7 @@ const QUADRANTS: Array<{
     assets: "现金, 黄金",
     growthDir: "低增长",
     inflationDir: "高通胀",
-    activeBg: "bg-red-600",
-    activeText: "text-white",
+    activeClassName: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
     position: "rounded-br-[var(--radius-lg)]",
   },
 ];
@@ -72,7 +67,7 @@ export function InvestmentClockWidget({ phase, growthProxy, inflationProxy, conf
       <div className="flex items-stretch gap-2">
         {/* 左侧纵轴标签 */}
         <div className="flex w-5 shrink-0 flex-col items-center justify-center gap-1">
-          <span className="whitespace-nowrap text-[10px] font-semibold tracking-wide text-[var(--muted)] [writing-mode:vertical-lr] [text-orientation:mixed] rotate-180">
+          <span className="whitespace-nowrap text-[10px] font-semibold tracking-normal text-[var(--muted)] [writing-mode:vertical-lr] [text-orientation:mixed] rotate-180">
             增长 ↑
           </span>
           {growthProxy != null ? (
@@ -84,24 +79,24 @@ export function InvestmentClockWidget({ phase, growthProxy, inflationProxy, conf
 
         {/* 2x2 网格 */}
         <div className="grid flex-1 grid-cols-2 gap-0.5">
-          {QUADRANTS.map((q) => {
-            const isActive = !noData && phase === q.phase;
+          {QUADRANTS.map((quadrant) => {
+            const isActive = !noData && phase === quadrant.phase;
             return (
               <div
-                key={q.phase}
+                key={quadrant.phase}
                 className={cn(
-                  "flex flex-col items-center justify-center px-3 py-4 text-center transition-colors",
-                  q.position,
+                  "flex flex-col items-center justify-center border px-3 py-4 text-center transition-colors",
+                  quadrant.position,
                   isActive
-                    ? cn(q.activeBg, q.activeText, "shadow-lg")
-                    : "bg-[var(--surface)] text-[var(--muted)]",
+                    ? quadrant.activeClassName
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]",
                 )}
               >
-                <div className={cn("text-sm font-bold", isActive ? q.activeText : "text-[var(--text)]")}>
-                  {q.label}
+                <div className={cn("text-sm font-bold", isActive ? "text-current" : "text-[var(--text)]")}>
+                  {quadrant.label}
                 </div>
                 <div className={cn("mt-1 text-[11px]", isActive ? "opacity-90" : "text-[var(--faint)]")}>
-                  {q.assets}
+                  {quadrant.assets}
                 </div>
               </div>
             );

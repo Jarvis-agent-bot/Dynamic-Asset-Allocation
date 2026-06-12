@@ -746,20 +746,6 @@ function buildScheduledRebalanceDates(dates: string[], freq: string): string[] {
   return scheduled;
 }
 
-function sliceSeriesThroughIndex(
-  seriesBySymbol: Record<string, PriceBar[]>,
-  endIndex: number,
-  lookbackBars = ROLLING_LOOKBACK_BARS,
-): Record<string, PriceBar[]> {
-  const startIndex = Math.max(0, endIndex - lookbackBars + 1);
-  return Object.fromEntries(
-    Object.entries(seriesBySymbol).map(([symbol, series]) => [
-      symbol,
-      (series || []).slice(startIndex, endIndex + 1),
-    ]),
-  );
-}
-
 function sliceSeriesThroughDate(
   seriesBySymbol: Record<string, PriceBar[]>,
   endDate: string,

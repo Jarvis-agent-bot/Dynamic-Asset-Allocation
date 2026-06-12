@@ -2,7 +2,7 @@
 
 > 面向：技术读者、贡献者、架构评审
 > 范围：代码分层、模块职责、数据流、数据模型、关键约束
-> Cognitive Agent 细节见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)；部署运维见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+> 投资助理复核工作流细节见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)；部署运维见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 
 ---
 
@@ -12,8 +12,8 @@ DAA Rebalance 是面向个人/小团队管理者的动态资产配置与再平�
 
 - 不是实盘交易系统 — 默认执行边界是本地 `sim` / `crypto_paper`，不向真实券商下单
 - 不是开放式多租户 SaaS — 当前以一个 admin 账户为主，但核心组合、观察列表、交易和通知数据已按 `owner_account_id` 做账户隔离
-- 是"观察 + 研究 + 目标权重计划 + 本地模拟执行 + 复盘"的闭环工作台
-- AI-Native：系统不只是展示数据，而是维护一组持续演化的**投资论点（Thesis）**，每天自问"我现在最可能错在哪里"
+- 是"观察 + 投资判断复核 + 目标权重计划 + 本地模拟执行 + 复盘"的闭环工作台
+- AI-Native：系统不只是展示数据，而是维护一组持续演化的**投资判断**，每天自问"我现在最可能错在哪里"
 
 ---
 
@@ -27,11 +27,11 @@ DAA Rebalance 是面向个人/小团队管理者的动态资产配置与再平�
 | 图表 | Recharts + lightweight-charts | 3.7 / 5.1 | K 线 + 指标 |
 | 数据库 | PostgreSQL + pgvector | pg16 / 0.2 | 主存储 + 向量检索 |
 | 全文检索 | `pg_trgm` (Postgres 内置扩展) | — | 关键字/子串 |
-| LLM | DeepSeek（主）· OpenAI 兼容（备） | — | 决策 / 反思 / 日报 |
-| Embedding | Ollama `bge-m3`（本地）/ SiliconFlow / OpenAI | 1024 维 | 语义记忆 |
-| Agent 工作流 | `@langchain/langgraph` | 1.2.8 | Cognitive Agent 6 节点编排 |
+| LLM | DeepSeek（主）· OpenAI 兼容（备） | — | 决策 / 反思 / 复核简报 |
+| Embedding | Ollama `bge-m3`（本地）/ SiliconFlow / OpenAI | 1024 维 | 经验库语义检索 |
+| 复核工作流 | `@langchain/langgraph` | 1.2.8 | 投资助理复核 6 节点编排 |
 | 认证 | 本地 Postgres Auth | `daa_auth_accounts` / `daa_auth_sessions` | 登录 / 会话 / 角色 |
-| 通知 | Telegram Bot · Feishu · Email (Resend) | — | 日报推送 + 告警 |
+| 通知 | Telegram Bot · Feishu · Email (Resend) | — | 复核简报推送 + 告警 |
 | 测试 | Vitest（单测）· Playwright（e2e） | 4.0 / 1.58 | — |
 | 包管理 | pnpm | 10.28.2 | — |
 | 运行时 | Node.js 20 | on Docker | — |
@@ -43,14 +43,14 @@ DAA Rebalance 是面向个人/小团队管理者的动态资产配置与再平�
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  UI Layer     app/daa/dashboard/                               │
-│  ├─ today/         投委会（Agent 日报 + thesis + memories）   │
+│  ├─ today/         今日复核工作台（投资判断 + 经验库）         │
 │  ├─ portfolio/     组合与观察列表                              │
 │  ├─ rebalance/     漂移检测与调仓建议                          │
 │  ├─ trades/        交易记录与复盘                              │
 │  ├─ strategy-lab/  策略回测实验室                              │
-│  ├─ settings/      策略 / 风控 / 数据源 / 通知 / 认知 Agent    │
+│  ├─ settings/      策略 / 风控 / 数据源 / 通知 / 投资助理      │
 │  ├─ _shared/       跨页共享 UI（K 线、持仓面板、再平衡组件）  │
-│  ├─ _components/   壳组件（DashboardShell / AgentRail / Nav） │
+│  ├─ _components/   壳组件（WorkbenchShell / Nav）             │
 │  └─ _hooks/        页面模型与流程 hook                         │
 ├────────────────────────────────────────────────────────────────┤
 │  API Layer    app/api/daa/                                     │
@@ -59,13 +59,13 @@ DAA Rebalance 是面向个人/小团队管理者的动态资产配置与再平�
 │  ├─ read/          聚合读模型（组合 / 交易 / today）           │
 │  ├─ store/         持久化写入（配置 / 账本 / 快照）            │
 │  ├─ market/        行情代理（Yahoo / yfinance / 指标序列）     │
-│  ├─ agent/         Cognitive Agent（run / theses / memories）  │
+│  ├─ agent/         投资助理复核 API（run / theses / memories） │
 │  ├─ chat/          Web 对话 + Telegram webhook                 │
 │  ├─ hf/            基金经理持仓追踪                            │
 │  └─ cron/          14 个定时 Job 入口（DAA_CRON_TOKEN 鉴权）  │
 ├────────────────────────────────────────────────────────────────┤
 │  Business     src/daa/     （编排 + 副作用）                   │
-│  ├─ agent/         Cognitive Agent OS（6 节点 + 记忆三层 + 16 tools）│
+│  ├─ agent/         投资助理复核链路（6 节点 + 经验库三层检索 + 16 tools）│
 │  ├─ entities/      实体图抽取与存储                            │
 │  ├─ modules/       workbench / portfolio / trade /            │
 │  │                 marketContext / decision / dividend         │
@@ -101,17 +101,17 @@ DAA Rebalance 是面向个人/小团队管理者的动态资产配置与再平�
 
 ## 4. 六大业务模块
 
-### 4.1 Cognitive Agent OS（AI-Native 核心）
+### 4.1 Investment Review Assistant OS（AI-Native 核心）
 
-Thesis-driven 的认知 Agent，基于 LangGraph.js 实现的 6 节点循环：
+Investment-judgment-driven 的投资助理复核链路，基于 LangGraph.js 实现的 6 节点循环：
 
 ```
 observe → prioritize → investigate ⇄ reflect → review → surface → END
    ↑                                                         ↓
- cron / 手动 / 重大新闻事件                          TG 日报 + 目标权重计划
+ cron / 手动 / 重大新闻事件                          TG 复核简报 + 目标权重计划
 ```
 
-每次 cycle 会：加载持仓+市场+新闻 → 选最需调查的 thesis → 并行证据收集 + ReAct → 反思 + 生成记忆 → 到期 thesis 复盘 → 生成 DailyBriefing（5 面板：意外 / 缺口 / 改观 / 冲突 / 风险），必要时输出本轮目标权重计划并推 Telegram。
+每次 cycle 会：加载持仓+市场+新闻 → 选最需复核的投资判断 → 并行依据收集 + ReAct → 反思 + 生成经验记录 → 到期投资判断复盘 → 生成每日复核简报（5 面板：需要复核的变化 / 复核优先级 / 改观条件 / 判断不一致 / 风险暴露），必要时输出本轮目标权重计划并推 Telegram。
 
 **详细见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)**。
 
@@ -121,12 +121,12 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 |------|------|
 | 漂移检测 | 按资产目标权重对比当前权重，行动外圈由 `policy.drift.outerBandPct` 控制（默认 5%） |
 | 定期复盘 | monthly / quarterly / semi-annual / annual 只表示组合复盘节奏，不直接等同交易理由 |
-| Agent 触发 | Agent LLM 建议主动调仓；Autopilot 下由定时循环、新闻刷新或实时重大事件主动触发 |
+| 投资助理触发 | 投资助理 LLM 建议主动调仓；自动复核授权下由定时循环、新闻刷新或实时重大事件主动触发 |
 | 信号融合 | 四维信号加权合成 conviction → buy/sell/hold 建议 |
 | 订单生成 | `src/core/rebalanceCore.ts` 纯算法：最小化交易次数，满足权重约束 |
 | 风控预检 | 市场 regime、单仓上限、流动性、手续费阈值 |
 | 模拟执行 | 无券商对接，经 trade ticket / execution gateway 写入本地模拟账本与 `daa_positions_v2` |
-| 执行边界 | Autopilot 可在显式配置下自动执行本地模拟账本；真实券商链路未接入 |
+| 执行边界 | 自动复核可在显式配置下执行本地模拟账本；真实券商链路未接入 |
 
 **自动化权限边界**：
 
@@ -138,7 +138,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 4. 必须存在可执行 cycle 与 proposal。
 5. 之后继续经过 `policy.execution.maxSingleOrderPctOfNav`、执行前风控、trade ticket 执行校验。
 
-因此，Autopilot 可以自动执行，但只能在本地模拟账户内执行，不能绕过 Authority 直接从 LLM 输出下单。
+因此，自动复核可以执行本地模拟调仓，但只能在本地模拟账户内执行，不能绕过 Authority 直接从 LLM 输出下单。
 
 **信号融合**（`src/daa/signals/fusion.ts`）：
 - `technicalSignal.ts` — SMA / 动量 / 趋势
@@ -190,7 +190,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 读取统一走 `listDaaAssetUniverse()` 的 5-table JOIN。
 
-### 4.5 Chat / Agent 对话层
+### 4.5 Chat / 投资助理对话层
 
 双通道：
 - **Web** — `POST /api/daa/chat/messages` + `GET /api/daa/chat/sessions`
@@ -209,19 +209,19 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 ## 5. 数据模型（核心表）
 
-### 5.1 Agent / Memory（8 张）
+### 5.1 投资助理 / 经验库（核心表）
 
 ```
-daa_research_threads    — 研究论点（thesis，status/conviction/reviewAt）
-daa_evidence_items      — 证据链（supporting/contradicting/neutral）
-daa_agent_runs          — Agent 运行记录（完整 briefing JSONB）
-daa_agent_memory        — 长期记忆（vector(1024) + pg_trgm GIN 子串索引）
+daa_research_threads    — 投资判断（内部 thesis 契约，status/conviction/reviewAt）
+daa_evidence_items      — 依据链（supporting/contradicting/neutral）
+daa_agent_runs          — 投资助理运行记录（完整 briefing JSONB）
+daa_agent_memory        — 经验库记录（内部 memory 契约，vector(1024) + pg_trgm GIN 子串索引）
 daa_thesis_reviews      — 决策复盘（accuracy_score + lessons_learned）
 daa_agent_entity        — 实体主表（asset/ticker/thesis_id/regime/news_source/strategy_tag）
 daa_memory_entity_link  — 记忆 ↔ 实体（weight, many-to-many）
-daa_thesis_entity_link  — 论点 ↔ 实体
+daa_thesis_entity_link  — 投资判断 ↔ 实体
 daa_agent_tool_executions  — 工具调用日志（输入/输出/延迟）
-daa_agent_strategies    — 从高准确率 run 提取的调查策略模板
+daa_agent_strategies    — 从高准确率 run 提取的复核策略模板
 ```
 
 ### 5.2 组合与交易（5 张）
@@ -283,7 +283,7 @@ daa_schema_migrations_v1           — 迁移元表
 
 系统基准货币默认 USD，一旦设定不应更改，否则历史 PnL 失真。运行时账户状态是基准货币 source of truth，系统配置只作为默认值和展示配置。
 
-所有组合级金额必须由 Money/Valuation Domain 输出，不能在 UI、Agent、通知或 cron 中各自拼装：
+所有组合级金额必须由 Money/Valuation Domain 输出，不能在 UI、投资助理、通知或 cron 中各自拼装：
 
 | 字段 | 币种 | 用途 |
 |------|------|------|
@@ -361,7 +361,7 @@ fusionSignals({ technical, valuation, news, human })
    ▼
 marketContext.decide({ regime, buyScale, highRiskBuyScale })
    │
-   ├─ Agent overlay（若启用）→ 覆盖 regime / 单资产阈值
+   ├─ 投资助理 overlay（若启用）→ 覆盖 regime / 单资产阈值
    │
    ▼
 src/core/rebalanceCore.rebalanceCore()       ← 纯算法
@@ -410,8 +410,8 @@ simulateExecute() → 写持仓/账本/快照
 | DB 迁移 | `src/daa/store/runtimeMigrations.ts` |
 | Asset key 工具 | `src/daa/assetKey.ts` |
 | API 限流 | `src/daa/api/rateLimit.ts` |
-| Cognitive Agent 工作流 | `src/daa/agent/cognitiveGraph.ts` |
-| Agent 工具注册表 | `src/daa/agent/tools/index.ts` |
+| 投资助理复核工作流 | `src/daa/agent/cognitiveGraph.ts` |
+| 复核工具注册表 | `src/daa/agent/tools/index.ts` |
 | 实体图抽取 | `src/daa/agent/entities/entityExtractor.ts` |
 | 实体图存储 | `src/daa/agent/entities/entityStore.ts` |
 
@@ -419,7 +419,7 @@ simulateExecute() → 写持仓/账本/快照
 
 ## 10. 进一步阅读
 
-- **[COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)** — Cognitive Agent OS 详解（工作流、记忆三层、16 工具、日报原理）
+- **[COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)** — 投资助理复核链路详解（工作流、经验库三层检索、16 工具、每日复核原理）
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** — Docker Compose、环境变量、Cron、故障排查
 - **[../CLAUDE.md](../CLAUDE.md)** — 面向 AI 助手和新贡献者的快速参考（规范清单）
 - **[archived/](./archived/)** — 历史设计文档

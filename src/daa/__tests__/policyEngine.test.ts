@@ -73,7 +73,7 @@ function agentIntent(): InvestmentIntent {
     source: "agent_thesis",
     action: "review_only",
     assetKeys: ["US::QQQ"],
-    thesis: "Agent 目标权重计划进入策略评估",
+    thesis: "投资助理目标权重计划进入策略评估",
     confidencePct: 80,
     expiresAt: null,
     evidenceRefs: [],
@@ -173,7 +173,7 @@ describe("policy-engine", () => {
     expect(decision.reasons.join(" ")).toContain("自动执行冷静期");
   });
 
-  it("Agent 目标权重计划有可执行提案时直接授权自动执行", () => {
+  it("投资助理目标权重计划有可执行提案时直接授权自动执行", () => {
     const policy = resolvePolicyConfig(normalizeSystemConfig({}));
     const decision = evaluatePortfolioPolicy({
       portfolioState: portfolioState({
@@ -182,7 +182,7 @@ describe("policy-engine", () => {
           staleAssetKeys: ["US::QQQ"],
           missingAssetKeys: [],
           fxMissingAssetKeys: [],
-          message: "测试 stale 数据不再阻断 Agent 全自动目标权重计划",
+          message: "测试 stale 数据不再阻断投资助理全自动目标权重计划",
         },
       }),
       policy,
@@ -203,6 +203,6 @@ describe("policy-engine", () => {
 
     expect(decision.action).toBe("authorize_auto_execute");
     expect(decision.blockers).toEqual([]);
-    expect(decision.reasons.join(" ")).toContain("Agent 目标权重计划");
+    expect(decision.reasons.join(" ")).toContain("投资助理目标权重计划");
   });
 });

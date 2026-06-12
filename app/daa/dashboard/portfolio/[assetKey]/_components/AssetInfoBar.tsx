@@ -55,20 +55,20 @@ export function AssetInfoBar(props: {
       : "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]";
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,var(--card),var(--surface))] shadow-[0_16px_36px_rgba(15,23,42,0.08)]">
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-4">
         <div className="flex min-w-[240px] items-center gap-3">
           <button
             type="button"
             onClick={() => router.push("/daa/dashboard/portfolio")}
-            className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[var(--muted)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]"
+            className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--muted)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]"
             title="返回持仓"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
           <button
             type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[var(--muted)] transition-colors hover:bg-[var(--primary-bg)] hover:text-[var(--primary)]"
+            className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--muted)] transition-colors hover:bg-[var(--primary-bg)] hover:text-[var(--primary)]"
             title="关注"
           >
             <Star className="h-4 w-4" />
@@ -101,32 +101,32 @@ export function AssetInfoBar(props: {
           ) : null}
         </div>
 
-        <div className="ml-auto grid flex-1 grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-3 xl:grid-cols-[repeat(5,minmax(92px,1fr))_minmax(170px,1.45fr)]">
-          <div className="min-w-0">
+        <div className="ml-auto grid flex-1 grid-cols-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] md:grid-cols-3 xl:grid-cols-[repeat(5,minmax(92px,1fr))_minmax(170px,1.45fr)]">
+          <div className="min-w-0 border-b border-r border-[var(--border)] px-3 py-2 xl:border-b-0">
             <div className="text-[11px] text-[var(--muted)]">市值</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
               {formatCurrency(valBase, baseCurrency)}
             </div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 border-b border-[var(--border)] px-3 py-2 md:border-r xl:border-b-0">
             <div className="text-[11px] text-[var(--muted)]">持仓</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
               {row.holdingQty % 1 === 0 ? row.holdingQty.toLocaleString() : row.holdingQty.toFixed(4)}
             </div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 border-b border-r border-[var(--border)] px-3 py-2 md:border-r-0 xl:border-b-0 xl:border-r">
             <div className="text-[11px] text-[var(--muted)]">均价</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
               {costPerShare != null ? formatCurrency(costPerShare, row.currency) : "--"}
             </div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 border-b border-[var(--border)] px-3 py-2 md:border-b-0 md:border-r">
             <div className="text-[11px] text-[var(--muted)]">当前 / 目标</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
               {(row.actualWeightPct ?? 0).toFixed(2)}% / {targetPct.toFixed(2)}%
             </div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 border-r border-[var(--border)] px-3 py-2">
             <div className="text-[11px] text-[var(--muted)]">总盈亏</div>
             <div className={cn(
               "mt-1 truncate font-[var(--font-mono)] text-sm font-semibold",
@@ -137,18 +137,18 @@ export function AssetInfoBar(props: {
                 : "--"}
             </div>
           </div>
-          <div className="min-w-0 xl:min-w-[170px]">
+          <div className="min-w-0 px-3 py-2 xl:min-w-[170px]">
             <div className="text-[11px] text-[var(--muted)]">状态</div>
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
               <span className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded-[6px] border px-1.5 py-0.5 font-[var(--font-mono)] text-xs font-semibold",
+                "inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border px-1.5 py-0.5 font-[var(--font-mono)] text-xs font-semibold",
                 riskTone,
               )}>
                 <ShieldCheck className={cn("h-3.5 w-3.5", riskIconTone)} />
                 {riskLabel}
               </span>
               <span className={cn(
-                "inline-flex max-w-full items-center rounded-[6px] border px-1.5 py-0.5 font-[var(--font-mono)] text-xs font-semibold whitespace-nowrap",
+                "inline-flex max-w-full items-center rounded-[var(--radius-sm)] border px-1.5 py-0.5 font-[var(--font-mono)] text-xs font-semibold whitespace-nowrap",
                 gapPillTone,
               )}>
                 偏离 {gapPct >= 0 ? "+" : ""}{gapPct.toFixed(2)}%

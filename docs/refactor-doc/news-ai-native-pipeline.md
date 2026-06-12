@@ -27,12 +27,12 @@
 ## 触发规则
 
 - Telegram 重大新闻推送仍有 24 小时去重，避免刷屏。
-- Agent autopilot 触发依据是“检测到 high-impact 新闻事件”，不依赖 Telegram 是否实际推送成功。
+- 投资助理自动复核触发依据是“检测到 high-impact 新闻事件”，不依赖 Telegram 是否实际推送成功。
 - Alpaca WS 实时事件会立刻写 item、event 和实时 signal；cron 批量刷新负责补全非实时来源与长期缓存。
 
-## Agent 可见信息
+## 投资助理可见信息
 
-`observeNode` 现在优先读取事件层，Agent 能看到：
+`observeNode` 现在优先读取事件层，投资助理能看到：
 
 - 新闻标题、来源、时间；
 - AI summary、actionHint；
@@ -43,7 +43,7 @@
 - 组合影响: holding / watchlist / target / related_candidate 的影响等级；
 - 候选发现: 新候选资产、分数、置信度、证据引用、出现次数和人工处理状态。
 
-如果某条新闻尚未经过 AI 事件分析，Agent 仍能看到原始新闻标题，但 summary 和 majorEvent 为空。
+如果某条新闻尚未经过 AI 事件分析，投资助理仍能看到原始新闻标题，但 summary 和 majorEvent 为空。
 
 ## 只读 API
 
@@ -54,7 +54,7 @@
 - `discoveryCandidates`: 状态为 `new` / `watching` 的候选发现；
 - `policy`: 明确标注 `canAutoMutateWatchlist=false`、`canAutoTrade=false`。
 
-这个 API 用于 UI 和 Agent 读取，不承担任何写动作。
+这个 API 用于 UI 和投资助理读取，不承担任何写动作。
 
 ## 权限边界
 

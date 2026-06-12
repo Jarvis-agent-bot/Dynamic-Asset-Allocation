@@ -1,10 +1,10 @@
 /**
- * POST /api/daa/cron/cognitive-agent — 定时触发 Cognitive Agent 循环
+ * POST /api/daa/cron/cognitive-agent — 定时触发投资助理复核循环
  *
  * Feature D: 自门控 — 外部 cron 可频繁触发（如每小时），本路由检查当前 UTC 时间
  * 是否匹配由 schedule 派生出的 UTC 窗口，不匹配则跳过。
  *
- * 配置在 Settings → 认知 Agent → 运行频率
+ * 配置在 Settings → 投资助理复核 → 运行频率
  */
 
 export const runtime = "nodejs";
@@ -125,7 +125,7 @@ function buildOperatorResearchOnlyResult(input: {
         blockedReason: null,
         error: null,
       },
-      reason: "操作员模式只运行定时复核，不创建调仓周期。",
+      reason: "手动复核授权只运行定时复核，不创建调仓周期。",
     },
     targetWeightPool: {
       attempted: false,
@@ -137,7 +137,7 @@ function buildOperatorResearchOnlyResult(input: {
       persistedCount: 0,
       failedCount: 0,
       minConfidence: 0,
-      reason: "操作员模式不写入 AI 目标权重池。",
+      reason: "手动复核授权不写入目标权重建议池。",
     },
   };
 }
@@ -208,7 +208,7 @@ async function runScheduledCognitiveAgent(): Promise<CognitiveAgentCronResult> {
 
   return buildBrainModeSkippedResult({
     brainMode: brain.mode,
-    reason: "顾问模式不运行定时复核；需要手动查看建议。",
+    reason: "仅建议授权不运行定时复核；需要手动查看建议。",
   });
 }
 
@@ -231,10 +231,10 @@ async function runCognitiveAgentJob(req: Request, scope: DaaActiveAccountScope):
       const ca = sysConfig.config.cognitiveAgent;
       if (ca) {
         if (!ca.enabled) {
-          return { skipped: true, reason: "认知 Agent 已在设置中禁用。" };
+          return { skipped: true, reason: "投资助理复核已在设置中禁用。" };
         }
         if (ca.schedule === "manual_only") {
-          return { skipped: true, reason: "Agent 运行频率设为仅手动。" };
+          return { skipped: true, reason: "投资助理复核运行频率设为仅手动。" };
         }
         // 检查当前 UTC 时间是否匹配当前频率对应的调度窗口
         const nowUtc = new Date();
@@ -270,7 +270,7 @@ async function runCognitiveAgentJob(req: Request, scope: DaaActiveAccountScope):
       if (duplicate) {
         return {
           skipped: true,
-          reason: "当前调度窗口已完成过认知 Agent 循环，跳过重复触发。",
+          reason: "当前调度窗口已完成过投资复核，跳过重复触发。",
           requestId: duplicate.requestId,
           jobId: duplicate.jobId,
           duplicateOf: duplicate.jobId,
@@ -305,7 +305,7 @@ async function runCognitiveAgentJob(req: Request, scope: DaaActiveAccountScope):
     if (!locked.acquired) {
       return {
         skipped: true,
-        reason: "当前调度窗口已有认知 Agent 循环正在执行，跳过并发触发。",
+        reason: "当前调度窗口已有投资复核正在执行，跳过并发触发。",
         idempotencyKey,
       };
     }

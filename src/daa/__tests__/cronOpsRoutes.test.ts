@@ -561,7 +561,7 @@ describe("cron-ops-routes-v1", () => {
     expect(json.data.jobId).toBeTruthy();
   });
 
-  it("cognitive-agent 在自动驾驶模式下继续走自动驾驶链路", async () => {
+  it("cognitive-agent 在自动复核授权下继续走自动复核链路", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-19T21:05:00.000Z"));
     vi.mocked(getScopedDaaSystemConfig).mockResolvedValue(buildSystemConfig({
@@ -582,7 +582,7 @@ describe("cron-ops-routes-v1", () => {
     expect(vi.mocked(runCognitiveAgentCycle)).not.toHaveBeenCalled();
   });
 
-  it("cognitive-agent 在操作员模式下只运行定时复核，不创建调仓周期", async () => {
+  it("cognitive-agent 在手动复核授权下只运行定时复核，不创建调仓周期", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-19T21:05:00.000Z"));
     vi.mocked(getScopedDaaSystemConfig).mockResolvedValue(buildSystemConfig({
@@ -602,17 +602,17 @@ describe("cron-ops-routes-v1", () => {
       attempted: false,
       created: false,
       cycleId: null,
-      reason: "操作员模式只运行定时复核，不创建调仓周期。",
+      reason: "手动复核授权只运行定时复核，不创建调仓周期。",
     });
     expect(json.data.targetWeightPool).toMatchObject({
       attempted: false,
-      reason: "操作员模式不写入 AI 目标权重池。",
+      reason: "手动复核授权不写入目标权重建议池。",
     });
     expect(vi.mocked(runCognitiveAgentCycle)).toHaveBeenCalledWith("scheduled");
     expect(vi.mocked(runAutopilotLoop)).not.toHaveBeenCalled();
   });
 
-  it("cognitive-agent 在顾问模式下清晰跳过定时复核", async () => {
+  it("cognitive-agent 在仅建议授权下清晰跳过定时复核", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-19T21:05:00.000Z"));
     vi.mocked(getScopedDaaSystemConfig).mockResolvedValue(buildSystemConfig({
@@ -627,12 +627,12 @@ describe("cron-ops-routes-v1", () => {
     expect(json.ok).toBe(true);
     expect(json.data.skipped).toBe(true);
     expect(json.data.brainMode).toBe("advisor");
-    expect(json.data.reason).toBe("顾问模式不运行定时复核；需要手动查看建议。");
+    expect(json.data.reason).toBe("仅建议授权不运行定时复核；需要手动查看建议。");
     expect(vi.mocked(runCognitiveAgentCycle)).not.toHaveBeenCalled();
     expect(vi.mocked(runAutopilotLoop)).not.toHaveBeenCalled();
   });
 
-  it("daily-analysis 在关闭自动生成时跳过生成但仍可发送每日报告", async () => {
+  it("daily-analysis 在关闭自动生成时跳过生成但仍可发送每日复核", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig({
       autoGenerateEnabled: false,
       telegramDailyReport: true,
@@ -648,14 +648,14 @@ describe("cron-ops-routes-v1", () => {
     expect(json.data.message).toBe("policy auto generate disabled");
     expect(vi.mocked(refreshMarketIndicators)).not.toHaveBeenCalled();
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
-    // Daily report should still be sent
+    // 每日复核通知仍应发送
     expect(vi.mocked(buildWorkbenchBootstrap)).toHaveBeenCalledWith({ syncPrices: false });
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
     expect(json.data.dailyReport.sent).toBe(true);
     expect(json.data.dailyReport.telegram).toBe(true);
   });
 
-  it("daily-analysis 在关闭自动生成且无每日报告时不发送任何通知", async () => {
+  it("daily-analysis 在关闭自动生成且无每日复核时不发送任何通知", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig({
       autoGenerateEnabled: false,
     }));

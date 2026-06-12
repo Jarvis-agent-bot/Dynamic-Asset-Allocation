@@ -25,13 +25,13 @@ export function AssetDetailDialog({
   return (
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DaaSurfaceDialogShell
-        accent="cyan"
+        accent="primary"
         className="max-w-4xl"
         title={draft?.symbol ?? ""}
         description={draft?.name || `${draft?.market ?? ""} 市场 · K 线图表`}
         badges={
           draft ? (
-            <DaaSurfaceStatusPill tone="cyan">{draft.market}</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone="primary">{draft.market}</DaaSurfaceStatusPill>
           ) : null
         }
       >

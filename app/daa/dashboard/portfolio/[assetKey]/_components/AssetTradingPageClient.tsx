@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { getApiErrorMessage } from "@/src/daa/api/client";
+import { WorkbenchLoadingState } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { AssetKlineChart } from "@/app/daa/dashboard/_shared/AssetKlineChart";
 import { usePriceStream } from "@/app/daa/dashboard/_hooks/usePriceStream";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
-import { buildManualExecutionInput } from "@/app/daa/dashboard/_hooks/dashboard/assetActionCommands";
+import { buildManualExecutionInput } from "@/app/daa/dashboard/_hooks/asset-workbench/assetActionCommands";
 import { getAssetDetailReadModel } from "@/src/daa/modules/read/readApi";
 import { executeWorkbenchOrder, patchWorkbenchAsset, previewWorkbenchExecution } from "@/src/daa/modules/workbench/workbenchApi";
 import type { AssetDetailReadModel } from "@/src/daa/modules/read/readModels";
@@ -153,22 +153,17 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   }), [handlePreviewOrder, handleSubmitOrder]);
 
   if (loading && !detail) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-20">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />
-        <span className="text-sm text-[var(--muted)]">加载资产数据…</span>
-      </div>
-    );
+    return <WorkbenchLoadingState title="正在加载资产详情" description="同步行情、持仓、目标权重与交易记录。" />;
   }
 
   if (error && !detail) {
     return (
-      <div className="space-y-4 py-12 text-center">
-        <div className="text-sm text-red-300">{error}</div>
+      <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-4">
+        <div className="text-sm font-medium text-[var(--danger)]">{error}</div>
         <button
           type="button"
           onClick={() => void loadDetail(true)}
-          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--elevated)]"
+          className="rounded-[var(--radius-sm)] border border-[var(--danger-border)] px-3 py-1.5 text-xs text-[var(--danger)] transition-colors hover:bg-[var(--surface)]"
         >
           重新加载
         </button>
@@ -179,14 +174,14 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   // 未找到资产
   if (!displayRow) {
     return (
-      <div className="space-y-4 py-12 text-center">
-        <div className="text-sm text-[var(--muted)]">
+      <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-4 py-4">
+        <div className="text-sm font-medium text-[var(--text)]">
           未找到资产 <span className="font-[var(--font-mono)]">{props.assetKey}</span>
         </div>
         <button
           type="button"
           onClick={() => router.push("/daa/dashboard/portfolio")}
-          className="rounded-[10px] border border-[var(--border)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--elevated)]"
+          className="rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]"
         >
           返回持仓列表
         </button>
@@ -203,7 +198,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         {/* 左侧：K 线图 */}
         <SectionErrorBoundary sectionName="K线图">
-          <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[#050607] shadow-[0_18px_42px_rgba(15,23,42,0.14)]">
+          <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--surface)]">
             <AssetKlineChart
               symbol={displayRow.yfinanceSymbol || displayRow.symbol}
               market={displayRow.market}
@@ -240,7 +235,7 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
         </div>
       </div>
 
-      {/* 底部：交易所式证据区 */}
+      {/* 底部：交易所式依据区 */}
       <SectionErrorBoundary sectionName="资产详情">
         <AssetDetailTabs row={displayRow} />
       </SectionErrorBoundary>

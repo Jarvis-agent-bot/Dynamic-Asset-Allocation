@@ -91,7 +91,7 @@ describe("auth-routes-api-response-v1", () => {
     expect(json.error.message).toBe("invalid_credentials");
   });
 
-  it("login 会保留 dashboard 深链 returnTo", async () => {
+  it("login 会保留工作站深链 returnTo", async () => {
     mockLoginAccount({
       accountId: "user-1",
       username: "admin@example.com",

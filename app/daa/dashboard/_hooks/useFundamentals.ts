@@ -129,9 +129,9 @@ export function useFundamentalsState(symbols: string[]): FundamentalsLoadState {
       cache: "no-store",
       signal: controller.signal,
     })
-      .then((r) => {
-        if (!r.ok) throw new Error(`fundamentals request failed: ${r.status}`);
-        return r.json();
+      .then((response) => {
+        if (!response.ok) throw new Error(`fundamentals request failed: ${response.status}`);
+        return response.json();
       })
       .then((json) => {
         const payload = json?.data as FundamentalsResponse | undefined;
@@ -159,8 +159,4 @@ export function useFundamentalsState(symbols: string[]): FundamentalsLoadState {
   }, [symbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return state;
-}
-
-export function useFundamentals(symbols: string[]): Record<string, AssetFundamentals> {
-  return useFundamentalsState(symbols).items;
 }

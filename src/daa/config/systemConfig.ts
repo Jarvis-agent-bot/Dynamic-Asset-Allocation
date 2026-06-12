@@ -4,7 +4,7 @@ import {
   normalizeCurrencyPairToken,
   type CurrencyCode,
 } from "@/src/daa/config/currency";
-import { MARKET_INDICATOR_CONFIG_KEYS_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
+import { MARKET_INDICATOR_CONFIG_KEYS } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type { DaaPolicyConfig, PolicyReviewFrequency } from "@/src/daa/modules/policy-engine/policyTypes";
 
 type DaaFundKind = "equity" | "qdii" | "balanced";
@@ -61,7 +61,7 @@ export type DaaMarketIndicatorsConfig = {
 export type DaaBrainMode = "advisor" | "operator" | "autopilot";
 export type DaaCognitiveAgentSchedule = "2x_daily" | "daily" | "every_6h" | "manual_only";
 
-const COGNITIVE_AGENT_SCHEDULE_TIMES_: Record<DaaCognitiveAgentSchedule, string[]> = {
+const COGNITIVE_AGENT_SCHEDULE_TIMES_UTC_BY_SCHEDULE: Record<DaaCognitiveAgentSchedule, string[]> = {
   "2x_daily": ["13:00", "21:00"],
   daily: ["21:00"],
   every_6h: ["01:00", "07:00", "13:00", "19:00"],
@@ -69,7 +69,7 @@ const COGNITIVE_AGENT_SCHEDULE_TIMES_: Record<DaaCognitiveAgentSchedule, string[
 };
 
 export function deriveCognitiveAgentScheduleTimesUtc(schedule: DaaCognitiveAgentSchedule): string[] {
-  return [...(COGNITIVE_AGENT_SCHEDULE_TIMES_[schedule] ?? COGNITIVE_AGENT_SCHEDULE_TIMES_.daily)];
+  return [...(COGNITIVE_AGENT_SCHEDULE_TIMES_UTC_BY_SCHEDULE[schedule] ?? COGNITIVE_AGENT_SCHEDULE_TIMES_UTC_BY_SCHEDULE.daily)];
 }
 
 export type DaaSystemConfig = {
@@ -106,7 +106,7 @@ export type DaaSystemConfig = {
       enforceOnExecution: boolean;
     };
   };
-  /** AI Native 策略引擎配置：signals -> intents -> policy decision -> proposal plan。 */
+  /** 策略引擎配置：signals -> intents -> policy decision -> proposal plan。 */
   policy: DaaPolicyConfig;
   dataSources: {
     hfFund: {
@@ -149,29 +149,29 @@ export type DaaSystemConfig = {
     }[];
     marketIndicators: DaaMarketIndicatorsConfig;
   };
-  /** 大脑控制面：定义 AI 的授权等级；配置写入不属于自动驾驶权限 */
+  /** 投资助理授权等级；配置写入不属于自动复核授权 */
   brain?: {
     mode: DaaBrainMode;
   };
-  /** 认知 Agent 配置 */
+  /** 投资助理复核配置 */
   cognitiveAgent?: {
     enabled: boolean;
-    /** 每次调查最大论点数（默认 5） */
+    /** 每次复核最大投资判断数（默认 5） */
     maxInvestigationTargets: number;
-    /** 新论点默认复盘间隔天数（默认 14） */
+    /** 新投资判断默认复核间隔天数（默认 14） */
     reviewIntervalDays: number;
-    /** 每次调查召回记忆数（默认 5） */
+    /** 每次复核召回经验记录数（默认 5） */
     memoryRecallLimit: number;
     /** 连续 LLM 失败触发熔断的阈值（默认 3） */
     circuitBreakerThreshold: number;
     /** 运行频率 */
     schedule: DaaCognitiveAgentSchedule;
-    /** 记忆衰减率 per day（默认 0.97，约 23 天半衰期） */
+    /** 经验记录衰减率 per day（默认 0.97，约 23 天半衰期） */
     memoryDecayRate: number;
-    /** medium+ conviction thesis 超过此天数未被调查时，强制占用 1 个调查槽位（默认 7 天，防止 LLM 永远只调查 uncertain） */
+    /** medium+ 置信度投资判断超过此天数未复核时，强制占用 1 个复核槽位（默认 7 天） */
     thesisStalenessDays?: number;
   };
-  /** AI 目标权重池：Agent 输出的目标权重落到 asset_universe.targetWeightHint 的开关 */
+  /** 目标权重建议池：投资助理输出的目标权重落到 asset_universe.targetWeightHint 的开关 */
   aiTargetWeightPool?: {
     enabled: boolean;
     minConfidence: number;
@@ -199,7 +199,7 @@ export type DaaSystemConfigPatch = {
   value: unknown;
 };
 
-const DEFAULT_HF_FUNDS_: DaaHfFundTrack[] = [
+const DEFAULT_HF_FUNDS: DaaHfFundTrack[] = [
   { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
   { fundCode: "100055", label: "富国全球科技互联网", kind: "qdii", enabled: true },
   { fundCode: "005827", label: "易方达蓝筹精选", kind: "equity", enabled: true },
@@ -212,7 +212,7 @@ const DEFAULT_HF_FUNDS_: DaaHfFundTrack[] = [
   { fundCode: "000874", label: "广发全球精选股票QDII", kind: "qdii", enabled: true },
 ];
 
-const DEFAULT_POLICY_CONFIG_: DaaPolicyConfig = {
+const DEFAULT_POLICY_CONFIG: DaaPolicyConfig = {
   enabled: true,
   shadowMode: false,
   drift: {
@@ -248,7 +248,7 @@ const DEFAULT_POLICY_CONFIG_: DaaPolicyConfig = {
   },
 };
 
-export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
+export const DEFAULT_SYSTEM_CONFIG: DaaSystemConfig = {
   strategy: {
     style: "classic_rebalance",
     breakout: {
@@ -286,11 +286,11 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       enforceOnExecution: true,
     },
   },
-  policy: clone(DEFAULT_POLICY_CONFIG_),
+  policy: clone(DEFAULT_POLICY_CONFIG),
   dataSources: {
     hfFund: {
       enabled: true,
-      funds: DEFAULT_HF_FUNDS_,
+      funds: DEFAULT_HF_FUNDS,
     },
     priceFeed: {
       enabled: true,
@@ -465,7 +465,7 @@ function normalizeMarketIndicatorWeights(
   const source = isRecord(input) ? input : {};
   const out = {} as DaaMarketIndicatorsConfig["indicators"];
   let positiveWeightCount = 0;
-  for (const key of MARKET_INDICATOR_CONFIG_KEYS_) {
+  for (const key of MARKET_INDICATOR_CONFIG_KEYS) {
     const row = isRecord(source[key]) ? source[key] : {};
     const fallbackRow = fallback[key];
     const weight = Math.max(0, Number(row.weight ?? fallbackRow.weight) || 0);
@@ -664,7 +664,7 @@ function normalizeStrategyStyle(value: unknown, fallback: DaaStrategyStyle): Daa
 export function getStrategyExecutionConfig(config: Pick<DaaSystemConfig, "strategy">): DaaStrategyExecutionConfig & {
   maxOrderPctOfNav: number;
 } {
-  const fallback = DEFAULT_SYSTEM_CONFIG_.strategy;
+  const fallback = DEFAULT_SYSTEM_CONFIG.strategy;
   const execution = config.strategy.execution || fallback.execution;
   const constraints = config.strategy.constraints || fallback.constraints;
   const feeRateBpsRaw = Number(execution.feeRateBps);
@@ -682,7 +682,7 @@ export function getStrategyExecutionConfig(config: Pick<DaaSystemConfig, "strate
 }
 
 export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
-  const fallback = clone(DEFAULT_SYSTEM_CONFIG_);
+  const fallback = clone(DEFAULT_SYSTEM_CONFIG);
   const source = isRecord(raw) ? raw : {};
 
   const strategy = isRecord(source.strategy) ? source.strategy : {};

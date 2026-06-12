@@ -1,5 +1,5 @@
 /**
- * Entity Extractor — 从记忆/论点文本中抽取结构化实体
+ * Entity Extractor — 从记忆/投资判断文本中抽取结构化实体
  *
  * 支持 6 种实体：asset / thesis_id / regime / ticker / news_source / strategy_tag
  * 抽取结果驱动实体图（daa_agent_entity + link tables），用于回答
@@ -171,7 +171,7 @@ export function extractEntitiesFromMemory(input: {
 }
 
 /**
- * 为一个论点抽取实体（title + thesisText + assetKeys + tags）。
+ * 为一个投资判断抽取实体（title + thesisText + assetKeys + tags）。
  */
 export function extractEntitiesFromThesis(thread: {
   id: string;
@@ -186,7 +186,7 @@ export function extractEntitiesFromThesis(thread: {
     if (!merged.has(key)) merged.set(key, e);
   };
 
-  // 论点自身也是一个 thesis_id 实体
+  // 投资判断自身也是一个 thesis_id 实体
   add({ kind: "thesis_id", value: thread.id });
 
   for (const key of thread.assetKeys ?? []) {

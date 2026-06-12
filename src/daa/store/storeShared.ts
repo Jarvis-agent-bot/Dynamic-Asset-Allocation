@@ -3,7 +3,7 @@
  */
 
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import type { DaaPgQueryFn, DaaPgQueryResult } from "@/src/daa/pg/daaPg";
+import type { DaaPgQueryFn } from "@/src/daa/pg/daaPg";
 
 export { withDaaPgClient } from "@/src/daa/pg/daaPg";
 export type { DaaPgQueryFn, DaaPgQueryResult } from "@/src/daa/pg/daaPg";
@@ -15,7 +15,6 @@ export { toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 /*  Query function type used in transactions                          */
 /* ------------------------------------------------------------------ */
 
-export type DaaQueryRowResult<Row extends Record<string, unknown> = Record<string, unknown>> = DaaPgQueryResult<Row>;
 export type DaaTxQueryFn = DaaPgQueryFn;
 export type SchemaQueryFn = DaaPgQueryFn;
 

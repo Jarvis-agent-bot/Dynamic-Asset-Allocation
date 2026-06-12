@@ -41,8 +41,8 @@ export function useAssistantChat() {
         sessionId: targetSessionId,
       });
       applyPayload(data);
-    } catch (error_) {
-      setError(getApiErrorMessage(error_));
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError));
     } finally {
       setLoading(false);
     }
@@ -60,8 +60,8 @@ export function useAssistantChat() {
     try {
       const data = await sendAssistantMessage(trimmed);
       applyPayload(data);
-    } catch (error_) {
-      setError(getApiErrorMessage(error_));
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError));
     } finally {
       setSending(false);
     }

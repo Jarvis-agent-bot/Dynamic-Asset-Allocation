@@ -1,7 +1,7 @@
 /**
- * 策略 Overlay 存储 — 读取 Agent 目标权重计划
+ * 策略 Overlay 存储 — 读取投资助理目标权重计划
  *
- * Agent 每个 cycle 在 surfaceNode 末尾通过 LLM 生成目标权重计划（strategyOverlay），
+ * 投资助理每个 cycle 在 surfaceNode 末尾通过 LLM 生成目标权重计划（strategyOverlay），
  * 存储在 daa_agent_runs.briefing JSONB 中。
  */
 
@@ -28,7 +28,7 @@ function normalizeStrategyOverlayFromBriefing(briefingRaw: unknown): AgentStrate
 }
 
 /**
- * 读取指定 Agent run 产出的目标权重计划，供 Autopilot 避免误用历史输出。
+ * 读取指定复核运行产出的目标权重计划，供自动复核避免误用历史输出。
  */
 export async function getAgentStrategyOverlayForRun(runId: string): Promise<AgentStrategyOverlay | null> {
   try {

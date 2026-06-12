@@ -1,11 +1,11 @@
 import type React from "react";
 
-import DashboardShell from "./_components/DashboardShell";
+import WorkbenchShell from "./_components/WorkbenchShell";
 
 type Props = {
   children: React.ReactNode;
 };
 
-export default function DaaDashboardLayout({ children }: Props) {
-  return <DashboardShell>{children}</DashboardShell>;
+export default function DaaWorkbenchLayout({ children }: Props) {
+  return <WorkbenchShell>{children}</WorkbenchShell>;
 }

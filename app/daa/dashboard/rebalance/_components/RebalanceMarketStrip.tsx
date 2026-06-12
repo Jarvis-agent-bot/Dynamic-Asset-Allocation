@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { DaaSurfacePanel, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndicatorDashboard";
+import { MarketContextPanel } from "@/app/daa/dashboard/_shared/MarketContextPanel";
 import { marketRegimeLabel, marketRegimeTone } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 import type { DaaMarketContext, DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
 
@@ -20,11 +20,11 @@ function formatIndicatorValue(ind: DaaMarketIndicatorSnapshot | undefined): stri
 }
 
 function indicatorTone(ind: DaaMarketIndicatorSnapshot | undefined) {
-  if (!ind) return "slate" as const;
-  if (ind.stance === "risk_off") return "red" as const;
-  if (ind.stance === "risk_on") return "green" as const;
-  if (ind.stance === "transitional") return "amber" as const;
-  return "slate" as const;
+  if (!ind) return "neutral" as const;
+  if (ind.stance === "risk_off") return "danger" as const;
+  if (ind.stance === "risk_on") return "success" as const;
+  if (ind.stance === "transitional") return "warning" as const;
+  return "neutral" as const;
 }
 
 export function RebalanceMarketStrip({
@@ -51,8 +51,8 @@ export function RebalanceMarketStrip({
       accent={marketRegimeTone(regime)}
       title="市场环境与预算依据"
       subtitle={expanded
-        ? "组合偏离、宏观政策、资产预算和指标证据合并在同一处；用于解释建议，不单独触发订单。"
-        : "已收起明细，仅保留环境摘要和关键指标。"}
+        ? "偏离、政策、预算与指标统一呈现；只解释建议，不触发订单。"
+        : "已收起明细，仅保留环境摘要与关键指标。"}
       action={(
         <button
           type="button"
@@ -75,7 +75,7 @@ export function RebalanceMarketStrip({
           return (
             <div
               key={key}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px]"
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px]"
               title={ind.reason || ind.label}
             >
               <span className="text-[var(--faint)]">{ind.label}</span>
@@ -98,13 +98,13 @@ export function RebalanceMarketStrip({
             <section>
               <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">组合偏离</div>
+                  <div className="text-xs font-semibold uppercase tracking-normal text-[var(--faint)]">组合偏离</div>
                   <div className="mt-1 text-[11px] leading-5 text-[var(--muted)]">
                     当前持仓相对目标权重的偏离；超过策略阈值的资产优先进入建议审阅。
                   </div>
                 </div>
                 {typeof driftCount === "number" ? (
-                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "warning" : "success"}>
                     {driftCount > 0 ? `${driftCount} 项超阈值` : "目标内"}
                   </DaaSurfaceStatusPill>
                 ) : null}
@@ -112,7 +112,7 @@ export function RebalanceMarketStrip({
               {driftContent}
             </section>
           ) : null}
-          <MarketIndicatorDashboard marketContext={marketContext} hideClock />
+          <MarketContextPanel marketContext={marketContext} hideClock />
         </div>
       ) : null}
     </DaaSurfacePanel>

@@ -2,10 +2,10 @@ import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
 import { classifyMacroCycleWithFred, type FredMacroInput } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
-  MARKET_INDICATOR_CONFIG_KEY_BY_KEY_,
-  MARKET_INDICATOR_KEYS_,
-  MARKET_SCOPE_KEY_ORDER_,
-  MARKET_SCOPE_LABEL_ZH_,
+  MARKET_INDICATOR_CONFIG_KEY_BY_KEY,
+  MARKET_INDICATOR_KEYS,
+  MARKET_SCOPE_KEY_ORDER,
+  MARKET_SCOPE_LABEL_ZH,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type {
   DaaAssetBudgetOverlay,
@@ -48,8 +48,8 @@ function rankMarketIndicatorReasons(input: {
 }): string[] {
   return [...input.indicators]
     .sort((a, b) => {
-      const weightA = input.config.indicators[MARKET_INDICATOR_CONFIG_KEY_BY_KEY_[a.key]]?.weight ?? 0;
-      const weightB = input.config.indicators[MARKET_INDICATOR_CONFIG_KEY_BY_KEY_[b.key]]?.weight ?? 0;
+      const weightA = input.config.indicators[MARKET_INDICATOR_CONFIG_KEY_BY_KEY[a.key]]?.weight ?? 0;
+      const weightB = input.config.indicators[MARKET_INDICATOR_CONFIG_KEY_BY_KEY[b.key]]?.weight ?? 0;
       const scoreA = weightA * Math.abs(a.riskOffScorePct - 50);
       const scoreB = weightB * Math.abs(b.riskOffScorePct - 50);
       return scoreB - scoreA;
@@ -69,7 +69,7 @@ export function deriveMarketRegime(
   return "transitional";
 }
 
-const MACRO_POLICY_DIMENSION_META_: Record<DaaMacroPolicyDimensionKey, {
+const MACRO_POLICY_DIMENSION_META: Record<DaaMacroPolicyDimensionKey, {
   label: string;
   indicators: DaaMarketIndicatorKey[];
 }> = {
@@ -91,7 +91,7 @@ function buildMacroPolicyDimension(input: {
   key: DaaMacroPolicyDimensionKey;
   indicators: DaaMarketIndicatorSnapshot[];
 }): DaaMacroPolicyDimension | null {
-  const meta = MACRO_POLICY_DIMENSION_META_[input.key];
+  const meta = MACRO_POLICY_DIMENSION_META[input.key];
   const rows = meta.indicators
     .map((key) => input.indicators.find((item) => item.key === key) || null)
     .filter((item): item is DaaMarketIndicatorSnapshot => Boolean(item));
@@ -127,7 +127,7 @@ function macroPolicyLabel(regime: DaaMarketRegime): string {
 }
 
 function buildMacroPolicyContext(indicators: DaaMarketIndicatorSnapshot[]): DaaMacroPolicyContext | null {
-  const dimensions = (Object.keys(MACRO_POLICY_DIMENSION_META_) as DaaMacroPolicyDimensionKey[])
+  const dimensions = (Object.keys(MACRO_POLICY_DIMENSION_META) as DaaMacroPolicyDimensionKey[])
     .map((key) => buildMacroPolicyDimension({ key, indicators }))
     .filter((item): item is DaaMacroPolicyDimension => Boolean(item));
   if (dimensions.length <= 0) return null;
@@ -344,14 +344,14 @@ function buildScopedContext(input: {
 }): DaaMarketScopeContext | null {
   const enabledIndicators = input.indicators.filter((indicator) => {
     if (indicator.scope !== input.scope) return false;
-    const configKey = MARKET_INDICATOR_CONFIG_KEY_BY_KEY_[indicator.key];
+    const configKey = MARKET_INDICATOR_CONFIG_KEY_BY_KEY[indicator.key];
     return input.config.indicators[configKey]?.enabled;
   });
   if (enabledIndicators.length <= 0) return null;
 
   const weightedRows = enabledIndicators
     .map((indicator) => {
-      const configKey = MARKET_INDICATOR_CONFIG_KEY_BY_KEY_[indicator.key];
+      const configKey = MARKET_INDICATOR_CONFIG_KEY_BY_KEY[indicator.key];
       const weight = Math.max(0, input.config.indicators[configKey]?.weight ?? 0);
       return { indicator, weight };
     })
@@ -391,7 +391,7 @@ function buildScopedContext(input: {
 
   return {
     scope: input.scope,
-    label: MARKET_SCOPE_LABEL_ZH_[input.scope],
+    label: MARKET_SCOPE_LABEL_ZH[input.scope],
     generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : new Date().toISOString(),
     regime,
     riskOffScorePct: round(riskOffScorePct),
@@ -399,7 +399,7 @@ function buildScopedContext(input: {
     buyScale: round(buyScale),
     highRiskBuyScale: round(highRiskBuyScale),
     reasons: rankMarketIndicatorReasons({ indicators: enabledIndicators, config: input.config }),
-    indicators: MARKET_INDICATOR_KEYS_
+    indicators: MARKET_INDICATOR_KEYS
       .map((key) => enabledIndicators.find((item) => item.key === key) || null)
       .filter(Boolean) as DaaMarketIndicatorSnapshot[],
   };
@@ -410,7 +410,7 @@ export function buildMarketContextFromIndicators(input: {
   config: DaaMarketIndicatorsConfig;
   fredMacro?: FredMacroInput | null;
 }): DaaMarketContext | null {
-  const scopes = MARKET_SCOPE_KEY_ORDER_
+  const scopes = MARKET_SCOPE_KEY_ORDER
     .map((scope) => buildScopedContext({ scope, indicators: input.indicators, config: input.config }))
     .filter((item): item is DaaMarketScopeContext => Boolean(item));
   if (scopes.length <= 0) return null;
@@ -433,7 +433,7 @@ export function buildMarketContextFromIndicators(input: {
     .filter((item) => Number.isFinite(item))
     .sort((a, b) => b - a)[0];
 
-  const enabledIndicators = MARKET_INDICATOR_KEYS_
+  const enabledIndicators = MARKET_INDICATOR_KEYS
     .map((key) => input.indicators.find((item) => item.key === key) || null)
     .filter(Boolean) as DaaMarketIndicatorSnapshot[];
 

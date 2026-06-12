@@ -1,5 +1,5 @@
 /**
- * Agent Rebalance Adapter — 用 Cognitive Agent 的 thesis 数据驱动调仓决策
+ * 复核调仓适配器 — 用投资判断数据驱动调仓决策
  *
  * 基于 thesis conviction 调整漂移提案量，保留纯数学漂移计算和风控持久化。
  *
@@ -89,7 +89,7 @@ export async function enhanceProposalsWithAgent(input: {
     if (theses.length === 0) {
       return {
         proposals: draftProposals,
-        llmSummary: "Agent 无活跃论点，使用纯漂移计算。",
+        llmSummary: "投资助理暂无活跃判断，使用纯漂移计算。",
         marketRegime,
         agentStatus: "fallback",
         tokensUsed: 0,
@@ -119,7 +119,7 @@ export async function enhanceProposalsWithAgent(input: {
 
     // 增强提案
     const enhancedProposals: RebalanceProposal[] = [];
-    const skippedByAgent: string[] = [];
+    const skippedByAssistantReview: string[] = [];
 
     for (const proposal of draftProposals) {
       const relatedTheses = thesesByAssetKey.get(proposal.assetKey) ?? [];
@@ -138,7 +138,7 @@ export async function enhanceProposalsWithAgent(input: {
 
       if (multiplier === 0) {
         // uncertain → 跳过此提案
-        skippedByAgent.push(proposal.symbol);
+        skippedByAssistantReview.push(proposal.symbol);
         continue;
       }
 
@@ -146,7 +146,7 @@ export async function enhanceProposalsWithAgent(input: {
       const { adjustedQty, adjustedNotional } = scaleProposalForConviction(proposal, multiplier);
 
       if (adjustedQty <= 0 || adjustedNotional < 10) {
-        skippedByAgent.push(proposal.symbol);
+        skippedByAssistantReview.push(proposal.symbol);
         continue;
       }
 
@@ -159,10 +159,10 @@ export async function enhanceProposalsWithAgent(input: {
         llmAdjustment: multiplier >= 0.8 ? "execute" : multiplier >= 0.4 ? "reduce_size" : "skip",
         llmConfidence: thesis ? (conviction === "high" ? 85 : 55) : null,
         llmRationale: thesis
-          ? `[Agent] ${sanitizeForPrompt(thesis.thesisText, 120)} (conviction: ${thesis.conviction})`
+          ? `[投资判断] ${sanitizeForPrompt(thesis.thesisText, 120)} (conviction: ${thesis.conviction})`
           : null,
         finalQtyMultiplier: multiplier,
-        conflictFlags: hasUncertainConflict ? ["存在同资产未定论点，已用更高 conviction 论点驱动仓位"] : [],
+        conflictFlags: hasUncertainConflict ? ["存在同资产待复核判断，已优先采用 conviction 更高的投资判断驱动仓位"] : [],
         effectiveMarketRegime: marketRegime ?? null,
       };
 
@@ -171,7 +171,7 @@ export async function enhanceProposalsWithAgent(input: {
         suggestedQty: adjustedQty,
         suggestedNotional: adjustedNotional,
         reason: thesis
-          ? `${proposal.reason} | Agent: ${sanitizeForPrompt(thesis.title, 40)} (${thesis.conviction})`
+          ? `${proposal.reason} | 投资判断: ${sanitizeForPrompt(thesis.title, 40)} (${thesis.conviction})`
           : proposal.reason,
         decisionContext,
         thesisIds: thesisIds.length > 0 ? thesisIds : undefined,
@@ -184,12 +184,12 @@ export async function enhanceProposalsWithAgent(input: {
     try {
       const config = await resolveLlmConfig("decision");
       if (config && enhancedProposals.length > 0) {
-        const prompt = `你是投资研究操作系统的调仓顾问。基于以下信息，用2-3句话总结本次调仓建议的核心逻辑。
+        const prompt = `你是投资研究操作系统的调仓复核助手。基于以下信息，用2-3句话总结本次调仓建议的核心逻辑。
 
 提案: ${enhancedProposals.slice(0, 10).map(p => `${p.side} ${p.symbol} $${p.suggestedNotional.toFixed(0)}`).join(", ")}
-被跳过: ${skippedByAgent.join(", ") || "无"}
+被跳过: ${skippedByAssistantReview.join(", ") || "无"}
 市场: ${marketRegime ?? "unknown"}
-活跃论点: ${theses.length}
+活跃投资判断: ${theses.length}
 
 只输出摘要文字，不要 JSON。`;
         const { text } = await callLlm(config, prompt);
@@ -202,7 +202,7 @@ export async function enhanceProposalsWithAgent(input: {
 
     return {
       proposals: enhancedProposals,
-      llmSummary: llmSummary || `Agent 分析: ${enhancedProposals.length} 个提案, ${skippedByAgent.length} 个跳过 (conviction 不足)`,
+      llmSummary: llmSummary || `投资助理复核: ${enhancedProposals.length} 个提案, ${skippedByAssistantReview.length} 个跳过 (conviction 不足)`,
       marketRegime,
       agentStatus: "ok",
       tokensUsed,
@@ -211,7 +211,7 @@ export async function enhanceProposalsWithAgent(input: {
     logSwallowed("agentRebalanceAdapter", e);
     return {
       proposals: draftProposals,
-      llmSummary: `Agent 异常，使用纯漂移计算: ${e instanceof Error ? e.message : String(e)}`,
+      llmSummary: `投资助理复核异常，使用纯漂移计算: ${e instanceof Error ? e.message : String(e)}`,
       marketRegime,
       agentStatus: "error",
       tokensUsed: 0,

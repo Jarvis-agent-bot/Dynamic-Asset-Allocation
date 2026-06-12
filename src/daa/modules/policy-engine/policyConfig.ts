@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_CONFIG_, type DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { DEFAULT_SYSTEM_CONFIG, type DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 import type { DaaPolicyConfig } from "./policyTypes";
 
@@ -8,7 +8,7 @@ function finiteNumber(value: unknown, fallback: number): number {
 }
 
 export function resolvePolicyConfig(config: DaaSystemConfig): DaaPolicyConfig {
-  const fallback = DEFAULT_SYSTEM_CONFIG_.policy;
+  const fallback = DEFAULT_SYSTEM_CONFIG.policy;
   const source = config.policy;
   const rawInnerBandPct = finiteNumber(source.drift.innerBandPct, fallback.drift.innerBandPct);
   const outerBandPct = Math.max(

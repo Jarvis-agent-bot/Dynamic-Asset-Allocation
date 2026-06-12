@@ -2,7 +2,7 @@ import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { ManualTradeServiceError } from "@/src/daa/modules/workbench/manualTradeService";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
-import { appendChatMessage, appendChatToolCall, getChatSessionMemory, getOrCreateChatSession } from "./chatRepo";
+import { appendChatMessage, appendChatToolCall, getChatSessionState, getOrCreateChatSession } from "./chatRepo";
 import {
   loadAssistantRuntimeContext,
   parsePendingAction,
@@ -91,7 +91,7 @@ export async function runAssistantTurn(input: {
     });
     await saveAssistantSessionSnapshot({
       sessionId: session.sessionId,
-      sessionMemory: runtimeContext.sessionMemory,
+      sessionState: runtimeContext.sessionState,
       userText: input.userText,
       assistantText: reply.text,
       intentKind: reply.intentKind,
@@ -132,14 +132,14 @@ export async function runAssistantTurn(input: {
       intentKind: "unknown",
       status: "failed",
     });
-    const sessionMemory = await getChatSessionMemory(session.sessionId);
+    const sessionState = await getChatSessionState(session.sessionId);
     await saveAssistantSessionSnapshot({
       sessionId: session.sessionId,
-      sessionMemory,
+      sessionState,
       userText: input.userText,
       assistantText: assistantMessage.body,
       intentKind: "unknown",
-      pendingAction: parsePendingAction(sessionMemory?.metaJson?.pendingAction),
+      pendingAction: parsePendingAction(sessionState?.metaJson?.pendingAction),
     });
     return {
       session,

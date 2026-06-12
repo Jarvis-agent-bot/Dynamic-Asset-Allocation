@@ -1,5 +1,5 @@
 /**
- * Agent Tool System V2 — Barrel 导出
+ * 复核工具 System V2 — Barrel 导出
  *
  * import 此文件会触发所有工具的自注册（Hermes 模式）。
  * 在 cognitiveGraph.ts 中 import 一次即可。

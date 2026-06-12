@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildAssistantBrainContextDigest, buildAssistantSystemDigest } from "@/src/daa/chat/agentContext";
 
 describe("assistant-context-digest", () => {
-  it("会汇总权限边界、LLM 路由与认知 Agent 状态", () => {
+  it("会汇总权限边界、LLM 路由与投资助理复核状态", () => {
     const digest = buildAssistantSystemDigest({
       llmRoutes: [
         {
@@ -46,16 +46,16 @@ describe("assistant-context-digest", () => {
     expect(digest).toContain("执行边界：仅支持本地模拟");
     expect(digest).toContain("通道权限：Web 与 Telegram 入站");
     expect(digest).toContain("权限边界：不返回敏感密钥明文");
-    expect(digest).toContain("系统设置只允许显式大脑模式切换");
-    expect(digest).toContain("大脑模式：操作员模式");
-    expect(digest).toContain("大脑动作边界：操作员模式");
+    expect(digest).toContain("系统设置只允许显式切换投资助理授权等级");
+    expect(digest).toContain("投资助理授权：手动复核授权");
+    expect(digest).toContain("投资助理动作边界：手动复核授权");
     expect(digest).toContain("分析解读：启用 / openai / gpt-5.4 / llm-api.onekeytest.com");
     expect(digest).toContain("深度研究：关闭 / openai / gpt-5.4 / llm-api.onekeytest.com");
-    expect(digest).toContain("认知 Agent：已启用");
+    expect(digest).toContain("投资助理复核：已启用");
     expect(digest).toContain("输出目标权重计划");
   });
 
-  it("会把活跃论点和最新日报整理成聊天可用的大脑上下文", () => {
+  it("会把活跃投资判断和最新简报整理成聊天可用的投资助理上下文", () => {
     const digest = buildAssistantBrainContextDigest({
       activeTheses: [{
         id: "t1",
@@ -97,11 +97,11 @@ describe("assistant-context-digest", () => {
       },
     });
 
-    expect(digest).toContain("活跃论点（1 个）");
+    expect(digest).toContain("活跃投资判断（1 个）");
     expect(digest).toContain("NVDA 数据中心增长");
     expect(digest).toContain("需要复核的变化");
     expect(digest).toContain("毛利率低于预期");
-    expect(digest).toContain("论点复核");
+    expect(digest).toContain("投资判断复核");
     expect(digest).toContain("改变判断的条件");
   });
 });

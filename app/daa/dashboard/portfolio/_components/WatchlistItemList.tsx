@@ -33,8 +33,8 @@ function assetDisplayName(row: AssetUniverseView): string {
 function badgeClass(tone: ValuationTone): string {
   if (tone === "cheap") return "bg-[var(--success-bg)] text-[var(--success)]";
   if (tone === "fair") return "bg-[var(--primary-bg)] text-[var(--primary)]";
-  if (tone === "expensive") return "bg-amber-500/12 text-amber-300";
-  if (tone === "danger") return "bg-red-500/12 text-red-300";
+  if (tone === "expensive") return "bg-[var(--amber-bg)] text-[var(--amber)]";
+  if (tone === "danger") return "bg-[var(--danger-bg)] text-[var(--danger)]";
   return "bg-[var(--elevated)] text-[var(--faint)]";
 }
 
@@ -46,7 +46,7 @@ function momentumLabel(value: DaaTechnicalSignal["momentumRegime"]): string {
 
 function technicalBadgeClass(signal: DaaTechnicalSignal): string {
   if (signal.momentumRegime === "strong" || signal.scorePct >= 68) return "bg-[var(--success-bg)] text-[var(--success)]";
-  if (signal.momentumRegime === "weak" || signal.scorePct <= 42) return "bg-red-500/12 text-red-300";
+  if (signal.momentumRegime === "weak" || signal.scorePct <= 42) return "bg-[var(--danger-bg)] text-[var(--danger)]";
   return "bg-[var(--primary-bg)] text-[var(--primary)]";
 }
 
@@ -105,7 +105,7 @@ function WatchlistRow(props: {
   const priceChange = deriveAssetPriceChange(row, sparkData);
   const changePct = priceChange?.changePct ?? null;
   const isUp = changePct != null ? changePct >= 0 : null;
-  const sparkColor = isUp === true ? "hsl(142 71% 45%)" : isUp === false ? "hsl(0 84% 60%)" : "hsl(188 95% 60%)";
+  const sparkColor = isUp === true ? "var(--success)" : isUp === false ? "var(--danger)" : "var(--primary)";
 
   const targetPct = (row.targetWeightHint ?? 0) * 100;
   const actualPct = row.actualWeightPct ?? 0;
@@ -130,7 +130,7 @@ function WatchlistRow(props: {
       tabIndex={0}
       onClick={props.onClick}
       onKeyDown={(e) => { if (e.key === "Enter") props.onClick(); }}
-      className="group flex cursor-pointer items-center gap-3 rounded-[12px] border border-transparent px-4 py-3 transition-colors hover:border-[var(--border)] hover:bg-[var(--primary-bg)]"
+      className="group flex cursor-pointer items-center gap-3 rounded-[var(--radius-md)] border border-transparent px-3 py-2.5 transition-colors hover:border-[var(--border)] hover:bg-[var(--primary-bg)]"
     >
       {/* 标的 */}
       <div className="min-w-0 flex-1">
@@ -151,7 +151,7 @@ function WatchlistRow(props: {
           {targetPct > 0 ? <span>目标 {targetPct.toFixed(1)}%</span> : null}
           {actualPct > 0 ? <span>实际 {actualPct.toFixed(1)}%</span> : null}
           {gap != null ? (
-            <span className={Math.abs(gap) > 3 ? "text-amber-400/80" : ""}>
+            <span className={Math.abs(gap) > 3 ? "text-[var(--amber)]" : ""}>
               偏离 {gap >= 0 ? "+" : ""}{gap.toFixed(1)}%
             </span>
           ) : null}
@@ -182,7 +182,7 @@ function WatchlistRow(props: {
         {changePct != null ? (
           <div className={cn(
             "font-[var(--font-mono)] text-xs",
-            changePct >= 0 ? "text-[var(--success)]" : "text-red-400",
+            changePct >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]",
           )}>
             {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
           </div>
@@ -202,7 +202,7 @@ function WatchlistRow(props: {
 
       {/* 公司市值 */}
       <div className="hidden w-[110px] text-right lg:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{marketCapLabel(row)}</div>
+        <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">{marketCapLabel(row)}</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {marketCap}
         </div>
@@ -210,7 +210,7 @@ function WatchlistRow(props: {
 
       {/* PE */}
       <div className="hidden w-[74px] text-right xl:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PE(TTM)</div>
+        <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">PE(TTM)</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {formatFundamentalRatio(props.fundamentals?.trailingPE)}
         </div>
@@ -218,7 +218,7 @@ function WatchlistRow(props: {
 
       {/* PB */}
       <div className="hidden w-[64px] text-right xl:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">PB</div>
+        <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">PB</div>
         <div className="font-[var(--font-mono)] text-xs text-[var(--text)]">
           {formatFundamentalRatio(props.fundamentals?.pbRatio)}
         </div>
@@ -226,7 +226,7 @@ function WatchlistRow(props: {
 
       {/* 估值状态 */}
       <div className="hidden w-[96px] text-right md:block">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">估值 / 增长</div>
+        <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">估值 / 增长</div>
         <span
           title={valuation.description}
           className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", badgeClass(valuation.tone))}
@@ -259,7 +259,7 @@ function WatchlistRow(props: {
           void props.onRemove?.(row);
         }}
         className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger-bg)]",
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--muted)] transition-colors hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger-bg)]",
           (props.disabled || props.removing) ? "cursor-not-allowed opacity-50" : "",
         )}
       >
@@ -307,8 +307,8 @@ function TargetWeightQuickEdit(props: {
         }
       }}
     >
-      <div className="mb-1 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">目标权重</div>
-      <div className="flex h-8 items-center rounded-[8px] border border-[var(--border)] bg-[var(--card)] px-2 focus-within:border-[var(--primary)] focus-within:ring-2 focus-within:ring-[var(--primary-bg)]">
+      <div className="mb-1 text-right text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">目标权重</div>
+      <div className="flex h-8 items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] px-2 focus-within:border-[var(--primary)] focus-within:ring-2 focus-within:ring-[var(--primary-bg)]">
         <input
           type="number"
           min="0"
@@ -327,7 +327,7 @@ function TargetWeightQuickEdit(props: {
           onClick={() => void submit()}
           disabled={!dirty || !valid || props.disabled || props.updating}
           className={cn(
-            "ml-1 inline-flex h-5 w-5 items-center justify-center rounded-[5px] transition-colors",
+            "ml-1 inline-flex h-5 w-5 items-center justify-center rounded-[var(--radius-sm)] transition-colors",
             dirty && valid && !props.disabled && !props.updating
               ? "bg-[var(--primary)] text-white"
               : "cursor-not-allowed bg-[var(--elevated)] text-[var(--faint)]",
@@ -362,38 +362,38 @@ export function WatchlistItemList(props: {
   const [sortKey, setSortKey] = useState<"default" | "change_desc" | "change_asc" | "name_asc" | "target_desc">("default");
   const [showAll, setShowAll] = useState(false);
 
-  const watchRows = useMemo(() => rows.filter((r) => r.watchEnabled), [rows]);
+  const watchRows = useMemo(() => rows.filter((assetRow) => assetRow.watchEnabled), [rows]);
 
   // 批量 sparkline（1 次 API）
-  const sparklineSymbols = useMemo(() => watchRows.map((r) => r.yfinanceSymbol || r.symbol), [watchRows]);
+  const sparklineSymbols = useMemo(() => watchRows.map((watchRow) => watchRow.yfinanceSymbol || watchRow.symbol), [watchRows]);
   const sparklines = useSparklines(sparklineSymbols);
   const fundamentalsState = useFundamentalsState(sparklineSymbols);
   const fundamentals = fundamentalsState.items;
   const technicalSignals = useTechnicalSignals(sparklineSymbols);
 
   const availableCategories = useMemo(() => {
-    const keys = new Set(watchRows.map((r) => holdingCategoryKey(r.market, r.assetClass)));
-    return HOLDING_CATEGORY_META.filter((m) => m.key === "all" || keys.has(m.key));
+    const categoryKeys = new Set(watchRows.map((watchRow) => holdingCategoryKey(watchRow.market, watchRow.assetClass)));
+    return HOLDING_CATEGORY_META.filter((categoryMeta) => categoryMeta.key === "all" || categoryKeys.has(categoryMeta.key));
   }, [watchRows]);
 
   const categoryFiltered = useMemo(() => {
     if (activeCategory === "all") return watchRows;
-    return watchRows.filter((r) => holdingCategoryKey(r.market, r.assetClass) === activeCategory);
+    return watchRows.filter((watchRow) => holdingCategoryKey(watchRow.market, watchRow.assetClass) === activeCategory);
   }, [watchRows, activeCategory]);
 
   const sortedRows = useMemo(() => {
     if (sortKey === "default") return categoryFiltered;
-    const arr = categoryFiltered.slice();
-    const changePct = (r: AssetUniverseView): number => {
-      const s = sparklines[r.yfinanceSymbol || r.symbol] ?? sparklines[r.symbol] ?? null;
-      const change = deriveAssetPriceChange(r, s);
+    const sortedWatchRows = categoryFiltered.slice();
+    const changePct = (assetRow: AssetUniverseView): number => {
+      const sparkline = sparklines[assetRow.yfinanceSymbol || assetRow.symbol] ?? sparklines[assetRow.symbol] ?? null;
+      const change = deriveAssetPriceChange(assetRow, sparkline);
       return change?.changePct ?? 0;
     };
-    if (sortKey === "change_desc") arr.sort((a, b) => changePct(b) - changePct(a));
-    else if (sortKey === "change_asc") arr.sort((a, b) => changePct(a) - changePct(b));
-    else if (sortKey === "name_asc") arr.sort((a, b) => assetDisplayName(a).localeCompare(assetDisplayName(b), "zh-CN"));
-    else if (sortKey === "target_desc") arr.sort((a, b) => (b.targetWeightHint ?? 0) - (a.targetWeightHint ?? 0));
-    return arr;
+    if (sortKey === "change_desc") sortedWatchRows.sort((leftAsset, rightAsset) => changePct(rightAsset) - changePct(leftAsset));
+    else if (sortKey === "change_asc") sortedWatchRows.sort((leftAsset, rightAsset) => changePct(leftAsset) - changePct(rightAsset));
+    else if (sortKey === "name_asc") sortedWatchRows.sort((leftAsset, rightAsset) => assetDisplayName(leftAsset).localeCompare(assetDisplayName(rightAsset), "zh-CN"));
+    else if (sortKey === "target_desc") sortedWatchRows.sort((leftAsset, rightAsset) => (rightAsset.targetWeightHint ?? 0) - (leftAsset.targetWeightHint ?? 0));
+    return sortedWatchRows;
   }, [categoryFiltered, sortKey, sparklines]);
 
   const PAGE_SIZE = 20;
@@ -420,7 +420,7 @@ export function WatchlistItemList(props: {
                 aria-selected={activeCategory === cat.key}
                 onClick={() => setActiveCategory(cat.key)}
                 className={cn(
-                  "min-h-9 rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors",
+                  "min-h-9 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-medium transition-colors",
                   activeCategory === cat.key
                     ? "bg-[var(--primary-bg)] text-[var(--text)]"
                     : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--elevated)]",
@@ -470,14 +470,16 @@ export function WatchlistItemList(props: {
       </div>
 
       {filteredRows.length === 0 ? (
-        <div className="py-8 text-center text-sm text-[var(--muted)]">该分类下暂无观察标的</div>
+        <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3.5 py-3 text-sm text-[var(--muted)]">
+          该分类下暂无观察标的
+        </div>
       ) : null}
 
       {!showAll && totalCount > PAGE_SIZE ? (
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="mx-auto block min-h-9 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+          className="mx-auto block min-h-9 rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
         >
           展开剩余 {totalCount - PAGE_SIZE} 条
         </button>

@@ -8,7 +8,7 @@ import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import {
   applySystemConfigPatches,
-  DEFAULT_SYSTEM_CONFIG_,
+  DEFAULT_SYSTEM_CONFIG,
   normalizeSystemConfig,
   type DaaSystemConfigPatch,
   type DaaSystemConfig,
@@ -126,7 +126,7 @@ function mapSystemConfigRow(row: Record<string, unknown>): DaaStoreSystemConfigR
   return {
     id: "default",
     version: Number.isFinite(versionRaw) && versionRaw > 0 ? Math.trunc(versionRaw) : 1,
-    config: normalizeSystemConfig(parseJsonb<Record<string, unknown>>(row.config_json, DEFAULT_SYSTEM_CONFIG_)),
+    config: normalizeSystemConfig(parseJsonb<Record<string, unknown>>(row.config_json, DEFAULT_SYSTEM_CONFIG)),
     updatedAt: toIsoString(row.updated_at),
   };
 }
@@ -163,7 +163,7 @@ export async function ensureSystemConfigRowInTx(
 
   const result = await query(
     "INSERT INTO daa_system_config_v2 (id, version, config_json, updated_at) VALUES ('default', 1, $1::jsonb, NOW()) RETURNING id, version, config_json, updated_at",
-    [JSON.stringify(DEFAULT_SYSTEM_CONFIG_)],
+    [JSON.stringify(DEFAULT_SYSTEM_CONFIG)],
   );
   await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_system_config_v2_id ON daa_system_config_v2(id)");
   return mapSystemConfigRow(result.rows[0]);

@@ -4,9 +4,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, Gauge, ListChecks, ShieldCheck, WalletCards } from "lucide-react";
+import { Gauge, ListChecks, ShieldCheck, WalletCards } from "lucide-react";
 
-import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
+import { useAssetWorkbenchModel } from "@/app/daa/dashboard/_hooks/useAssetWorkbenchModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfacePanel, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { SkeletonChart } from "@/app/daa/dashboard/_components/SkeletonPatterns";
@@ -21,8 +21,8 @@ import {
   totalProposalNotional,
 } from "./rebalanceDecisionState";
 
-import { DashboardNotificationBar } from "@/app/daa/dashboard/_shared/DashboardNotificationBar";
-import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
+import { WorkbenchNotificationBar } from "@/app/daa/dashboard/_shared/WorkbenchNotificationBar";
+import { WorkbenchDialogs } from "@/app/daa/dashboard/_shared/WorkbenchDialogs";
 import { RebalanceProposalList } from "@/app/daa/dashboard/_shared/rebalance/RebalanceProposalList";
 import type { WhatIfPreviewProps } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
 import type { DriftBarChartProps } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
@@ -44,33 +44,33 @@ const LazyDriftBarChart = dynamic<DriftBarChartProps>(
   () => import("@/app/daa/dashboard/_shared/rebalance/DriftBarChart").then((mod) => mod.DriftBarChart),
   {
     ssr: false,
-    loading: () => <div className="h-32 rounded-[14px] bg-[var(--surface)]" />,
+    loading: () => <div className="h-32 rounded-[var(--radius-md)] bg-[var(--surface)]" />,
   },
 );
 
 function RebalanceLoadingState() {
   return (
     <div className="space-y-4">
-      <section className="rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] p-4 shadow-[0_18px_38px_rgba(15,23,42,0.08)]">
+      <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.94fr)] xl:items-center">
           <div className="space-y-3">
-            <div className="h-5 w-28 animate-pulse rounded-full bg-[var(--border)]" />
+            <div className="h-5 w-28 animate-pulse rounded-[var(--radius-sm)] bg-[var(--border)]" />
             <div className="h-8 w-72 max-w-full animate-pulse rounded bg-[var(--border)]" />
             <div className="h-4 w-[36rem] max-w-full animate-pulse rounded bg-[var(--border)]" />
-            <div className="h-11 w-full animate-pulse rounded-[12px] bg-[var(--surface)]" />
+            <div className="h-11 w-full animate-pulse rounded-[var(--radius-md)] bg-[var(--card)]" />
           </div>
           <div className="grid gap-3 sm:grid-cols-4">
             {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="h-20 animate-pulse rounded-[var(--radius-lg)] bg-[var(--surface)]" />
+              <div key={index} className="h-20 animate-pulse rounded-[var(--radius-md)] bg-[var(--surface)]" />
             ))}
           </div>
         </div>
       </section>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.7fr)]">
-        <div className="h-72 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)]" />
-        <div className="h-72 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)]" />
+        <div className="h-72 animate-pulse rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]" />
+        <div className="h-72 animate-pulse rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]" />
       </div>
-      <DaaSurfacePanel title="漂移概览" subtitle="正在同步当前持仓、目标权重与策略阈值。" accent="slate">
+      <DaaSurfacePanel title="漂移概览" subtitle="同步持仓和目标权重。" accent="neutral">
         <SkeletonChart height={150} />
       </DaaSurfacePanel>
     </div>
@@ -88,7 +88,7 @@ function DecisionMetric(props: {
       <div className="flex items-start gap-2.5">
         {props.icon ? <div className="mt-0.5 text-[var(--muted)]">{props.icon}</div> : null}
         <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{props.label}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">{props.label}</div>
           <div className="mt-1 truncate font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">{props.value}</div>
           <div className="mt-0.5 line-clamp-1 text-xs text-[var(--muted)]">{props.hint}</div>
         </div>
@@ -122,12 +122,12 @@ function RebalanceDecisionSummary(props: {
   });
 
   return (
-    <section className="rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface))] p-4 shadow-[0_18px_38px_rgba(0,0,0,0.22)]">
+    <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.94fr)] xl:items-center">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <DaaSurfaceStatusPill tone={decision.tone}>本轮结论</DaaSurfaceStatusPill>
-            <DaaSurfaceStatusPill tone={props.priceStreamConnected ? "green" : "slate"}>
+            <DaaSurfaceStatusPill tone={props.priceStreamConnected ? "success" : "neutral"}>
               {props.priceStreamConnected ? "实时价格" : "价格离线"}
             </DaaSurfaceStatusPill>
             {cycle ? (
@@ -137,12 +137,12 @@ function RebalanceDecisionSummary(props: {
             ) : null}
           </div>
           <div>
-            <h2 className="font-[var(--font-display)] text-[28px] leading-tight tracking-[-0.02em] text-[var(--text)]">
+            <h2 className="text-[26px] font-semibold leading-tight text-[var(--text)]">
               {decision.title}
             </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">{decision.description}</p>
+            <p className="mt-1.5 line-clamp-2 max-w-3xl text-xs leading-5 text-[var(--muted)]">{decision.description}</p>
           </div>
-          <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+          <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm font-medium text-[var(--text)]">
             {decision.nextStep}
           </div>
         </div>
@@ -170,7 +170,7 @@ function RebalanceDecisionSummary(props: {
             label="策略"
             value={policyActionLabel(props.policyDecision?.action)}
             hint={props.policyDecision ? `行动分 ${props.policyDecision.score.toFixed(1)} / ${props.policyDecision.threshold.toFixed(1)}` : "等待评估"}
-            icon={<Bot className="h-4 w-4" />}
+            icon={<Gauge className="h-4 w-4" />}
           />
         </div>
       </div>
@@ -180,34 +180,34 @@ function RebalanceDecisionSummary(props: {
 
 function RebalanceActionRail(props: {
   bootstrap: WorkbenchBootstrap;
-  rp: NonNullable<ReturnType<typeof useDashboardPageModel>["rebalanceSectionProps"]>;
+  rebalanceModel: NonNullable<ReturnType<typeof useAssetWorkbenchModel>["rebalanceSectionProps"]>;
 }) {
-  const selectedProposalKeys = props.rp.currentCycle?.proposals
+  const selectedProposalKeys = props.rebalanceModel.currentCycle?.proposals
     .filter((proposal) => proposal.selected)
     .map((proposal) => `${proposal.assetKey}-${proposal.side}`) ?? [];
 
   return (
     <div className="space-y-3 xl:sticky xl:top-4">
       <ExecutionPanel
-        currentCycle={props.rp.currentCycle}
-        currentRiskCheck={props.rp.currentRiskCheck}
+        currentCycle={props.rebalanceModel.currentCycle}
+        currentRiskCheck={props.rebalanceModel.currentRiskCheck}
         baseCurrency={props.bootstrap.baseCurrency}
-        busy={props.rp.busy}
-        selectedProposalCount={props.rp.selectedProposalCount}
-        selectedProposalNotional={props.rp.selectedProposalNotional}
-        canExecuteAll={props.rp.canExecuteAll}
-        canExecuteSelected={props.rp.canExecuteSelected}
-        isCurrentCycleTerminal={props.rp.isCurrentCycleTerminal}
-        rebalanceChecklistAllPassed={props.rp.rebalanceChecklistAllPassed}
+        busy={props.rebalanceModel.busy}
+        selectedProposalCount={props.rebalanceModel.selectedProposalCount}
+        selectedProposalNotional={props.rebalanceModel.selectedProposalNotional}
+        canExecuteAll={props.rebalanceModel.canExecuteAll}
+        canExecuteSelected={props.rebalanceModel.canExecuteSelected}
+        isCurrentCycleTerminal={props.rebalanceModel.isCurrentCycleTerminal}
+        rebalanceChecklistAllPassed={props.rebalanceModel.rebalanceChecklistAllPassed}
         compact
-        onGenerateCycle={props.rp.onGenerateCycle}
-        onOpenExecuteDialog={props.rp.onOpenExecuteDialog}
-        onCancelCycle={props.rp.onCancelCycle}
+        onGenerateCycle={props.rebalanceModel.onGenerateCycle}
+        onOpenExecuteDialog={props.rebalanceModel.onOpenExecuteDialog}
+        onCancelCycle={props.rebalanceModel.onCancelCycle}
       />
-      {props.rp.selectedProposalCount > 0 && props.rp.currentCycle ? (
+      {props.rebalanceModel.selectedProposalCount > 0 && props.rebalanceModel.currentCycle ? (
         <SectionErrorBoundary sectionName="执行预览">
           <LazyWhatIfPreview
-            cycleId={props.rp.currentCycle.cycleId}
+            cycleId={props.rebalanceModel.currentCycle.cycleId}
             selectedProposalKeys={selectedProposalKeys}
             baseCurrency={props.bootstrap.baseCurrency}
             embedded
@@ -219,47 +219,47 @@ function RebalanceActionRail(props: {
 }
 
 export default function RebalancePageClient() {
-  const wbModel = useDashboardPageModel();
+  const assetWorkbenchModel = useAssetWorkbenchModel();
   const searchParams = useSearchParams();
   const appliedCycleIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const cycleId = searchParams.get("cycleId");
-    if (!cycleId || !wbModel.rebalanceSectionProps) return;
+    if (!cycleId || !assetWorkbenchModel.rebalanceSectionProps) return;
     if (appliedCycleIdRef.current === cycleId) return;
-    const match = wbModel.rebalanceSectionProps.cycles.find((c) => c.cycleId === cycleId);
+    const match = assetWorkbenchModel.rebalanceSectionProps.cycles.find((cycleOption) => cycleOption.cycleId === cycleId);
     if (match) {
       appliedCycleIdRef.current = cycleId;
-      wbModel.rebalanceSectionProps.onSelectCycle(match);
+      assetWorkbenchModel.rebalanceSectionProps.onSelectCycle(match);
     }
-  }, [searchParams, wbModel.rebalanceSectionProps]);
+  }, [searchParams, assetWorkbenchModel.rebalanceSectionProps]);
 
   const driftCount = useMemo(() => {
-    const threshold = (wbModel.bootstrap?.policy?.drift?.outerBandPct ?? 0.05) * 100;
-    return wbModel.tableProps.rows.filter(
-      (r) => r.watchEnabled && r.targetWeightHint > 0 && r.gapPct != null && Math.abs(r.gapPct) > threshold,
+    const driftThresholdPct = (assetWorkbenchModel.bootstrap?.policy?.drift?.outerBandPct ?? 0.05) * 100;
+    return assetWorkbenchModel.tableProps.rows.filter(
+      (assetRow) => assetRow.watchEnabled && assetRow.targetWeightHint > 0 && assetRow.gapPct != null && Math.abs(assetRow.gapPct) > driftThresholdPct,
     ).length;
-  }, [wbModel.tableProps.rows, wbModel.bootstrap?.policy?.drift?.outerBandPct]);
+  }, [assetWorkbenchModel.tableProps.rows, assetWorkbenchModel.bootstrap?.policy?.drift?.outerBandPct]);
 
-  const rp = wbModel.rebalanceSectionProps;
+  const rebalanceModel = assetWorkbenchModel.rebalanceSectionProps;
 
-  const cycle = rp?.currentCycle ?? null;
+  const cycle = rebalanceModel?.currentCycle ?? null;
   const policyDecision = cycle?.policySnapshot?.decision ?? null;
 
   return (
     <div className="space-y-4">
-      <DashboardNotificationBar
-        error={wbModel.error}
-        authRequired={wbModel.authRequired}
-        bootstrap={wbModel.bootstrap}
-        executionReceipt={wbModel.executionReceipt}
-        onClearExecutionReceipt={wbModel.clearExecutionReceipt}
-        currentCycle={rp?.currentCycle ?? null}
-        warnings={wbModel.bootstrap?.warnings || []}
+      <WorkbenchNotificationBar
+        error={assetWorkbenchModel.error}
+        authRequired={assetWorkbenchModel.authRequired}
+        bootstrap={assetWorkbenchModel.bootstrap}
+        executionReceipt={assetWorkbenchModel.executionReceipt}
+        onClearExecutionReceipt={assetWorkbenchModel.clearExecutionReceipt}
+        currentCycle={rebalanceModel?.currentCycle ?? null}
+        warnings={assetWorkbenchModel.bootstrap?.warnings || []}
       />
 
       {/* ── 两栏决策区域 ── */}
-      {wbModel.bootstrap && rp ? (
+      {assetWorkbenchModel.bootstrap && rebalanceModel ? (
         <>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -268,55 +268,55 @@ export default function RebalancePageClient() {
                 调仓工作台
               </div>
               <QuickConfigPopover
-                driftThresholdPct={wbModel.bootstrap.policy?.drift?.outerBandPct}
-                onSaved={() => void wbModel.loadBootstrap(true)}
+                driftThresholdPct={assetWorkbenchModel.bootstrap.policy?.drift?.outerBandPct}
+                onSaved={() => void assetWorkbenchModel.loadBootstrap(true)}
               />
             </div>
             <RebalanceDecisionSummary
-              bootstrap={wbModel.bootstrap}
+              bootstrap={assetWorkbenchModel.bootstrap}
               cycle={cycle}
-              riskCheck={rp.currentRiskCheck}
+              riskCheck={rebalanceModel.currentRiskCheck}
               policyDecision={policyDecision}
-              selectedProposalCount={rp.selectedProposalCount}
-              selectedProposalNotional={rp.selectedProposalNotional}
-              buyProposalCount={rp.buyProposalCount}
-              sellProposalCount={rp.sellProposalCount}
-              canExecuteSelected={rp.canExecuteSelected}
-              isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
-              priceStreamConnected={wbModel.priceStreamConnected}
+              selectedProposalCount={rebalanceModel.selectedProposalCount}
+              selectedProposalNotional={rebalanceModel.selectedProposalNotional}
+              buyProposalCount={rebalanceModel.buyProposalCount}
+              sellProposalCount={rebalanceModel.sellProposalCount}
+              canExecuteSelected={rebalanceModel.canExecuteSelected}
+              isCurrentCycleTerminal={rebalanceModel.isCurrentCycleTerminal}
+              priceStreamConnected={assetWorkbenchModel.priceStreamConnected}
             />
           </div>
 
           <SectionErrorBoundary sectionName="调仓建议">
             <RebalanceProposalList
-              bootstrap={wbModel.bootstrap}
-              currentCycle={rp.currentCycle}
-              currentRiskCheck={rp.currentRiskCheck}
-              busy={rp.busy}
-              isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
-              canEditCurrentCycle={rp.canEditCurrentCycle}
-              buyProposalCount={rp.buyProposalCount}
-              sellProposalCount={rp.sellProposalCount}
-              selectedProposalNotional={rp.selectedProposalNotional}
-              expandedProposalDecisionKeys={rp.expandedProposalDecisionKeys}
-              setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
-              onSelectAllProposals={rp.onSelectAllProposals}
-              onToggleProposal={rp.onToggleProposal}
-              sideContent={<RebalanceActionRail bootstrap={wbModel.bootstrap} rp={rp} />}
+              bootstrap={assetWorkbenchModel.bootstrap}
+              currentCycle={rebalanceModel.currentCycle}
+              currentRiskCheck={rebalanceModel.currentRiskCheck}
+              busy={rebalanceModel.busy}
+              isCurrentCycleTerminal={rebalanceModel.isCurrentCycleTerminal}
+              canEditCurrentCycle={rebalanceModel.canEditCurrentCycle}
+              buyProposalCount={rebalanceModel.buyProposalCount}
+              sellProposalCount={rebalanceModel.sellProposalCount}
+              selectedProposalNotional={rebalanceModel.selectedProposalNotional}
+              expandedProposalDecisionKeys={rebalanceModel.expandedProposalDecisionKeys}
+              setExpandedProposalDecisionKeys={rebalanceModel.setExpandedProposalDecisionKeys}
+              onSelectAllProposals={rebalanceModel.onSelectAllProposals}
+              onToggleProposal={rebalanceModel.onToggleProposal}
+              sideContent={<RebalanceActionRail bootstrap={assetWorkbenchModel.bootstrap} rebalanceModel={rebalanceModel} />}
             />
           </SectionErrorBoundary>
 
           {/* ── 市场环境与预算依据（默认展开，便于审阅建议来源） ── */}
-          {wbModel.bootstrap.marketContext ? (
+          {assetWorkbenchModel.bootstrap.marketContext ? (
             <SectionErrorBoundary sectionName="市场环境">
               <RebalanceMarketStrip
-                marketContext={wbModel.bootstrap.marketContext}
+                marketContext={assetWorkbenchModel.bootstrap.marketContext}
                 driftCount={driftCount}
                 driftContent={(
                   <SectionErrorBoundary sectionName="组合偏离">
                     <LazyDriftBarChart
-                      rows={wbModel.tableProps.rows}
-                      driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
+                      rows={assetWorkbenchModel.tableProps.rows}
+                      driftThresholdPct={(assetWorkbenchModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
                       maxItems={12}
                     />
                   </SectionErrorBoundary>
@@ -327,17 +327,17 @@ export default function RebalancePageClient() {
             <SectionErrorBoundary sectionName="组合偏离">
               <DaaSurfacePanel
                 title="组合偏离"
-                subtitle="当前持仓相对目标权重的偏离；市场环境暂不可用时，仍可先审阅组合漂移。"
-                accent={driftCount > 0 ? "amber" : "green"}
+                subtitle="当前权重相对目标。"
+                accent={driftCount > 0 ? "warning" : "success"}
                 action={(
-                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "warning" : "success"}>
                     {driftCount > 0 ? `${driftCount} 项超阈值` : "目标内"}
                   </DaaSurfaceStatusPill>
                 )}
               >
                 <LazyDriftBarChart
-                  rows={wbModel.tableProps.rows}
-                  driftThresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
+                  rows={assetWorkbenchModel.tableProps.rows}
+                  driftThresholdPct={(assetWorkbenchModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
                   maxItems={12}
                 />
               </DaaSurfacePanel>
@@ -348,7 +348,7 @@ export default function RebalancePageClient() {
         <RebalanceLoadingState />
       )}
 
-      <DashboardDialogs {...wbModel.dialogProps} />
+      <WorkbenchDialogs {...assetWorkbenchModel.dialogProps} />
     </div>
   );
 }

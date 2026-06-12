@@ -8,21 +8,21 @@ import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipL
 import {
   DaaSurfaceActionButton,
   DaaSurfacePanel,
-  DaaSurfaceMiniStat,
   DaaSurfaceNoticeBox,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { PortfolioTemplateDialog } from "./PortfolioTemplateDialog";
 import { formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
+import { cn } from "@/lib/utils";
 
-const COLORS = [
-  "hsl(188 95% 60%)", // cyan
-  "hsl(45 93% 55%)", // amber
-  "hsl(142 71% 45%)", // green
-  "hsl(225 73% 60%)", // indigo
-  "hsl(0 84% 60%)", // red
-  "hsl(280 65% 60%)", // purple
-  "hsl(200 80% 50%)", // blue
-  "hsl(30 90% 55%)", // orange
+const TARGET_WEIGHT_SLICE_COLORS = [
+  "var(--primary)",
+  "var(--amber)",
+  "var(--success)",
+  "var(--indigo)",
+  "var(--danger)",
+  "var(--muted)",
+  "var(--amber-border)",
+  "var(--success-border)",
 ];
 
 type AssetRow = {
@@ -45,24 +45,37 @@ function toTooltipNumber(value: ValueType | undefined): number {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function targetWeightSliceClass(sliceIndex: number): string {
+  return [
+    "bg-[var(--primary)]",
+    "bg-[var(--amber)]",
+    "bg-[var(--success)]",
+    "bg-[var(--indigo)]",
+    "bg-[var(--danger)]",
+    "bg-[var(--muted)]",
+    "bg-[var(--amber-border)]",
+    "bg-[var(--success-border)]",
+  ][sliceIndex % TARGET_WEIGHT_SLICE_COLORS.length];
+}
+
 export function TargetWeightSummary(props: TargetWeightSummaryProps) {
   const [templateOpen, setTemplateOpen] = useState(false);
 
   const basketRows = useMemo(
-    () => props.rows.filter((r) => r.watchEnabled && r.targetWeightHint > 0),
+    () => props.rows.filter((assetRow) => assetRow.watchEnabled && assetRow.targetWeightHint > 0),
     [props.rows],
   );
 
   // targetWeightHint 是 0~1 小数形式，需要 ×100 转为百分比
   const totalWeight = useMemo(
-    () => basketRows.reduce((sum, r) => sum + r.targetWeightHint * 100, 0),
+    () => basketRows.reduce((sum, assetRow) => sum + assetRow.targetWeightHint * 100, 0),
     [basketRows],
   );
 
   const pieData = useMemo(() => {
-    const items = basketRows.map((r) => ({
-      name: r.displayNameZh || r.name || r.symbol,
-      value: r.targetWeightHint * 100,
+    const items = basketRows.map((assetRow) => ({
+      name: assetRow.displayNameZh || assetRow.name || assetRow.symbol,
+      value: assetRow.targetWeightHint * 100,
     }));
     const remaining = 100 - totalWeight;
     if (remaining > 0.5) {
@@ -73,31 +86,35 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
 
   if (basketRows.length === 0) return null;
 
-  // Determine progress bar color
+  // targetWeightHint 汇总后用颜色提示配置完整度与越界风险。
   const progressTone =
     totalWeight > 100.5
-      ? "red"
+      ? "danger"
       : totalWeight >= 95
-        ? "green"
+        ? "success"
         : totalWeight >= 80
-          ? "amber"
-          : "red";
+          ? "warning"
+          : "danger";
 
-  const progressColor =
-    progressTone === "green"
-      ? "hsl(142 71% 45%)"
-      : progressTone === "amber"
-        ? "hsl(45 93% 55%)"
-        : "hsl(0 84% 60%)";
+  const progressTextClass = progressTone === "success"
+    ? "text-[var(--success)]"
+    : progressTone === "warning"
+      ? "text-[var(--amber)]"
+      : "text-[var(--danger)]";
+  const progressBarClass = progressTone === "success"
+    ? "[&::-webkit-progress-value]:bg-[var(--success)] [&::-moz-progress-bar]:bg-[var(--success)] accent-[var(--success)]"
+    : progressTone === "warning"
+      ? "[&::-webkit-progress-value]:bg-[var(--amber)] [&::-moz-progress-bar]:bg-[var(--amber)] accent-[var(--amber)]"
+      : "[&::-webkit-progress-value]:bg-[var(--danger)] [&::-moz-progress-bar]:bg-[var(--danger)] accent-[var(--danger)]";
   const tooltipFormatter: Formatter<ValueType, NameType> = (value) => [`${toTooltipNumber(value).toFixed(1)}%`, "权重"];
 
   return (
     <DaaSurfacePanel
-      accent="cyan"
+      accent="primary"
       title="目标配置概览"
       subtitle={`${basketRows.length} 个标的已设权重`}
       action={
-        <DaaSurfaceActionButton tone="slate" onClick={() => setTemplateOpen(true)}>
+        <DaaSurfaceActionButton tone="neutral" onClick={() => setTemplateOpen(true)}>
           <LayoutGrid className="h-3.5 w-3.5" />
           应用模板
         </DaaSurfaceActionButton>
@@ -111,50 +128,48 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
       <div className="grid gap-4 lg:grid-cols-[1fr_200px]">
         {/* Left: Stats + Progress Bar */}
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            <DaaSurfaceMiniStat
-              label="已配置标的"
-              value={String(basketRows.length)}
-              tone="cyan"
-            />
-            <DaaSurfaceMiniStat
-              label="权重总和"
-              value={formatPercent(totalWeight)}
-              tone={progressTone}
-            />
-            <DaaSurfaceMiniStat
-              label="现金隐含占比"
-              value={
-                totalWeight < 100
-                  ? formatPercent(100 - totalWeight)
-                  : "0%"
-              }
-              tone="slate"
-            />
+          <div className="grid overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] sm:grid-cols-3">
+            <div className="border-b border-[var(--border)] px-3 py-2 sm:border-b-0 sm:border-r">
+              <div className="text-[10px] text-[var(--muted)]">已配置标的</div>
+              <div className="mt-1 font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
+                {basketRows.length}
+              </div>
+            </div>
+            <div className="border-b border-[var(--border)] px-3 py-2 sm:border-b-0 sm:border-r">
+              <div className="text-[10px] text-[var(--muted)]">权重总和</div>
+              <div className={cn("mt-1 font-[var(--font-mono)] text-sm font-semibold", progressTextClass)}>
+                {formatPercent(totalWeight)}
+              </div>
+            </div>
+            <div className="px-3 py-2">
+              <div className="text-[10px] text-[var(--muted)]">现金隐含占比</div>
+              <div className="mt-1 font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
+                {totalWeight < 100 ? formatPercent(100 - totalWeight) : "0%"}
+              </div>
+            </div>
           </div>
 
           {/* Progress bar */}
           <div>
             <div className="mb-1 flex items-center justify-between text-[11px]">
               <span className="text-[var(--faint)]">权重分配进度</span>
-              <span style={{ color: progressColor }} className="font-medium">
+              <span className={cn("font-medium", progressTextClass)}>
                 {formatPercent(totalWeight)}
               </span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--elevated)]">
-              <div
-                className="h-full rounded-full transition-all duration-300"
-                style={{
-                  width: `${Math.min(totalWeight, 100)}%`,
-                  backgroundColor: progressColor,
-                }}
-              />
-            </div>
+            <progress
+              value={Math.min(totalWeight, 100)}
+              max={100}
+              className={cn(
+                "block h-2 w-full overflow-hidden rounded-[var(--radius-sm)] bg-[var(--elevated)] [&::-webkit-progress-bar]:bg-[var(--elevated)] [&::-webkit-progress-value]:transition-all",
+                progressBarClass,
+              )}
+            />
           </div>
 
           {totalWeight > 100.5 && (
             <DaaSurfaceNoticeBox
-              tone="red"
+              tone="danger"
               title="权重总和超过 100%"
               description={`当前总和 ${formatPercent(totalWeight)}，请调整各标的权重使总和不超过 100%。`}
             />
@@ -174,10 +189,10 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
                 dataKey="value"
                 stroke="none"
               >
-                {pieData.map((_, i) => (
+                {pieData.map((_, sliceIndex) => (
                   <Cell
-                    key={i}
-                    fill={COLORS[i % COLORS.length]}
+                    key={sliceIndex}
+                    fill={TARGET_WEIGHT_SLICE_COLORS[sliceIndex % TARGET_WEIGHT_SLICE_COLORS.length]}
                   />
                 ))}
               </Pie>
@@ -194,14 +209,13 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
 
       {/* Legend */}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3">
-        {pieData.map((item, i) => (
+        {pieData.map((item, sliceIndex) => (
           <div
             key={item.name}
             className="flex items-center gap-1.5 text-xs text-[var(--muted)]"
           >
             <span
-              className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: COLORS[i % COLORS.length] }}
+              className={cn("inline-block h-2 w-2 rounded-[var(--radius-sm)]", targetWeightSliceClass(sliceIndex))}
             />
             {item.name} {item.value.toFixed(1)}%
           </div>

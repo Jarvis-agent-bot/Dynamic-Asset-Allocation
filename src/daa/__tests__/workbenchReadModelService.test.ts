@@ -18,7 +18,7 @@ vi.mock("@/src/daa/notify/notificationStatus", () => ({
 import type { NotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
-import { clearReadModelMemoryCache } from "@/src/daa/modules/read/readModelMemoryCache";
+import { clearReadModelCache } from "@/src/daa/modules/read/readModelCache";
 import { buildWorkbenchBootstrapBundle } from "@/src/daa/modules/workbench/workbenchReadService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
@@ -176,7 +176,7 @@ function buildLedgerMetaFixture(
 describe("workbench-read-model-service-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    clearReadModelMemoryCache();
+    clearReadModelCache();
   });
 
   it("复用 bootstrap bundle 的 cycles，不再额外读取周期列表", async () => {

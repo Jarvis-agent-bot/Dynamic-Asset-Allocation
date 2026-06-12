@@ -2,17 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Activity, Bot, Newspaper, ReceiptText } from "lucide-react";
+import { Activity, FileSearch, Newspaper, ReceiptText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
-import { AgentViewPanel } from "./AgentViewPanel";
+import { InvestmentJudgmentPanel } from "./InvestmentJudgmentPanel";
 import { AssetNewsList } from "./AssetNewsList";
 import { AssetOrderHistoryPanel } from "./AssetOrderHistoryPanel";
 import { AssetTechnicalPanel } from "./AssetTechnicalPanel";
 
-type TabKey = "technical" | "news" | "agent" | "orders";
+type TabKey = "technical" | "news" | "judgment" | "orders";
 
 export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
   const [active, setActive] = useState<TabKey>("technical");
@@ -21,7 +21,7 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
       { key: "technical", label: "技术指标", icon: <Activity className="h-3.5 w-3.5" /> },
       { key: "orders", label: "交易活动", icon: <ReceiptText className="h-3.5 w-3.5" /> },
       { key: "news", label: "市场资讯", icon: <Newspaper className="h-3.5 w-3.5" /> },
-      { key: "agent", label: "研究观点", icon: <Bot className="h-3.5 w-3.5" /> },
+      { key: "judgment", label: "投资判断", icon: <FileSearch className="h-3.5 w-3.5" /> },
     ];
     return items;
   }, []);
@@ -31,7 +31,7 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
   }, [active, tabs]);
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--card)]">
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]">
       <div role="tablist" aria-label="资产详情信息" className="flex gap-0 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-2">
         {tabs.map((tab) => (
           <button
@@ -50,7 +50,7 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
             {tab.icon}
             {tab.label}
             {tab.count ? <span className="text-[var(--faint)]">{tab.count}</span> : null}
-            {active === tab.key ? <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-[var(--primary)]" /> : null}
+            {active === tab.key ? <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-[var(--radius-sm)] bg-[var(--primary)]" /> : null}
           </button>
         ))}
       </div>
@@ -60,7 +60,7 @@ export function AssetDetailTabs({ row }: { row: AssetUniverseView }) {
           <AssetTechnicalPanel symbol={row.yfinanceSymbol || row.symbol} currency={row.currency} />
         ) : null}
         {active === "news" ? <AssetNewsList symbol={row.symbol} /> : null}
-        {active === "agent" ? <AgentViewPanel assetKey={row.assetKey} /> : null}
+        {active === "judgment" ? <InvestmentJudgmentPanel assetKey={row.assetKey} /> : null}
         {active === "orders" ? <AssetOrderHistoryPanel symbol={row.symbol} /> : null}
       </div>
     </div>

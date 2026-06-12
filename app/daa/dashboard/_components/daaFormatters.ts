@@ -1,6 +1,6 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-const DATE_TIME_FORMATTER_ = new Intl.DateTimeFormat("zh-CN", {
+const ZH_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -67,5 +67,5 @@ export function formatCurrency(v: number, currency = "USD"): string {
 }
 
 export function formatDateTime(value: DateLike): string {
-  return formatDateParts(value, DATE_TIME_FORMATTER_, true) || "-";
+  return formatDateParts(value, ZH_DATE_TIME_FORMATTER, true) || "-";
 }

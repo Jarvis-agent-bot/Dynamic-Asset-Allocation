@@ -1,7 +1,7 @@
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export const MIN_VISIBLE_HOLDING_VALUE_BASE = 1;
-export const MIN_VISIBLE_HOLDING_WEIGHT_PCT = 0.01;
+const MIN_VISIBLE_HOLDING_WEIGHT_PCT = 0.01;
 
 function finiteNumber(value: unknown): number | null {
   if (value == null || value === "") return null;

@@ -205,7 +205,7 @@ export type GenerateRebalanceCycleInput = {
   triggerReason?: string;
   manual?: boolean;
   /**
-   * Agent 目标配置计划（0-1），只影响本次周期生成，不直接写入系统配置。
+   * 投资助理目标配置计划（0-1），只影响本次周期生成，不直接写入系统配置。
    */
   targetAllocationPlan?: {
     agentRunId?: string | null;

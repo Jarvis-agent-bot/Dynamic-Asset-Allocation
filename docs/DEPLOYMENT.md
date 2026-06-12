@@ -2,7 +2,7 @@
 
 > 面向：运维 / 部署新环境 / 故障排查
 > 范围：容器拓扑、环境变量、首次部署、Cron 清单、数据保留、常见故障
-> 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)；Agent 细节见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)。
+> 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)；投资助理复核细节见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)。
 
 ---
 
@@ -209,7 +209,7 @@ docker compose up -d daa-web
 | `20 0 * * *` | `cache-cleanup` | 每日 00:20 统一清理过期缓存 |
 | `*/30 * * * *` | `health-check` | 每 30 分钟检查核心 cron 是否正常，失败 TG 告警 |
 | `0 * * * *` | `cognitive-agent` | 每小时触发（路由内按 `schedule` 派生窗口自门控） |
-| `40 3 * * *` | `entity-backfill` | 每日 03:40 幂等补齐存量记忆/论点的实体图 |
+| `40 3 * * *` | `entity-backfill` | 每日 03:40 幂等补齐存量经验记录/投资判断的实体图 |
 | （手动） | `monthly-report` | 月度报告（手动触发） |
 
 ### 5.2 手动触发
@@ -239,7 +239,7 @@ curl -X POST -H "x-daa-cron-token: $CRON_TOKEN" \
 | Job 日志 | `daa_job_execution_logs` | 90 天 |
 | **价格历史** | `daa_market_price_history_v1` | **永久** |
 | **权益快照** | `daa_equity_snapshots_v2` | **永久** |
-| **Agent 记忆** | `daa_agent_memory` | 按 `strength` 衰减 + 僵尸清理（见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)） |
+| **复核经验记录** | `daa_agent_memory` | 按 `strength` 衰减 + 僵尸清理（见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)） |
 
 ### 6.1 Exchange Calendar Maintenance
 
@@ -364,7 +364,7 @@ docker compose up -d --build
 
 ### 9.3 Ollama 模型未拉
 
-`ollama-init` 失败或被清理，之后 Agent 会报 embedding 失败。对策：
+`ollama-init` 失败或被清理，之后投资助理会报 embedding 失败。对策：
 
 ```bash
 docker exec daa-ollama ollama pull bge-m3
@@ -391,7 +391,7 @@ DELETE FROM daa_schema_migrations_v1 WHERE id = '20260419_xxx';
 -- 然后 restart web 容器自动重试
 ```
 
-### 9.6 Agent cycle 卡住
+### 9.6 投资助理 cycle 卡住
 
 ```bash
 # 看最近 run
@@ -438,14 +438,14 @@ cp .env.bak.xxx .env && docker compose up -d daa-web
 
 **注意**：
 - 数据库迁移无 DOWN，如果新迁移加了列或索引，回滚代码不会自动撤销。通常 `IF NOT EXISTS` 设计不会有问题。
-- 若需撤销 entity/memory 数据，直接 `TRUNCATE daa_memory_entity_link, daa_thesis_entity_link, daa_agent_entity`（不影响主数据）。
+- 若需撤销 entity/memory 数据，直接 `TRUNCATE daa_memory_entity_link, daa_thesis_entity_link, daa_agent_entity`（不影响主数据；表名保留内部兼容契约）。
 
 ---
 
 ## 11. 相关文档
 
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** — 代码分层、模块、数据流、约束
-- **[COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)** — Agent 工作流、记忆系统、16 Tools、日报原理
+- **[COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)** — 投资助理复核工作流、经验库、工具注册、复核简报原理
 - **[../CLAUDE.md](../CLAUDE.md)** — 快速参考清单（AI 助手 / 新贡献者）
 - **[../.env.example](../.env.example)** — 环境变量模板
 - **[../docker-compose.yml](../docker-compose.yml)** — 容器编排

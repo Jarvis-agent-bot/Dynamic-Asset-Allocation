@@ -1,12 +1,12 @@
 /**
- * Trade Outcome Feedback — Thesis → Rebalance 闭环反馈
+ * Trade Outcome Feedback — 投资判断 → 调仓 闭环反馈
  *
- * 交易结果反馈为 thesis evidence，形成 thesis → proposal → trade → evidence 闭环。
+ * 交易结果反馈会沉淀为判断依据，形成 thesis → proposal → trade → evidence 闭环。
  *
  * 逻辑：
- * 1. 计算 PnL 方向是否符合 thesis conviction
+ * 1. 计算 PnL 方向是否符合投资判断 conviction
  * 2. 创建 EvidenceItem（source: "trade_outcome"）
- * 3. 高 conviction thesis 出现大幅亏损时，自动安排提前 review
+ * 3. 高 conviction 投资判断出现大幅亏损时，自动安排提前 review
  */
 
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
@@ -32,7 +32,7 @@ interface TradeOutcomeResult {
 }
 
 /**
- * 记录交易结果为 thesis 证据，并在必要时安排紧急复盘。
+ * 记录交易结果为判断依据，并在必要时安排紧急复盘。
  */
 export async function recordTradeOutcomeAsEvidence(input: TradeOutcomeInput): Promise<TradeOutcomeResult> {
   const result: TradeOutcomeResult = {
@@ -51,7 +51,7 @@ export async function recordTradeOutcomeAsEvidence(input: TradeOutcomeInput): Pr
     const effectivePnlPct = input.side === "SELL" ? -rawPnlPct : rawPnlPct;
     const isProfit = effectivePnlPct > 0;
 
-    // 判断 thesis conviction 方向（high/medium 视为看多，low 视为看空/减仓）
+    // 判断投资判断 conviction 方向（high/medium 视为看多，low 视为看空/减仓）
     const thesisBullish = thesis.conviction === "high" || thesis.conviction === "medium";
     const tradeBullish = input.side === "BUY";
 
@@ -71,7 +71,7 @@ export async function recordTradeOutcomeAsEvidence(input: TradeOutcomeInput): Pr
     const content = `交易反馈: ${input.side} ${input.assetKey} ` +
       `入场 $${input.entryPrice.toFixed(2)} → 现价 $${input.currentPrice.toFixed(2)} ` +
       `(${isProfit ? "+" : ""}${pnlStr}%)。` +
-      `论点 conviction=${thesis.conviction}，${result.evidenceType === "supporting" ? "方向一致" : result.evidenceType === "contradicting" ? "方向不一致" : "中性"}。`;
+      `投资判断 conviction=${thesis.conviction}，${result.evidenceType === "supporting" ? "方向一致" : result.evidenceType === "contradicting" ? "方向不一致" : "中性"}。`;
 
     // 添加 evidence
     await thesisStore.addEvidence({
@@ -90,7 +90,7 @@ export async function recordTradeOutcomeAsEvidence(input: TradeOutcomeInput): Pr
     });
     result.evidenceAdded = true;
 
-    // 高 conviction thesis + 大幅亏损 → 安排提前 review
+    // 高 conviction 投资判断 + 大幅亏损 → 安排提前 review
     if (
       result.evidenceType === "contradicting" &&
       thesis.conviction === "high" &&

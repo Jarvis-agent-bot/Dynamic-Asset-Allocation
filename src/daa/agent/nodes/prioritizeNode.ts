@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Prioritize 节点（DeepSeek checkpoint）
+ * 投资助理复核工作流 — Prioritize 节点（DeepSeek checkpoint）
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
@@ -115,25 +115,25 @@ function buildRotationTargets(state: CognitiveState, stalenessDays: number, focu
       let reason = "";
       if (humanRequestedInvestigation) {
         priority = 1250 + maxHoldingWeight * 100 + days;
-        reason = `人手动要求 Agent 调查：该论点已被放入优先队列，距离上次有效调查 ${days} 天`;
+        reason = `人手动要求投资助理复核：该投资判断已被放入优先队列，距离上次有效复核 ${days} 天`;
       } else if (focusEvent) {
         priority = 1100 + days;
-        reason = `事件触发复核：相关资产出现在本轮新闻/外部事件中，距离上次有效调查 ${days} 天`;
+        reason = `事件触发复核：相关资产出现在本轮新闻/外部事件中，距离上次有效复核 ${days} 天`;
       } else if (uncertainHolding) {
         priority = 1000 + days;
-        reason = `轮询复核：持仓论点仍为观察态，权重 ${(maxHoldingWeight * 100).toFixed(1)}%，已 ${days} 天未有效调查`;
+        reason = `轮询复核：持仓判断仍为观察态，权重 ${(maxHoldingWeight * 100).toFixed(1)}%，已 ${days} 天未有效复核`;
       } else if (staleHighWeightHolding) {
         priority = 950 + days;
-        reason = `轮询复核：高权重持仓论点已 ${days} 天未有效调查，权重 ${(maxHoldingWeight * 100).toFixed(1)}%`;
+        reason = `轮询复核：高权重持仓判断已 ${days} 天未有效复核，权重 ${(maxHoldingWeight * 100).toFixed(1)}%`;
       } else if (reviewDue) {
         priority = 900 + days;
-        reason = `轮询复核：论点已到 reviewAt，距离上次有效调查 ${days} 天`;
+        reason = `轮询复核：投资判断已到 reviewAt，距离上次有效复核 ${days} 天`;
       } else if (staleDirectional) {
         priority = 850 + days;
-        reason = `轮询复核：${t.conviction} conviction 论点已 ${days} 天未有效调查`;
+        reason = `轮询复核：${t.conviction} conviction 判断已 ${days} 天未有效复核`;
       } else if (watchlistNeedsReview) {
         priority = 800 + days;
-        reason = `轮询复核：观察列表相关论点需要刷新，距离上次有效调查 ${days} 天`;
+        reason = `轮询复核：观察列表相关判断需要刷新，距离上次有效复核 ${days} 天`;
       }
 
       if (priority <= 0) return null;
@@ -235,12 +235,12 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
           logSwallowed("cognitiveGraph.prioritize.dedup", new Error(`跳过重复 thesis: "${nt.title}" 已有类似 "${existing.title}"`));
           continue;
         }
-        // 2) 单资产论点上限（避免 GC=F/NVDA 这类热门标的累积几十篇并行论点）
+        // 2) 单资产投资判断上限（避免 GC=F/NVDA 这类热门标的累积几十篇并行判断）
         const activeCount = await countActiveThesesForAssets(assetKeys);
         if (activeCount >= MAX_ACTIVE_THESES_PER_ASSET) {
           logSwallowed(
             "cognitiveGraph.prioritize.assetCap",
-            new Error(`跳过新 thesis: 资产 ${assetKeys.join(",")} 已有 ${activeCount} 篇活跃论点（上限 ${MAX_ACTIVE_THESES_PER_ASSET}）`),
+            new Error(`跳过新 thesis: 资产 ${assetKeys.join(",")} 已有 ${activeCount} 篇活跃投资判断（上限 ${MAX_ACTIVE_THESES_PER_ASSET}）`),
           );
           continue;
         }
@@ -252,10 +252,10 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
           conviction: "uncertain",
           reviewAt: new Date(Date.now() + (state.agentConfig?.reviewIntervalDays ?? 14) * 86400000),
         });
-        // 添加到调查队列
+        // 添加到复核队列
         data.targets.push({
           threadId: created.id,
-          reason: "新创建的研究线索",
+          reason: "新创建的投资判断",
           dataNeeded: ["technical", "valuation"],
         });
       } catch (e) {
@@ -263,8 +263,8 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       }
     }
 
-    // 设置调查队列：LLM 给方向，代码做 id 归一、去重和轮询补位。
-    // 这样即使模型返回短 id，或遗漏长期未调查的持仓/观察列表论点，本轮仍能落到可加载 thesis。
+    // 设置复核队列：LLM 给方向，代码做 id 归一、去重和轮询补位。
+    // 这样即使模型返回短 id，或遗漏长期未复核的持仓/观察列表判断，本轮仍能落到可加载 thesis。
     const queuedByThreadId = new Map<string, QueuedInvestigationTarget>();
     const rawTargets = data.targets ?? [];
     let normalizedLlmTargets = 0;
@@ -275,7 +275,7 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       addQueuedTarget(queuedByThreadId, {
         target: {
           threadId: id,
-          reason: typeof t.reason === "string" && t.reason.trim() ? t.reason.trim() : "LLM 选中的调查目标",
+          reason: typeof t.reason === "string" && t.reason.trim() ? t.reason.trim() : "LLM 选中的复核目标",
           dataNeeded: normalizeDataNeeded(t.dataNeeded),
         },
         priority: 700 - order,
@@ -319,7 +319,7 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       );
     }
 
-    // Phase 2: 加载匹配的调查策略（基于当前 regime + conviction + tags）
+    // Phase 2: 加载匹配的复核策略（基于当前 regime + conviction + tags）
     let matchedStrategies: CognitiveUpdate["matchedStrategies"] = [];
     try {
       const { findMatchingStrategies } = await import("@/src/daa/agent/learning/strategyStore");

@@ -1,5 +1,5 @@
 /**
- * Entity Backfill — 为存量记忆和论点补齐实体图
+ * Entity Backfill — 为存量记忆和投资判断补齐实体图
  *
  * 幂等：只处理还没有 entity link 的条目。可反复运行，增量处理。
  * 每次最多 limit 条以避免长事务；通过 cron 每日凌晨调度。
@@ -27,7 +27,7 @@ interface EntityBackfillResult {
 }
 
 /**
- * 回填指定上限的记忆和论点。推荐每次 200 条，每日凌晨跑即可清空积压。
+ * 回填指定上限的记忆和投资判断。推荐每次 200 条，每日凌晨跑即可清空积压。
  */
 export async function runEntityBackfill(opts: {
   memoryLimit?: number;
@@ -80,7 +80,7 @@ export async function runEntityBackfill(opts: {
     }
   }
 
-  // ── 论点回填 ──
+  // ── 投资判断回填 ──
   const thesisRows = await withDaaPgClient(async ({ query }) => {
     const res = await query(
       `SELECT t.id, t.title, t.thesis_text, t.asset_keys, t.tags

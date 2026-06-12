@@ -28,7 +28,7 @@ const DECISION_RULES: DecisionRule[] = [
   {
     match: ({ cycle }) => !cycle,
     resolve: () => ({
-      tone: "cyan",
+      tone: "primary",
       title: "等待生成本轮调仓建议",
       description: "先生成本轮建议，再审阅买卖清单、风控结果和执行影响。",
       nextStep: "下一步：在下方执行面板生成本轮建议。",
@@ -37,7 +37,7 @@ const DECISION_RULES: DecisionRule[] = [
   {
     match: ({ riskCheck }) => riskCheck?.overallStatus === "block",
     resolve: ({ riskCheck }) => ({
-      tone: "red",
+      tone: "danger",
       title: "风控阻断，暂不应执行",
       description: riskCheck?.items.find((item) => item.status === "block")?.message ?? "存在阻断项，需要先降低仓位或调整建议。",
       nextStep: "下一步：展开建议详情，处理阻断项后重新复核。",
@@ -46,7 +46,7 @@ const DECISION_RULES: DecisionRule[] = [
   {
     match: ({ isCurrentCycleTerminal }) => isCurrentCycleTerminal,
     resolve: ({ cycle }) => ({
-      tone: cycle?.status === "completed" ? "green" : "slate",
+      tone: cycle?.status === "completed" ? "success" : "neutral",
       title: cycle?.status === "completed" ? "本轮调仓已完成" : "本轮调仓已终止",
       description: cycle?.status === "completed"
         ? "该周期已进入只读状态，可生成新一轮建议继续审阅。"
@@ -57,18 +57,18 @@ const DECISION_RULES: DecisionRule[] = [
   {
     match: ({ cycle }) => (cycle?.proposals?.length ?? 0) === 0,
     resolve: ({ cycle }) => ({
-      tone: "slate",
+      tone: "neutral",
       title: "本轮没有可执行建议",
       description: cycle?.triggerReason || "组合仍在目标范围内，或候选资产暂未满足金额、信念与风控条件。",
-      nextStep: "下一步：查看下方证据，确认是否需要调整策略阈值。",
+      nextStep: "下一步：查看下方依据，确认是否需要调整策略阈值。",
     }),
   },
   {
     match: ({ policyDecision, riskCheck }) =>
       policyDecision?.action === "authorize_auto_execute" && (riskCheck?.overallStatus ?? "pass") !== "block",
     resolve: ({ policyDecision, riskCheck }) => ({
-      tone: "green",
-      title: "Agent 建议自动执行",
+      tone: "success",
+      title: "系统建议自动执行",
       description: riskCheck?.overallStatus === "warn"
         ? "策略评分已过阈值，但仍有风控提示，建议先复核再执行。"
         : "策略评分已过阈值，可一键执行全部建议；如有疑虑，可先勾选部分建议。",
@@ -80,7 +80,7 @@ const DECISION_RULES: DecisionRule[] = [
   {
     match: ({ selectedProposalCount, canExecuteSelected }) => selectedProposalCount > 0 && canExecuteSelected,
     resolve: () => ({
-      tone: "green",
+      tone: "success",
       title: "已选建议可执行",
       description: "当前选中项已通过执行前检查，可以先执行选中项，保留其余建议继续观察。",
       nextStep: "下一步：在下方执行面板执行选中建议。",
@@ -91,9 +91,9 @@ const DECISION_RULES: DecisionRule[] = [
 const FALLBACK: DecisionRule = {
   match: () => true,
   resolve: ({ cycle }) => ({
-    tone: "amber",
+    tone: "warning",
     title: "建议待审阅",
-    description: cycle?.triggerReason || "本轮已生成买卖建议，请先确认理由、金额和冲突标记。",
+    description: cycle?.triggerReason || "本轮已生成买卖建议，请先确认理由、金额和判断不一致标记。",
     nextStep: "下一步：勾选要执行的建议，或按买入/卖出快速筛选。",
   }),
 };
@@ -140,6 +140,6 @@ export function topRiskItems(
   return riskCheck.items
     .filter((item) => item.status !== "pass")
     .slice()
-    .sort((a, b) => severity[a.status] - severity[b.status])
+    .sort((leftRiskItem, rightRiskItem) => severity[leftRiskItem.status] - severity[rightRiskItem.status])
     .slice(0, limit);
 }

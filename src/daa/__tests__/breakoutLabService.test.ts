@@ -11,7 +11,7 @@ vi.mock("@/src/daa/pg/daaPg", () => ({
 }));
 
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
-import { BreakoutLabDomainError, runBreakoutLabBacktest } from "@/src/daa/modules/strategyLab/breakoutLabService";
+import { runBreakoutLabBacktest } from "@/src/daa/modules/strategyLab/breakoutLabService";
 
 function buildBreakoutBars() {
   return [

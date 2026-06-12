@@ -1,5 +1,5 @@
 /**
- * POST /api/daa/agent/run — 手动触发 Cognitive Agent 循环
+ * POST /api/daa/agent/run — 手动触发投资助理复核循环
  */
 
 export const runtime = "nodejs";

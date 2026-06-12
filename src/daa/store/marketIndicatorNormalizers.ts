@@ -1,10 +1,10 @@
 import type { DaaMarketIndicatorKey, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
-import { MARKET_INDICATOR_KEYS_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
+import { MARKET_INDICATOR_KEYS } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
 export function normalizeMarketIndicatorKey(value: unknown): DaaMarketIndicatorKey | null {
   const text = normalizeText(value, "").toLowerCase();
-  return (MARKET_INDICATOR_KEYS_ as readonly string[]).includes(text) ? text as DaaMarketIndicatorKey : null;
+  return (MARKET_INDICATOR_KEYS as readonly string[]).includes(text) ? text as DaaMarketIndicatorKey : null;
 }
 
 export function normalizeMarketRegimeStore(value: unknown): DaaMarketRegime | "neutral" {

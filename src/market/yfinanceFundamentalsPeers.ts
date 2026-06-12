@@ -1,4 +1,4 @@
-import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
+import { WORKBENCH_FEATURED_ASSETS_CATALOG } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import {
   FUNDAMENTAL_PEER_PERCENTILE_MIN_SAMPLE_COUNT,
@@ -134,11 +134,11 @@ function basketLabelFor(symbol: string): string | null {
 
 function catalogPeerSymbolsFor(symbol: string): string[] {
   const normalized = normalizeYfinanceSymbol(symbol);
-  const item = WORKBENCH_FEATURED_ASSETS_CATALOG_.find((entry) => normalizeYfinanceSymbol(entry.symbol) === normalized);
+  const item = WORKBENCH_FEATURED_ASSETS_CATALOG.find((entry) => normalizeYfinanceSymbol(entry.symbol) === normalized);
   if (!item || item.assetClass !== "EQUITY") return [];
 
   return normalizeSymbols(
-    WORKBENCH_FEATURED_ASSETS_CATALOG_
+    WORKBENCH_FEATURED_ASSETS_CATALOG
       .filter((entry) => {
         if (entry.assetClass !== "EQUITY") return false;
         if (item.themeKey === "semiconductor") return entry.themeKey === item.themeKey;

@@ -31,9 +31,9 @@ function actionSummary(action: DailyDecisionAction): string {
 }
 
 function actionReason(action: DailyDecisionAction): string {
-  if (action === "approve_plan") return "人已确认本轮 Agent 目标权重变化，可作为后续调仓处理依据。";
-  if (action === "reject_plan") return "人不接受本轮 Agent 目标权重变化，后续复盘需要避免重复使用同一理由直接打扰。";
-  return "人确认今天不做组合动作，后台调查和风险观察继续运行。";
+  if (action === "approve_plan") return "人已确认本轮目标权重变化，可作为后续调仓处理依据。";
+  if (action === "reject_plan") return "人不接受本轮目标权重变化，后续复盘需要避免重复使用同一理由直接打扰。";
+  return "人确认今天不做组合动作，后台复核和风险观察继续运行。";
 }
 
 export async function POST(req: Request) {

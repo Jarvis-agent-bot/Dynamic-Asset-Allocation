@@ -5,10 +5,8 @@ import type { Formatter, NameType, ValueType } from "recharts/types/component/De
 import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 
 const COLORS = {
-  bar: "hsla(199,89%,60%,0.4)",
-  barHighlight: "hsl(199 89% 60%)",
-  muted: "hsl(215 16% 57%)",
-  grid: "hsla(215,16%,57%,0.12)",
+  bar: "var(--primary-bg)",
+  barHighlight: "var(--primary)",
 };
 
 type Bin = { min: number; max: number; count: number };
@@ -27,13 +25,13 @@ export function PercentileDistribution(props: {
   unit: string;
 }) {
   if (props.bins.length === 0) {
-    return <div className="py-6 text-center text-xs text-[var(--muted)]">分布数据不足</div>;
+    return <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">分布数据不足</div>;
   }
 
-  const data = props.bins.map((b, i) => ({
-    label: `${b.min.toFixed(1)}`,
-    count: b.count,
-    isHighlight: i === props.currentBin,
+  const data = props.bins.map((bin, binIndex) => ({
+    label: `${bin.min.toFixed(1)}`,
+    count: bin.count,
+    isHighlight: binIndex === props.currentBin,
   }));
   const tooltipFormatter: Formatter<ValueType, NameType> = (value) => [`${toTooltipNumber(value)} 天`, "频率"];
 
@@ -53,11 +51,11 @@ export function PercentileDistribution(props: {
               itemStyle={daaChartTooltipItemStyle}
               labelStyle={daaChartTooltipLabelStyle}
               formatter={tooltipFormatter}
-              labelFormatter={(l) => `区间: ${l}${props.unit}`}
+              labelFormatter={(label) => `区间: ${label}${props.unit}`}
             />
             <Bar dataKey="count" radius={[2, 2, 0, 0]}>
-              {data.map((entry, i) => (
-                <Cell key={i} fill={entry.isHighlight ? COLORS.barHighlight : COLORS.bar} />
+              {data.map((entry, entryIndex) => (
+                <Cell key={entryIndex} fill={entry.isHighlight ? COLORS.barHighlight : COLORS.bar} />
               ))}
             </Bar>
           </BarChart>

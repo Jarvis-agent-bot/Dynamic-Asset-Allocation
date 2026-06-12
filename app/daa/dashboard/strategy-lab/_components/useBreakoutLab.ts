@@ -122,12 +122,12 @@ export function useBreakoutLab(
           trailingPct: config.trailingPct / 100,
         },
       };
-      const res = await runBreakoutBacktest(params);
+      const breakoutResult = await runBreakoutBacktest(params);
       if (reqId !== runReqIdRef.current) return;
-      setResult(res);
-    } catch (e) {
+      setResult(breakoutResult);
+    } catch (error) {
       if (reqId !== runReqIdRef.current) return;
-      setError(e instanceof Error ? e.message : "回测执行失败");
+      setError(error instanceof Error ? error.message : "回测执行失败");
     } finally {
       if (reqId === runReqIdRef.current) setRunning(false);
     }

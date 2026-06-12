@@ -7,11 +7,10 @@ import {
   FormSelect,
   NumberInput,
   SectionCard,
-  settingsGridCols2Style,
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
-const DEFAULT_AI_TARGET_WEIGHT_POOL: NonNullable<DaaSystemConfig["aiTargetWeightPool"]> = {
+const DEFAULT_TARGET_WEIGHT_SUGGESTION_POOL: NonNullable<DaaSystemConfig["aiTargetWeightPool"]> = {
   enabled: true,
   minConfidence: 0,
 };
@@ -29,7 +28,7 @@ export function SettingsStrategySection(props: {
   return (
     <>
       <SectionCard title="策略风格">
-        <div style={settingsGridCols2Style}>
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
             <FieldLabel>组合风格</FieldLabel>
             <FormSelect
@@ -257,8 +256,8 @@ export function SettingsStrategySection(props: {
         </div>
       </SectionCard>
 
-      <SectionCard title="Policy Engine">
-        <div style={settingsGridCols2Style}>
+      <SectionCard title="策略与风控">
+        <div className="grid gap-4 md:grid-cols-2">
           <CheckboxRow
             checked={policy.enabled}
             onChange={(value) =>
@@ -376,7 +375,7 @@ export function SettingsStrategySection(props: {
               }
               placeholder="00:20"
             />
-            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
+            <div className="mt-1.5 text-[11px] leading-5 text-[var(--faint)]">
               当前调度按整点 UTC 轮询；如果填写 10:51，实际会在 11:00 UTC 的窗口执行。若希望执行时间更直观，建议直接填写整点。
             </div>
           </div>
@@ -601,13 +600,8 @@ export function SettingsStrategySection(props: {
           </CheckboxRow>
 
           {policy.execution.autoGenerateEnabled && (
-            <div style={{ gridColumn: "1 / -1", marginTop: -4 }}>
-              <div style={{
-                border: "1px solid var(--border)",
-                borderRadius: 12,
-                padding: "12px 16px",
-                background: "var(--surface)",
-              }}>
+            <div className="-mt-1 md:col-span-2">
+              <div className="border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                 <CheckboxRow
                   checked={policy.execution.autoExecuteEnabled}
                   onChange={(value) =>
@@ -628,8 +622,8 @@ export function SettingsStrategySection(props: {
                 </CheckboxRow>
 
                 {policy.execution.autoExecuteEnabled && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                  <div className="mt-2">
+                    <div className="grid gap-2">
                       <div>
                         <FieldLabel>单次执行上限 (% NAV)</FieldLabel>
                         <NumberInput
@@ -656,17 +650,8 @@ export function SettingsStrategySection(props: {
                         />
                       </div>
                     </div>
-                    <div style={{
-                      marginTop: 10,
-                      padding: "8px 12px",
-                      background: "rgba(234, 179, 8, 0.08)",
-                      border: "1px solid rgba(234, 179, 8, 0.2)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      color: "var(--muted)",
-                    }}>
-                      自动驾驶开启后，系统将在 cron 触发生成提案并通过风控检查后自动执行交易，无需手动确认。执行结果会通过已配置的通知渠道推送。
+                    <div className="mt-2.5 border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">
+                      自动执行只写入本地模拟账本；提案需先通过风控，结果走通知渠道。
                     </div>
                   </div>
                 )}
@@ -676,8 +661,8 @@ export function SettingsStrategySection(props: {
         </div>
       </SectionCard>
 
-      <SectionCard title="AI 目标权重池">
-        <div style={settingsGridCols2Style}>
+      <SectionCard title="目标权重建议池">
+        <div className="grid gap-4 md:grid-cols-2">
           <CheckboxRow
             checked={config.aiTargetWeightPool?.enabled !== false}
             onChange={(value) =>
@@ -686,7 +671,7 @@ export function SettingsStrategySection(props: {
                   ? {
                       ...prev,
                       aiTargetWeightPool: {
-                        ...(prev.aiTargetWeightPool ?? DEFAULT_AI_TARGET_WEIGHT_POOL),
+                        ...(prev.aiTargetWeightPool ?? DEFAULT_TARGET_WEIGHT_SUGGESTION_POOL),
                         enabled: value,
                       },
                     }
@@ -694,7 +679,7 @@ export function SettingsStrategySection(props: {
               )
             }
           >
-            将 Agent 输出的目标权重落到资产 targetWeightHint
+            将投资助理给出的目标权重建议写入资产目标权重
           </CheckboxRow>
 
           <div>
@@ -710,7 +695,7 @@ export function SettingsStrategySection(props: {
                     ? {
                         ...prev,
                         aiTargetWeightPool: {
-                          ...(prev.aiTargetWeightPool ?? DEFAULT_AI_TARGET_WEIGHT_POOL),
+                          ...(prev.aiTargetWeightPool ?? DEFAULT_TARGET_WEIGHT_SUGGESTION_POOL),
                           minConfidence: Math.max(0, Math.min(100, value || 0)),
                         },
                       }
@@ -718,8 +703,8 @@ export function SettingsStrategySection(props: {
                 )
               }
             />
-            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
-              Agent 输出 targetAllocationPlan 时，只有置信度 ≥ 此阈值的 intent 才会写入持久目标权重；后续 BUY/SELL 通过 cycle 的 drift 计算 + AutomationAuthority 统一执行，不再走规则触发器。
+            <div className="mt-1.5 text-[11px] leading-5 text-[var(--faint)]">
+              生成目标权重计划时，只有置信度不低于此阈值的建议才会写入持久目标权重；后续买入/卖出通过调仓周期的偏离计算和统一风控执行。
             </div>
           </div>
         </div>

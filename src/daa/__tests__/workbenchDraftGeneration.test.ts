@@ -38,7 +38,7 @@ describe("buildCycleDraftFromBootstrap", () => {
     expect(draft.maxAbsDriftPct).toBeCloseTo(20, 6);
   });
 
-  it("显式允许时，Agent 目标权重路径可以为未持仓资产生成 BUY 提案", () => {
+  it("显式允许时，投资助理目标权重路径可以为未持仓资产生成 BUY 提案", () => {
     const bootstrap = buildWorkbenchBootstrap({
       account: {
         cash: 1000,

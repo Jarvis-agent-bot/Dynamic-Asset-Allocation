@@ -19,7 +19,7 @@ import type {
   WorkbenchReadModel,
   WorkbenchSignal,
 } from "./readModels";
-import { getOrSetReadModelMemoryCache } from "./readModelMemoryCache";
+import { getOrSetReadModelCache } from "./readModelCache";
 
 function isAfterLedgerStart(ts: string | null | undefined, ledgerStartTs: string | null): boolean {
   if (!ledgerStartTs) return true;
@@ -145,7 +145,7 @@ function buildSignals(input: {
       id: "warning:notification:cron-token",
       level: "warn",
       source: "warning",
-      text: "定时任务 Token 未配置，自动分析与每日报告类通知不会按计划触发。",
+      text: "定时任务 Token 未配置，自动分析与每日复核类通知不会按计划触发。",
       actionHref: "/daa/dashboard/settings#settings-notification",
       createdAt,
     });
@@ -384,7 +384,7 @@ export async function buildWorkbenchReadModel(input: {
     return buildWorkbenchReadModelUncached(input);
   }
   const scopeId = getDaaAccountScopeId();
-  return getOrSetReadModelMemoryCache(
+  return getOrSetReadModelCache(
     `workbench-read:${scopeId}`,
     5000,
     () => buildWorkbenchReadModelUncached(input),

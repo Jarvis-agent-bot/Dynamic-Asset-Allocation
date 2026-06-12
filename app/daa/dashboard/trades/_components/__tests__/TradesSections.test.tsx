@@ -62,6 +62,7 @@ function createTradesModel(overrides: Partial<TradesModel> = {}): TradesModel {
   const reports = overrides.reports ?? [];
 
   return {
+    tradesModel: null,
     loading: false,
     refreshing: false,
     error: "",

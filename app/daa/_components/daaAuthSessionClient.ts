@@ -28,13 +28,13 @@ type RuntimeState = {
   cacheAt: number;
 };
 
-const RUNTIME_KEY_ = "__daa_auth_me_client_runtime_v1__";
-const DEFAULT_CACHE_TTL_MS_ = 2_500;
+const DAA_AUTH_SESSION_RUNTIME_KEY = "__daa_auth_me_client_runtime_v1__";
+const DAA_AUTH_SESSION_DEFAULT_CACHE_TTL_MS = 2_500;
 
 function getRuntime(): RuntimeState {
   const g = globalThis as Record<string, unknown>;
-  if (!g[RUNTIME_KEY_]) {
-    g[RUNTIME_KEY_] = {
+  if (!g[DAA_AUTH_SESSION_RUNTIME_KEY]) {
+    g[DAA_AUTH_SESSION_RUNTIME_KEY] = {
       inflight: null,
       inflightSilent: false,
       cache: null,
@@ -42,7 +42,7 @@ function getRuntime(): RuntimeState {
       cacheAt: 0,
     } satisfies RuntimeState;
   }
-  return g[RUNTIME_KEY_] as RuntimeState;
+  return g[DAA_AUTH_SESSION_RUNTIME_KEY] as RuntimeState;
 }
 
 function toErrorMessage(value: unknown, fallback: string): string {
@@ -59,27 +59,27 @@ function toErrorMessage(value: unknown, fallback: string): string {
 async function requestAuthSession(silent: boolean): Promise<DaaAuthSessionResult> {
   const endpoint = silent ? "/api/daa/auth/me?silent=1" : "/api/daa/auth/me";
   try {
-    const res = await fetch(endpoint, {
+    const sessionResponse = await fetch(endpoint, {
       method: "GET",
       headers: { accept: "application/json" },
       cache: "no-store",
     });
-    const raw = await res.json().catch(() => null);
+    const raw = await sessionResponse.json().catch(() => null);
 
-    if (res.status === 401) return { kind: "signedOut" };
+    if (sessionResponse.status === 401) return { kind: "signedOut" };
     if (!isApiResponse(raw)) {
-      return { kind: "error", message: `HTTP ${res.status}` };
+      return { kind: "error", message: `HTTP ${sessionResponse.status}` };
     }
 
     const json = raw as DaaAuthMeResponse;
     if (!json.ok && json.error.message === "not_authenticated") {
       return { kind: "signedOut" };
     }
-    if (!res.ok) {
+    if (!sessionResponse.ok) {
       if (!json.ok) {
-        return { kind: "error", message: toErrorMessage(json.error, `HTTP ${res.status}`) };
+        return { kind: "error", message: toErrorMessage(json.error, `HTTP ${sessionResponse.status}`) };
       }
-      return { kind: "error", message: `HTTP ${res.status}` };
+      return { kind: "error", message: `HTTP ${sessionResponse.status}` };
     }
     if (json.ok) {
       return { kind: "signedIn", me: json.data };
@@ -97,7 +97,7 @@ export async function fetchDaaAuthSession(input?: {
 }): Promise<DaaAuthSessionResult> {
   const silent = input?.silent !== false;
   const force = Boolean(input?.force);
-  const ttlMs = Math.max(0, Math.trunc(Number(input?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS_)) || 0);
+  const ttlMs = Math.max(0, Math.trunc(Number(input?.cacheTtlMs ?? DAA_AUTH_SESSION_DEFAULT_CACHE_TTL_MS)) || 0);
   const runtime = getRuntime();
   const now = Date.now();
 

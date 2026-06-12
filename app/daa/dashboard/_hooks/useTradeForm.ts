@@ -61,7 +61,7 @@ export function useTradeForm(input: {
   }, [blockedRiskMessage, preview]);
 
   const inputModeLabel = qtyNum > 0 ? "按数量预估" : notionalNum > 0 ? "按金额预估" : "等待输入";
-  const inputModeTone = qtyNum > 0 ? "green" : notionalNum > 0 ? "amber" : "slate";
+  const inputModeTone = qtyNum > 0 ? "success" : notionalNum > 0 ? "warning" : "neutral";
 
   function resetPreviewState() {
     if (preview) setPreview(null);
@@ -87,13 +87,13 @@ export function useTradeForm(input: {
     resetPreviewState();
     const { holdingQty, availableCash, lastPrice, pct } = params;
     if (input.side === "SELL" && holdingQty > 0) {
-      const q = pct >= 1 ? String(holdingQty) : (pct * holdingQty).toFixed(6);
-      setQty(q);
+      const quantityText = pct >= 1 ? String(holdingQty) : (pct * holdingQty).toFixed(6);
+      setQty(quantityText);
       setNotional("");
       setSellAll(pct >= 1);
     } else if (input.side === "BUY" && lastPrice > 0 && availableCash > 0) {
-      const q = ((pct * availableCash) / lastPrice).toFixed(6);
-      setQty(q);
+      const quantityText = ((pct * availableCash) / lastPrice).toFixed(6);
+      setQty(quantityText);
       setNotional("");
       setSellAll(false);
     }
@@ -108,17 +108,17 @@ export function useTradeForm(input: {
     setError("");
     setPreviewLoading(true);
     try {
-      const res = await input.callbacks.onPreview({
+      const previewResult = await input.callbacks.onPreview({
         assetKey: input.assetKey,
         side: input.side,
         qty: qtyNum > 0 ? qtyNum : undefined,
         notional: notionalNum > 0 ? notionalNum : undefined,
         sellAll: input.side === "SELL" && sellAll,
       });
-      setPreview(res);
-    } catch (e) {
+      setPreview(previewResult);
+    } catch (previewError) {
       setPreview(null);
-      setError(e instanceof Error ? e.message : "预览失败");
+      setError(previewError instanceof Error ? previewError.message : "预览失败");
     } finally {
       setPreviewLoading(false);
     }
@@ -129,7 +129,7 @@ export function useTradeForm(input: {
     await input.callbacks.onSubmit(preview);
   }, [preview, input.submitting, input.callbacks]);
 
-  const canPreview = (qtyNum > 0 || notionalNum > 0) && !previewLoading;
+  const canPreview = Boolean(input.assetKey && input.callbacks) && (qtyNum > 0 || notionalNum > 0) && !previewLoading;
   const canSubmit = !!preview && !input.submitting && preview.canSubmit !== false;
 
   return {
@@ -143,7 +143,7 @@ export function useTradeForm(input: {
     blockedRiskMessage,
     displayWarnings,
     inputModeLabel,
-    inputModeTone: inputModeTone as "green" | "amber" | "slate",
+    inputModeTone: inputModeTone as "success" | "warning" | "neutral",
     canPreview,
     canSubmit,
     handleQtyChange,

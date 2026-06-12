@@ -39,11 +39,11 @@ describe("daa/url", () => {
       expect(normalizeDaaReturnTo("/daa/dashboard?tab=settings&section=security#x")).toBe("/daa/dashboard#x");
     });
 
-    it("preserves dashboard deep links", () => {
+    it("preserves workbench deep links", () => {
       expect(normalizeDaaReturnTo("/daa/dashboard/settings?section=risk")).toBe("/daa/dashboard/settings?section=risk");
     });
 
-    it("rejects retired dashboard paths instead of redirecting to stale surfaces", () => {
+    it("rejects retired workbench paths instead of redirecting to stale surfaces", () => {
       expect(normalizeDaaReturnTo("/daa/dashboard/unknown/deep")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnTo("/daa/dashboard/unknown?tab=watchlist")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnTo("/daa/dashboard/unknown")).toBe("/daa/dashboard");

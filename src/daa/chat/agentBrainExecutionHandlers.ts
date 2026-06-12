@@ -10,14 +10,14 @@ export function createAssistantBrainExecutionHandlers(input: DaaAgentToolContext
   handlers.set("brain_set_mode", async () => {
     if (input.intent.kind !== "brain_set_mode") {
       return {
-        text: "当前没有识别到目标大脑模式。",
+        text: "当前没有识别到目标投资助理授权等级。",
         intentKind: "brain_set_mode",
         pendingAction: input.currentPendingAction,
       };
     }
     if (!input.allowExecution) {
       return {
-        text: "当前会话只允许查询，不允许直接修改大脑模式。",
+        text: "当前会话只允许查询，不允许直接修改投资助理授权等级。",
         intentKind: "brain_set_mode",
         pendingAction: input.currentPendingAction,
       };
@@ -50,7 +50,7 @@ export function createAssistantBrainExecutionHandlers(input: DaaAgentToolContext
     });
     if (!permission.allowed) {
       return {
-        text: `${permission.reason}\n如需放开，请到设置页切换到「操作员」或「自动驾驶」模式。`,
+        text: `${permission.reason}\n如需放开，请到设置页切换到「手动复核」或「自动复核」授权。`,
         intentKind: "agent_run",
         pendingAction: input.currentPendingAction,
       };
@@ -79,7 +79,7 @@ export function createAssistantBrainExecutionHandlers(input: DaaAgentToolContext
     });
     if (!permission.allowed) {
       return {
-        text: `${permission.reason}\n如需放开，请到设置页切换到「操作员」或「自动驾驶」模式。`,
+        text: `${permission.reason}\n如需放开，请到设置页切换到「手动复核」或「自动复核」授权。`,
         intentKind: "agent_bootstrap",
         pendingAction: input.currentPendingAction,
       };

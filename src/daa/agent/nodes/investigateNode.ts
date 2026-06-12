@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Investigate 节点（Phase 3: ReAct 循环 — LLM 自主选择工具）
+ * 投资助理复核工作流 — Investigate 节点（Phase 3: ReAct 循环 — LLM 自主选择工具）
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
@@ -23,7 +23,7 @@ import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { isNoResultFallbackEvidence } from "@/src/daa/agent/evidenceText";
+import { isNoResultFallbackReviewBasis } from "@/src/daa/agent/evidenceText";
 
 function buildNoResultFallback(prefix: string): InvestigateOutput {
   return {
@@ -31,11 +31,11 @@ function buildNoResultFallback(prefix: string): InvestigateOutput {
     updatedThesis: null,
     newConviction: null,
     evidenceType: "neutral",
-    evidenceSummary: `${prefix}已触达该论点并执行调查，但模型未返回可解析的结构化结论；本轮保留原论点，等待下一轮证据确认。`,
+    evidenceSummary: `${prefix}已触达该投资判断并执行复核，但模型未返回可解析的结构化结论；本轮保留原判断，等待下一轮依据确认。`,
     surprises: [],
     invalidationConditions: null,
     suggestedReviewDays: 3,
-    nextActions: ["下一轮继续复核该论点的最新证据。"],
+    nextActions: ["下一轮继续复核该判断的最新依据。"],
   };
 }
 
@@ -68,7 +68,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       return { errors: ["investigate: 熔断 — 连续 LLM 失败次数过多，跳过"] };
     }
 
-    // Phase 4: 子 agent 并行调查（父处理 item[0]，子 agent 并行处理 item[1..N]）
+    // Phase 4: 子 agent 并行复核（父处理 item[0]，子 agent 并行处理 item[1..N]）
     const subAgentResultsForState: CognitiveUpdate["subAgentResults"] = [];
     let subAgentMemCount = 0;
     let subAgentFanoutCompleted = false;
@@ -98,9 +98,9 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
         });
 
         const settled = await Promise.allSettled(subAgentPromises);
-        // 持久化子 agent 的调查产出 — 和父 agent 对称：
+        // 持久化子 agent 的复核产出 — 和父 agent 对称：
         // updateThesis → addEvidence → touchThesis（无论是否变更）→ createMemory（未变更时）
-        // 这样 sub-agent 调查过的 thesis 下一个 cycle 不会再被误判为"N 天未复盘"。
+        // 这样 sub-agent 复核过的 thesis 下一个 cycle 不会再被误判为"N 天未复盘"。
         for (const s of settled) {
           if (s.status !== "fulfilled" || !s.value) continue;
           const r = s.value;
@@ -116,7 +116,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
           });
 
           if (!out || !subThread) continue;
-          const hasUsableEvidence = Boolean(out.evidenceSummary && !isNoResultFallbackEvidence(out.evidenceSummary));
+          const hasUsableEvidence = Boolean(out.evidenceSummary && !isNoResultFallbackReviewBasis(out.evidenceSummary));
 
           // 1) thesis 文本 / conviction / 失效条件 / 复盘时间 更新（与父 agent 同一套字段）
           if (out.thesisChanged && out.updatedThesis) {
@@ -134,7 +134,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
             }
           }
 
-          // 2) 证据链：只有形成真实证据时才存档；解析失败的轮询状态不算证据。
+          // 2) 依据链：只有形成真实依据时才存档；解析失败的轮询状态不算依据。
           if (hasUsableEvidence) {
             try {
               await thesisStore.addEvidence({
@@ -153,7 +153,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
             }
           }
 
-          // 3) bump updated_at — 只有真实调查结论才算复盘成功。
+          // 3) bump updated_at — 只有真实复核结论才算复盘成功。
           if (hasUsableEvidence || out.thesisChanged) {
             try {
               await thesisStore.touchThesis(r.threadId);
@@ -244,7 +244,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
 
     // ── ReAct 循环 ──
     // 第一轮：发送初始 prompt（含工具定义 + thesis + memories）
-    // 2C: 加载该 thesis 的 trade_outcome 证据
+    // 2C: 加载该 thesis 的 trade_outcome 依据
     let tradeOutcomes: Array<{ content: string; evidenceType: string; createdAt: string }> = [];
     try {
       const thesisWithEvidence = await thesisStore.getThesisWithEvidence(thread.id);
@@ -361,7 +361,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     // P1-3 修复：ReAct 循环结束仍无结果 → 发一轮强制结论请求
     if (!result && allToolsCalled.length > 0) {
       // V2: 使用 ContextManager 构建含所有工具结果的完整 prompt + 强制结论指令
-      contextManager.addToolResultRound("⚠️ 所有工具调用轮次已用完。请立即基于已收集的证据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。");
+      contextManager.addToolResultRound("⚠️ 所有工具调用轮次已用完。请立即基于已收集的依据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。");
       const forceContextResult = await contextManager.buildAsync(CONTEXT_BUDGET_TOKENS);
       const forcePrompt = forceContextResult.prompt;
 
@@ -376,9 +376,9 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     }
 
     if (!result) {
-      result = buildNoResultFallback("[Agent 轮询] ");
+      result = buildNoResultFallback("[后台复核] ");
     }
-    const resultHasUsableEvidence = Boolean(result.evidenceSummary && !isNoResultFallbackEvidence(result.evidenceSummary));
+    const resultHasUsableEvidence = Boolean(result.evidenceSummary && !isNoResultFallbackReviewBasis(result.evidenceSummary));
 
     // 校验 investigate 输出
     if (result) {
@@ -419,7 +419,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       });
     }
 
-    // 添加证据
+    // 添加依据
     if (resultHasUsableEvidence) {
       await thesisStore.addEvidence({
         threadId: thread.id,
@@ -436,9 +436,9 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       });
     }
 
-    // 调查完成无论 thesis 是否变化都 bump updated_at，防止论点复核天数
-    // 永久增长的 bug：否则 LLM 说"无变化"时 target thesis 虽然被调查过但
-    // updated_at 纹丝不动，日报里 medium thesis 永远是 "N 天未调查"。
+    // 复核完成无论 thesis 是否变化都 bump updated_at，防止投资判断复核天数
+    // 永久增长的 bug：否则 LLM 说"无变化"时 target thesis 虽然被复核过但
+    // updated_at 纹丝不动，每日复核里 medium thesis 永远是 "N 天未复核"。
     if (resultHasUsableEvidence || result?.thesisChanged) {
       try {
         await thesisStore.touchThesis(thread.id);
@@ -447,7 +447,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       }
     }
 
-    // P0-1: 创建观察记忆 — 无论 thesisChanged 与否，有效调查都留下记忆痕迹
+    // P0-1: 创建观察记忆 — 无论 thesisChanged 与否，有效复核都留下记忆痕迹
     // thesisChanged 时由 reflectNode 创建记忆，这里只处理未变化的情况
     let observationMemCount = 0;
     if (resultHasUsableEvidence && result.evidenceSummary.length > 20 && !result?.thesisChanged) {
@@ -471,7 +471,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     const subAgentTokens = subAgentResultsForState.reduce((sum, r) => sum + r.tokensUsed, 0);
 
     return {
-      // 剩余队列已经由子 agent 并行消费，清掉它们，避免 LangGraph 后续循环重复调查。
+      // 剩余队列已经由子 agent 并行消费，清掉它们，避免 LangGraph 后续循环重复复核。
       investigationQueue: subAgentFanoutCompleted ? [target] : state.investigationQueue,
       investigateResult: result,
       retrievedMemories: memories,

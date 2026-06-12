@@ -9,7 +9,7 @@ import {
 import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 
 describe("autopilot-orchestrator", () => {
-  it("自动驾驶生成提案只要求自动生成开关，执行开关交给执行层判定", () => {
+  it("自动复核生成提案只要求自动生成开关，执行开关交给执行层判定", () => {
     const config = normalizeSystemConfig({
       cognitiveAgent: {
         enabled: true,
@@ -27,7 +27,7 @@ describe("autopilot-orchestrator", () => {
       missing: [
         "/policy/execution/autoGenerateEnabled",
       ],
-      reason: "自动驾驶无法生成调仓周期，缺少必要开关：/policy/execution/autoGenerateEnabled",
+      reason: "自动复核无法生成调仓周期，缺少必要开关：/policy/execution/autoGenerateEnabled",
     });
   });
 
@@ -48,12 +48,12 @@ describe("autopilot-orchestrator", () => {
     });
   });
 
-  it("认知 Agent 本轮存在错误时不应继续进入自动调仓", () => {
+  it("投资助理复核存在错误时不应继续进入自动调仓", () => {
     expect(getAutopilotRebalanceBlockedReasonAfterRun([])).toBeNull();
     expect(getAutopilotRebalanceBlockedReasonAfterRun(["observe: market data stale"])).toContain("自动调仓已降级为仅报告");
   });
 
-  it("定期 Agent 审核归入 scheduled_review，事件新闻仍走 agent_trigger", () => {
+  it("定期后台复核归入 scheduled_review，事件新闻仍走 agent_trigger", () => {
     expect(resolveAutopilotRebalanceTriggerSource("cron_cognitive_agent")).toBe("scheduled_review");
     expect(resolveAutopilotExecutionTriggerSource("cron_cognitive_agent")).toBe("cron_cognitive_agent");
     expect(resolveAutopilotRebalanceTriggerSource("cron_news_refresh")).toBe("agent_trigger");

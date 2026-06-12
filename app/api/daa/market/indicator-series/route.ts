@@ -2,8 +2,8 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { checkRateLimit } from "@/src/daa/api/rateLimit";
 import {
-  MARKET_INDICATOR_META_CATALOG_,
-  MARKET_INDICATOR_KEYS_,
+  MARKET_INDICATOR_META_CATALOG,
+  MARKET_INDICATOR_KEYS,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
@@ -35,11 +35,11 @@ export async function GET(req: Request) {
     const key = url.searchParams.get("key") as DaaMarketIndicatorKey | null;
     const start = url.searchParams.get("start") || defaultStart();
 
-    if (!key || !MARKET_INDICATOR_KEYS_.includes(key)) {
+    if (!key || !MARKET_INDICATOR_KEYS.includes(key)) {
       return fail("VALIDATION_FAILED", `无效的指标 key: ${key}`, { status: 400 });
     }
 
-    const meta = MARKET_INDICATOR_META_CATALOG_[key];
+    const meta = MARKET_INDICATOR_META_CATALOG[key];
     if (!meta) {
       return fail("NOT_FOUND", `未找到指标元数据: ${key}`, { status: 404 });
     }

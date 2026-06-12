@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyTargetAllocationWeightsToBootstrap,
-  buildAgentTargetWeightPlan,
+  buildTargetWeightSuggestionPlan,
   buildEmptyAutoTriggerSkipMessage,
   filterAutoTradeStability,
   filterRecentAutoTradeReversals,
   findAutoExecuteSingleOrderBreach,
   findAutoExecuteTurnoverBreach,
-  shouldSendAgentBriefingTelegram,
+  shouldSendReviewBriefingTelegram,
 } from "@/src/daa/automation/automationGuards";
 import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { buildAssetUniverseView, buildSystemConfigRow, buildWorkbenchBootstrap } from "@/src/daa/__tests__/testDataFactories";
@@ -19,8 +19,8 @@ describe("automationGuards", () => {
       triggerSource: "agent_trigger",
       manual: false,
       proposalCount: 0,
-      agentSummary: "Agent 分析: 0 个提案, 2 个跳过 (conviction 不足)",
-    })).toBe("Agent 主动调仓未生成可执行提案，跳过创建周期（Agent 分析: 0 个提案, 2 个跳过 (conviction 不足)）。");
+      agentSummary: "投资助理分析: 0 个提案, 2 个跳过 (conviction 不足)",
+    })).toBe("投资助理主动调仓未生成可执行提案，跳过创建周期（投资助理分析: 0 个提案, 2 个跳过 (conviction 不足)）。");
   });
 
   it("手动触发没有提案时不由自动触发护栏拦截", () => {
@@ -245,7 +245,7 @@ describe("automationGuards", () => {
     expect(result.blocked).toHaveLength(0);
   });
 
-  it("Agent 日报推送必须同时满足 Telegram 开关和 dailyReport 开关", () => {
+  it("投资助理复核推送必须同时满足 Telegram 开关和 dailyReport 开关", () => {
     const enabled = buildSystemConfigRow({
       notification: {
         telegram: {
@@ -263,17 +263,17 @@ describe("automationGuards", () => {
       },
     }).config;
 
-    expect(shouldSendAgentBriefingTelegram(enabled)).toBe(true);
-    expect(shouldSendAgentBriefingTelegram(disabled)).toBe(false);
+    expect(shouldSendReviewBriefingTelegram(enabled)).toBe(true);
+    expect(shouldSendReviewBriefingTelegram(disabled)).toBe(false);
   });
 
-  it("会把 Agent 目标权重计划转换为可执行的目标权重覆盖", () => {
+  it("会把目标权重计划转换为可执行的目标权重覆盖", () => {
     const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
       regimeOverride: null,
       targetAllocationPlan: {
-        reasoning: "NVDA 论点不收敛，主动降到更小试探仓位。",
+        reasoning: "NVDA 投资判断不收敛，主动降到更小试探仓位。",
         intents: [
           {
             assetKey: "US::NVDA",
@@ -293,7 +293,7 @@ describe("automationGuards", () => {
       },
     };
 
-    const plan = buildAgentTargetWeightPlan({
+    const plan = buildTargetWeightSuggestionPlan({
       overlay,
       knownAssetKeys: ["US::NVDA", "US::TSLA"],
       maxPositionPct: 0.1,
@@ -316,11 +316,11 @@ describe("automationGuards", () => {
       acceptedCount: 1,
       skippedCount: 1,
       reason: "NVDA→3.0%",
-      summary: "NVDA 论点不收敛，主动降到更小试探仓位。",
+      summary: "NVDA 投资判断不收敛，主动降到更小试探仓位。",
     });
   });
 
-  it("Agent 目标权重计划会按单仓上限截断", () => {
+  it("目标权重计划会按单仓上限截断", () => {
     const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
@@ -339,7 +339,7 @@ describe("automationGuards", () => {
       },
     };
 
-    const plan = buildAgentTargetWeightPlan({
+    const plan = buildTargetWeightSuggestionPlan({
       overlay,
       knownAssetKeys: ["US::NVDA"],
       maxPositionPct: 0.1,
@@ -349,7 +349,7 @@ describe("automationGuards", () => {
     expect(plan?.targetWeights["US::NVDA"]).toBe(0.1);
   });
 
-  it("Agent 目标权重计划拒绝旧版单冒号 assetKey", () => {
+  it("目标权重计划拒绝旧版单冒号 assetKey", () => {
     const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
@@ -368,7 +368,7 @@ describe("automationGuards", () => {
       },
     };
 
-    const plan = buildAgentTargetWeightPlan({
+    const plan = buildTargetWeightSuggestionPlan({
       overlay,
       knownAssetKeys: ["US::NVDA"],
       maxPositionPct: 0.1,
@@ -378,7 +378,7 @@ describe("automationGuards", () => {
     expect(plan).toBeNull();
   });
 
-  it("Agent 目标权重计划可以直接指定新增仓位，不再要求预先存在高/中 conviction 论点", () => {
+  it("目标权重计划可以直接指定新增仓位，不再要求预先存在高/中 conviction 投资判断", () => {
     const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
@@ -391,7 +391,7 @@ describe("automationGuards", () => {
             symbol: "SPY",
             proposedTargetWeightPct: 5,
             confidence: 90,
-            reasoning: "没有论点支持的新增仓位应跳过",
+            reasoning: "没有投资判断支持的新增仓位应跳过",
           },
           {
             assetKey: "US::NVDA",
@@ -405,13 +405,13 @@ describe("automationGuards", () => {
             symbol: "MSFT",
             proposedTargetWeightPct: 4,
             confidence: 90,
-            reasoning: "没有 canonical 论点支持的新增仓位应跳过",
+            reasoning: "没有 canonical 投资判断支持的新增仓位应跳过",
           },
         ],
       },
     };
 
-    const plan = buildAgentTargetWeightPlan({
+    const plan = buildTargetWeightSuggestionPlan({
       overlay,
       knownAssetKeys: ["US::SPY", "US::NVDA", "US::MSFT"],
       currentTargetWeights: {

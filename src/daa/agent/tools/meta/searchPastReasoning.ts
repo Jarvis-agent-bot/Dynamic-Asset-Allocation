@@ -1,5 +1,5 @@
 /**
- * meta/searchPastReasoning — 按关键字搜索历史记忆与证据
+ * meta/searchPastReasoning — 按关键字搜索历史记忆与依据
  *
  * 基于 pg_trgm 子串匹配，回答"我之前在哪里思考过 XX"类问题。
  * 与语义召回互补：命中精确的 ticker、数字、专有名词。
@@ -14,7 +14,7 @@ import { searchEvidenceByKeyword } from "@/src/daa/agent/store/thesisStore";
 registerTool(
   {
     name: "search_past_reasoning",
-    description: "按关键字（ticker、术语、事件名）搜索历史记忆（lesson/pattern/preference/fact）和证据链条。适合回答'之前有没有推理过 XX'这类精确匹配需求。",
+    description: "按关键字（ticker、术语、事件名）搜索历史记忆（lesson/pattern/preference/fact）和复核依据。适合回答'之前有没有推理过 XX'这类精确匹配需求。",
     category: "meta",
     parameters: {
       keyword: { type: "string", description: "搜索关键字（支持中英文、ticker）", required: true },

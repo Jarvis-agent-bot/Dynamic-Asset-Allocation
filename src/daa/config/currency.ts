@@ -1,6 +1,6 @@
 export type CurrencyCode = "USD" | "CNY" | "HKD";
 
-const BASE_CURRENCY_SET_ = new Set<CurrencyCode>(["USD", "CNY", "HKD"]);
+const SUPPORTED_BASE_CURRENCY_SET = new Set<CurrencyCode>(["USD", "CNY", "HKD"]);
 
 function toUpper(value: unknown): string {
   return String(value || "").trim().toUpperCase();
@@ -14,7 +14,7 @@ export function normalizeCurrencyAlias(value: unknown, fallback = "USD"): string
 
 export function normalizeBaseCurrencyCode(value: unknown, fallback: CurrencyCode = "USD"): CurrencyCode {
   const aliased = normalizeCurrencyAlias(value, fallback);
-  if (BASE_CURRENCY_SET_.has(aliased as CurrencyCode)) {
+  if (SUPPORTED_BASE_CURRENCY_SET.has(aliased as CurrencyCode)) {
     return aliased as CurrencyCode;
   }
   return fallback;

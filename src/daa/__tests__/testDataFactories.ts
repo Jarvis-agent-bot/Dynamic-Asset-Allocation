@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_CONFIG_, normalizeSystemConfig, type DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { DEFAULT_SYSTEM_CONFIG, normalizeSystemConfig, type DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import type { MarketPriceResolved } from "@/src/daa/modules/marketCache/marketCacheService";
 import type {
   AssetUniverseView,
@@ -44,7 +44,7 @@ export function buildSystemConfigRow(
     id: "default",
     version: rowOverrides?.version ?? 1,
     updatedAt: rowOverrides?.updatedAt ?? "2026-03-01T00:00:00.000Z",
-    config: normalizeSystemConfig(mergeDeep(DEFAULT_SYSTEM_CONFIG_, configOverrides)),
+    config: normalizeSystemConfig(mergeDeep(DEFAULT_SYSTEM_CONFIG, configOverrides)),
   };
 }
 
@@ -163,9 +163,9 @@ export function buildWorkbenchBootstrap(
     assetUniverse: [],
     execution: {
       logs: [],
-      feeRateBps: DEFAULT_SYSTEM_CONFIG_.strategy.execution.feeRateBps,
-      slippageBps: DEFAULT_SYSTEM_CONFIG_.strategy.execution.slippageBps,
-      minNotional: DEFAULT_SYSTEM_CONFIG_.strategy.constraints.minNotional,
+      feeRateBps: DEFAULT_SYSTEM_CONFIG.strategy.execution.feeRateBps,
+      slippageBps: DEFAULT_SYSTEM_CONFIG.strategy.execution.slippageBps,
+      minNotional: DEFAULT_SYSTEM_CONFIG.strategy.constraints.minNotional,
     },
     rebalance: {
       mode: "manual",
@@ -173,7 +173,7 @@ export function buildWorkbenchBootstrap(
       scheduledTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
     },
-    policy: DEFAULT_SYSTEM_CONFIG_.policy,
+    policy: DEFAULT_SYSTEM_CONFIG.policy,
     latestCycle: null,
     marketContext: null,
     warnings: [],

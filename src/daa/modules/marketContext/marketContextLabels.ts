@@ -5,14 +5,14 @@ import type {
 
 export type DaaMarketActionLevel = "strong_buy" | "buy" | "hold" | "sell" | "strong_sell";
 
-export const ACTIONABLE_MARKET_SCOPES_: DaaMarketIndicatorScope[] = [
+export const ACTIONABLE_MARKET_SCOPES: DaaMarketIndicatorScope[] = [
   "us_equity",
   "hk_cn_equity",
   "crypto",
 ];
 
 export function isActionableMarketScope(scope: string | null | undefined): boolean {
-  return ACTIONABLE_MARKET_SCOPES_.includes(scope as DaaMarketIndicatorScope);
+  return ACTIONABLE_MARKET_SCOPES.includes(scope as DaaMarketIndicatorScope);
 }
 
 export function classifyMarketActionByRiskOffScore(scorePct: number | null | undefined): DaaMarketActionLevel {

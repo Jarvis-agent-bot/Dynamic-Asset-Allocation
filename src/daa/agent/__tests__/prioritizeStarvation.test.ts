@@ -1,8 +1,8 @@
 /**
  * prioritizeNode — Starvation prevention 单测。
  *
- * 验证修复点：medium+ conviction thesis 超过 staleness 阈值（默认 7 天）未调查时，
- * 必须被强制注入调查队列，覆盖 LLM 偏好新建 uncertain thesis 的选择。
+ * 验证修复点：medium+ conviction thesis 超过 staleness 阈值（默认 7 天）未复核时，
+ * 必须被强制注入复核队列，覆盖 LLM 偏好新建 uncertain thesis 的选择。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CognitiveState } from "@/src/daa/agent/cognitiveState";
@@ -130,9 +130,9 @@ describe("prioritizeNode starvation prevention", () => {
     expect(vi.mocked(thesisStore.getThesisById)).toHaveBeenCalledWith(fullId);
   });
 
-  it("注入 9 天未调查的 medium thesis 到队列", async () => {
+  it("注入 9 天未复核的 medium thesis 到队列", async () => {
     const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
-    // LLM 只选 uncertain 调查型 thesis，完全忽略 medium
+    // LLM 只选 uncertain 复核型 thesis，完全忽略 medium
     vi.mocked(callDeepSeekJson).mockResolvedValue({
       data: {
         targets: [
@@ -166,7 +166,7 @@ describe("prioritizeNode starvation prevention", () => {
     expect(result.investigationQueue).toHaveLength(3);
   });
 
-  it("优先调查人手动点名的 thesis", async () => {
+  it("优先复核人手动点名的 thesis", async () => {
     const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
     vi.mocked(callDeepSeekJson).mockResolvedValue({
       data: { targets: [], newThreads: [] },
@@ -280,7 +280,7 @@ describe("prioritizeNode starvation prevention", () => {
     expect(queueIds).toEqual(["u1"]);
   });
 
-  it("优先使用 lastInvestigatedAt 判断是否久未调查", async () => {
+  it("优先使用 lastInvestigatedAt 判断是否久未复核", async () => {
     const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
     vi.mocked(callDeepSeekJson).mockResolvedValue({
       data: {

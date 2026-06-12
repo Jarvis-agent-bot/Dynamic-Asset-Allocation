@@ -28,7 +28,7 @@ export type ExchangeCalendarData = {
   alwaysOpen?: boolean;
 };
 
-export const EXCHANGE_CALENDAR_DATA_: Record<string, ExchangeCalendarData> = {
+export const EXCHANGE_CALENDAR_DATA: Record<string, ExchangeCalendarData> = {
   US: {
     timeZone: "America/New_York",
     weekendDays: [0, 6],

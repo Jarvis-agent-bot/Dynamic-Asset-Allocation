@@ -12,23 +12,15 @@ export function cycleStatusLabel(status: RebalanceCycle["status"]): string {
   return status;
 }
 
-export function triggerSourceLabel(source: RebalanceCycle["triggerSource"]): string {
-  if (source === "scheduled_review") return "定期复盘";
-  if (source === "drift") return "偏移触发";
-  if (source === "risk") return "止盈止损触发";
-  if (source === "cash_idle") return "现金闲置触发";
-  return "手动触发";
-}
-
 export function marketRegimeLabel(regime: string | null | undefined): string {
   return marketRegimeActionLabelZh(regime);
 }
 
 export function marketRegimeTone(regime: string | null | undefined): DaaSurfaceTone {
-  if (regime === "risk_off") return "amber";
-  if (regime === "risk_on") return "green";
-  if (regime === "transitional") return "indigo";
-  return "slate";
+  if (regime === "risk_off") return "warning";
+  if (regime === "risk_on") return "success";
+  if (regime === "transitional") return "info";
+  return "neutral";
 }
 
 export function riskStatusLabel(status: PreTradeRiskCheck["overallStatus"]) {
@@ -38,17 +30,17 @@ export function riskStatusLabel(status: PreTradeRiskCheck["overallStatus"]) {
 }
 
 export function riskOverallTone(status: PreTradeRiskCheck["overallStatus"]): DaaSurfaceTone {
-  if (status === "block") return "red";
-  if (status === "warn") return "amber";
-  return "green";
+  if (status === "block") return "danger";
+  if (status === "warn") return "warning";
+  return "success";
 }
 
 export function cycleStatusTone(status: RebalanceCycle["status"]): DaaSurfaceTone {
-  if (status === "completed") return "green";
-  if (status === "executing") return "indigo";
-  if (status === "cancelled") return "slate";
-  if (status === "reviewing") return "amber";
-  return "cyan";
+  if (status === "completed") return "success";
+  if (status === "executing") return "info";
+  if (status === "cancelled") return "neutral";
+  if (status === "reviewing") return "warning";
+  return "primary";
 }
 
 export function riskRuleLabel(rule: string): string {
@@ -68,9 +60,9 @@ export function riskItemStatusLabel(status: "pass" | "warn" | "block"): string {
 }
 
 export function riskItemTone(status: "pass" | "warn" | "block"): DaaSurfaceTone {
-  if (status === "block") return "red";
-  if (status === "warn") return "amber";
-  return "green";
+  if (status === "block") return "danger";
+  if (status === "warn") return "warning";
+  return "success";
 }
 
 export function macroCyclePhaseLabel(phase: string | null | undefined): string {
@@ -88,7 +80,7 @@ export function signalActionLabel(action: string | null | undefined): string {
   return action || "—";
 }
 
-export function llmAdjustmentLabel(adj: string | null | undefined): string {
+export function allocationAdjustmentLabel(adj: string | null | undefined): string {
   if (adj === "execute") return "建议执行";
   if (adj === "skip") return "建议跳过";
   if (adj === "reduce_size") return "建议缩减";
@@ -96,4 +88,4 @@ export function llmAdjustmentLabel(adj: string | null | undefined): string {
   return adj || "—";
 }
 
-// stanceLabel 已移除（仅在 MarketIndicatorDashboard 本地定义使用）
+// 预算立场标签由 MarketContextPanel 本地处理，避免再平衡通用标签承载市场面板细节。

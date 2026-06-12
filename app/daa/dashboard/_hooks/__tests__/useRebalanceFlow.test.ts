@@ -2,7 +2,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { useRebalanceFlow } from "../dashboard/useRebalanceFlow";
+import { useRebalanceFlow } from "../asset-workbench/useRebalanceFlow";
 import type { AssetUniverseView, RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 

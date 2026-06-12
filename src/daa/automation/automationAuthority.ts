@@ -64,7 +64,7 @@ export function evaluateBrainActionAuthority(input: {
   const checks: AutomationAuthorityDecision["checks"] = [];
   const permission = canBrainRunAction(input.systemConfig, input.action);
   pushCheck(checks, "brain-mode-action", permission.allowed, permission.reason);
-  return finalize(checks, "大脑动作授权通过。");
+  return finalize(checks, "投资助理动作授权通过。");
 }
 
 export function evaluateAutoRebalanceAuthority(input: {

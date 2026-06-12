@@ -162,7 +162,7 @@ describe("buildReviewPrompt", () => {
       thread: mockThread,
       marketRegime: "risk_on",
       vix: 20,
-      priceChangeText: "\n该资产在论点存续期间(30天)内涨跌幅为 15.2%",
+      priceChangeText: "\n该资产在投资判断存续期间(30天)内涨跌幅为 15.2%",
     });
     expect(prompt).toContain("## 实际市场表现");
     expect(prompt).toContain("15.2%");
@@ -191,7 +191,7 @@ describe("buildSurfacePrompt", () => {
       thesesUpdated: 1,
       memoriesCreated: 0,
     });
-    expect(prompt).toContain("日报编辑");
+    expect(prompt).toContain("每日复核简报编辑");
     expect(prompt).toContain("示例输出");
     // cognitionGaps 已改为代码直出，不再出现在 prompt schema 中
     expect(prompt).not.toContain("cognitionGaps");
@@ -220,7 +220,7 @@ describe("buildStrategyAdvisorPrompt", () => {
         assetKey: "US::NVDA",
         portfolioWeight: 0.107,
         daysSinceLastInvestigation: 2,
-        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向",
+        uncertaintyReason: "投资判断仍处观察态，尚未形成高置信度方向",
         suggestedInvestigation: "关注维度：组合、资产配置、宏观",
       }],
       ruleRegime: "risk_on",
@@ -228,7 +228,7 @@ describe("buildStrategyAdvisorPrompt", () => {
       maxPositionPct: 0.3,
     });
 
-    expect(prompt).toContain("论点仍处观察态");
+    expect(prompt).toContain("投资判断仍处观察态");
     expect(prompt).toContain("关注维度");
     expect(prompt).toContain("目标15.0%");
     expect(prompt).toContain("偏离+4.3pct");
@@ -236,7 +236,7 @@ describe("buildStrategyAdvisorPrompt", () => {
     expect(prompt).not.toContain("US::NVDA 权重10.7% 2天未更新");
   });
 
-  it("把观察列表候选交给策略顾问，使大脑可以生成 BUY 目标权重", () => {
+  it("把观察列表候选交给策略顾问，使投资助理可以生成 BUY 目标权重", () => {
     const prompt = buildStrategyAdvisorPrompt({
       holdings: [],
       watchlist: [{
@@ -267,7 +267,7 @@ describe("buildStrategyAdvisorPrompt", () => {
 // ── 输出长度/标题规范（推送语义化重构） ──
 
 describe("prompt 输出规范约束", () => {
-  it("prioritize prompt 要求新论点标题为 ≤16 字名词短语，禁止疑问句", () => {
+  it("prioritize prompt 要求新投资判断标题为 ≤16 字名词短语，禁止疑问句", () => {
     const prompt = buildPrioritizePrompt({
       portfolio: mockPortfolio,
       market: mockMarket,

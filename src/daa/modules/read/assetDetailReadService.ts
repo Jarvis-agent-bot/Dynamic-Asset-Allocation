@@ -3,7 +3,7 @@ import { getDaaLedgerStartTs, listDaaTradeTickets, listTargetWeightAudits, type 
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 
 import type { AssetDetailReadModel, AssetDetailTradeMarker } from "./readModels";
-import { getOrSetReadModelMemoryCache } from "./readModelMemoryCache";
+import { getOrSetReadModelCache } from "./readModelCache";
 
 function normalizeKey(value: unknown): string {
   return String(value || "").trim().toUpperCase();
@@ -82,7 +82,7 @@ export async function buildAssetDetailReadModel(input: {
   if (input.fresh) {
     return buildAssetDetailReadModelUncached(assetKey);
   }
-  return getOrSetReadModelMemoryCache(
+  return getOrSetReadModelCache(
     `asset-detail:${scopeId}:${assetKey}`,
     5000,
     () => buildAssetDetailReadModelUncached(assetKey),

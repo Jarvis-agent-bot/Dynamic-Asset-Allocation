@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           <div className="grid gap-2">
             <div className="font-medium">Session cookie</div>
             <div className="text-muted-foreground">
-              After you sign in, the server sets an HTTP-only session cookie so you can access the dashboard.
+              After you sign in, the server sets an HTTP-only session cookie so you can access the DAA workspace.
             </div>
           </div>
 

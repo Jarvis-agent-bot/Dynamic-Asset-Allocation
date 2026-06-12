@@ -27,7 +27,7 @@ import { runSubAgentInvestigation } from "@/src/daa/agent/subAgent";
 
 const mockThread: ResearchThread = {
   id: "thread-1",
-  title: "测试论点",
+  title: "测试判断",
   status: "active",
   thesisText: "AAPL 在 AI 驱动下将持续上涨",
   conviction: "medium",
@@ -75,7 +75,7 @@ describe("runSubAgentInvestigation", () => {
 
     const result = await runSubAgentInvestigation(config);
     expect(result.threadId).toBe("thread-1");
-    expect(result.threadTitle).toBe("测试论点");
+    expect(result.threadTitle).toBe("测试判断");
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     // LLM mock 直接返回 result，所以 investigateOutput 应该有值
     expect(result.investigateOutput).toBeTruthy();

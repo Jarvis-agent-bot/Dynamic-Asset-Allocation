@@ -1,5 +1,5 @@
 /**
- * Embedding 工具 — 为 Agent 记忆生成 1024 维向量
+ * Embedding 工具 — 为经验库记录生成 1024 维向量
  *
  * 可插拔 provider 架构：
  * 1. SiliconFlow（默认推荐，免费额度，BGE-M3 中英双语优秀）

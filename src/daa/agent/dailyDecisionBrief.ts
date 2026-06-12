@@ -81,7 +81,7 @@ function buildApprovals(overlay: StrategyOverlay): DailyApprovalItem[] {
       return {
         key: `target-${intent.assetKey || symbol}-${index}`,
         title: `${symbol} 目标 ${target.toFixed(2)}%`,
-        reason: String(intent.reasoning || overlay?.targetAllocationPlan?.reasoning || "Agent 建议调整目标权重。").trim(),
+        reason: String(intent.reasoning || overlay?.targetAllocationPlan?.reasoning || "投资助理建议调整目标权重。").trim(),
         confidencePct: Number.isFinite(Number(intent.confidence)) ? Math.max(0, Math.min(100, Number(intent.confidence))) : null,
         intent,
       };
@@ -116,7 +116,7 @@ export function buildDailyDecisionBrief(input: DailyDecisionBriefInput): DailyDe
       posture: "risk_watch",
       label: "风险观察",
       title: "今天不建议直接交易，但有风险需要观察",
-      description: "Agent 没有形成明确的目标权重变化；相关风险先进入后台跟踪，不作为你的拍板待办。",
+      description: "系统暂未形成明确的目标权重变化；相关风险先进入后台跟踪，不作为你的拍板待办。",
       approvals,
       metrics: {
         approvalCount: 0,
@@ -130,9 +130,9 @@ export function buildDailyDecisionBrief(input: DailyDecisionBriefInput): DailyDe
   if (investigationCount > 0) {
     return {
       posture: "investigating",
-      label: "补充调查",
-      title: "今天不建议直接交易，Agent 正在补证据",
-      description: `${investigationCount} 条判断需要后台调查；它们不是你的主待办，除非你想要求深查。`,
+      label: "补充复核",
+      title: "今天不建议直接交易，后台正在补充依据",
+      description: `${investigationCount} 条判断需要后台复核；它们不是你的主待办，除非你想追加复核。`,
       approvals,
       metrics: {
         approvalCount: 0,
@@ -147,7 +147,7 @@ export function buildDailyDecisionBrief(input: DailyDecisionBriefInput): DailyDe
     posture: "hold",
     label: "保持当前",
     title: "今天不建议交易",
-    description: "Agent 没有形成目标权重变化，也没有需要你亲自处理的组合动作。",
+    description: "系统暂未形成目标权重变化，也没有需要你亲自处理的组合动作。",
     approvals,
     metrics: {
       approvalCount: 0,

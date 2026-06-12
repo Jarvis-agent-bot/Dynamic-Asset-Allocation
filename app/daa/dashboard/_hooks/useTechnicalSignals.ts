@@ -13,13 +13,13 @@ function normalizeSymbol(symbol: string): string {
 }
 
 export function useTechnicalSignals(symbols: string[]): Record<string, DaaTechnicalSignal> {
-  const [data, setData] = useState<Record<string, DaaTechnicalSignal>>({});
+  const [technicalSignalsBySymbol, setTechnicalSignalsBySymbol] = useState<Record<string, DaaTechnicalSignal>>({});
   const fetchedKey = useRef("");
 
   useEffect(() => {
     const filtered = symbols.map(normalizeSymbol).filter(Boolean);
     if (filtered.length === 0) {
-      setData({});
+      setTechnicalSignalsBySymbol({});
       fetchedKey.current = "";
       return;
     }
@@ -35,21 +35,21 @@ export function useTechnicalSignals(symbols: string[]): Record<string, DaaTechni
       cache: "no-store",
       signal: controller.signal,
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        const payload = json?.data as TechnicalSignalsResponse | undefined;
+      .then((response) => (response.ok ? response.json() : null))
+      .then((jsonPayload) => {
+        const payload = jsonPayload?.data as TechnicalSignalsResponse | undefined;
         const items = payload?.items;
         if (!items || typeof items !== "object") return;
-        const next: Record<string, DaaTechnicalSignal> = {};
+        const nextSignalsBySymbol: Record<string, DaaTechnicalSignal> = {};
         for (const [symbol, signal] of Object.entries(items)) {
-          if (signal) next[normalizeSymbol(symbol)] = signal;
+          if (signal) nextSignalsBySymbol[normalizeSymbol(symbol)] = signal;
         }
-        setData(next);
+        setTechnicalSignalsBySymbol(nextSignalsBySymbol);
       })
       .catch(() => {});
 
     return () => controller.abort();
   }, [symbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return data;
+  return technicalSignalsBySymbol;
 }

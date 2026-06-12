@@ -22,7 +22,7 @@ import type {
 /** 各层默认 token 占比和优先级 */
 const DEFAULT_LAYER_CONFIG: Record<ContextLayerName, { priority: number; maxTokenShare: number }> = {
   system:         { priority: 10, maxTokenShare: 0.08 },  // 角色设定，永不压缩
-  thesis:         { priority: 9,  maxTokenShare: 0.15 },  // 论点核心
+  thesis:         { priority: 9,  maxTokenShare: 0.15 },  // 投资判断核心
   rules:          { priority: 9,  maxTokenShare: 0.12 },  // 输出格式
   tools:          { priority: 8,  maxTokenShare: 0.15 },  // 工具列表
   portfolio:      { priority: 7,  maxTokenShare: 0.10 },  // 持仓背景
@@ -176,7 +176,7 @@ export class ContextManager {
       if (i >= rounds.length - 2) {
         parts.push(rounds[i]); // 最近 2 轮完整
       } else {
-        parts.push(`[第 ${i + 1} 轮工具调用结果已压缩，关键证据已纳入后续轮次]`);
+        parts.push(`[第 ${i + 1} 轮工具调用结果已压缩，关键依据已纳入后续轮次]`);
       }
     }
     return parts.join("\n\n");

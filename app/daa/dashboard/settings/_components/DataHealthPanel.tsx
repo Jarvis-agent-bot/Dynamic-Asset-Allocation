@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Activity, AlertTriangle, CheckCircle2, Clock, ShieldAlert, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 import {
   DaaSurfacePanel,
@@ -64,15 +64,17 @@ type ExternalDataHealth = {
   summary: ExternalRequestSummaryItem[];
 };
 
+type HealthTone = "success" | "warning" | "danger";
+
 function formatPct(value: number): string {
   return `${Math.max(0, Math.min(100, value)).toFixed(0)}%`;
 }
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "-";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "-";
-  return d.toLocaleString("zh-CN", {
+  const timestamp = new Date(iso);
+  if (!Number.isFinite(timestamp.getTime())) return "-";
+  return timestamp.toLocaleString("zh-CN", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -80,23 +82,104 @@ function formatWhen(iso: string | null): string {
   });
 }
 
+function healthToneForPct(value: number): HealthTone {
+  return value >= 90 ? "success" : value >= 70 ? "warning" : "danger";
+}
+
+function progressClassForTone(tone: HealthTone): string {
+  if (tone === "success") {
+    return "accent-[var(--success)] [&::-moz-progress-bar]:bg-[var(--success)] [&::-webkit-progress-value]:bg-[var(--success)]";
+  }
+  if (tone === "warning") {
+    return "accent-[var(--amber)] [&::-moz-progress-bar]:bg-[var(--amber)] [&::-webkit-progress-value]:bg-[var(--amber)]";
+  }
+  return "accent-[var(--danger)] [&::-moz-progress-bar]:bg-[var(--danger)] [&::-webkit-progress-value]:bg-[var(--danger)]";
+}
+
+function MarketHealthCell({ marketSnapshot, index }: { marketSnapshot: MarketHealth; index: number }) {
+  const tone = healthToneForPct(marketSnapshot.healthPct);
+  const borderClass = [
+    index % 2 === 0 ? "border-r border-[var(--border)]" : "",
+    index < 2 ? "border-b border-[var(--border)]" : "",
+    index % 4 === 3 ? "lg:border-r-0" : "lg:border-r lg:border-[var(--border)]",
+    index >= 4 ? "lg:border-b-0" : "lg:border-b lg:border-[var(--border)]",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className={`min-w-0 bg-[var(--card)] px-3 py-2.5 ${borderClass}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-semibold text-[var(--text)]">{marketSnapshot.market}</span>
+        <span className="shrink-0 font-[var(--font-mono)] text-xs text-[var(--muted)]">{formatPct(marketSnapshot.healthPct)}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-[var(--muted)]">
+        <span>新鲜 {marketSnapshot.fresh}</span>
+        <span>过期 {marketSnapshot.stale}</span>
+        <span>缺失 {marketSnapshot.missing}</span>
+        <span>共 {marketSnapshot.total}</span>
+      </div>
+      <progress
+        aria-label={`${marketSnapshot.market} 数据健康度`}
+        className={`mt-2 block h-1.5 w-full appearance-none overflow-hidden rounded-[var(--radius-sm)] bg-[var(--elevated)] [&::-webkit-progress-bar]:bg-[var(--elevated)] ${progressClassForTone(tone)}`}
+        max={100}
+        value={Math.max(0, Math.min(100, marketSnapshot.healthPct))}
+      />
+    </div>
+  );
+}
+
+function ExternalRequestCell({
+  label,
+  value,
+  tone = "neutral",
+  index,
+}: {
+  label: string;
+  value: string | number;
+  tone?: "success" | "warning" | "danger" | "neutral";
+  index: number;
+}) {
+  const toneClass = {
+    success: "text-[var(--success)]",
+    warning: "text-[var(--amber)]",
+    danger: "text-[var(--danger)]",
+    neutral: "text-[var(--text)]",
+  }[tone];
+  const borderClass = [
+    index % 2 === 0 ? "border-r border-[var(--border)]" : "",
+    index < 2 ? "border-b border-[var(--border)]" : "",
+    index % 4 === 3 ? "lg:border-r-0" : "lg:border-r lg:border-[var(--border)]",
+    "lg:border-b-0",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className={`min-w-0 bg-[var(--card)] px-3 py-2.5 ${borderClass}`}>
+      <div className="truncate text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">{label}</div>
+      <div className={`mt-1 font-[var(--font-mono)] text-[20px] leading-none ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
 export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealth?: ExternalDataHealth | null }) {
   const marketHealth = useMemo(() => {
     const groups = new Map<string, AssetHealthRow[]>();
-    for (const a of props.assets) {
-      const m = a.market || "OTHER";
-      if (!groups.has(m)) groups.set(m, []);
-      groups.get(m)!.push(a);
+    for (const assetRow of props.assets) {
+      const marketKey = assetRow.market || "OTHER";
+      if (!groups.has(marketKey)) groups.set(marketKey, []);
+      groups.get(marketKey)!.push(assetRow);
     }
 
     const result: MarketHealth[] = [];
     for (const [market, assets] of groups) {
-      const fresh = assets.filter((a) => a.priceStatus === "fresh").length;
-      const stale = assets.filter((a) => a.priceStatus === "stale").length;
-      const missing = assets.filter((a) => a.priceStatus === "missing").length;
-      const unsupported = assets.filter((a) => a.priceStatus === "unsupported").length;
+      const fresh = assets.filter((assetRow) => assetRow.priceStatus === "fresh").length;
+      const stale = assets.filter((assetRow) => assetRow.priceStatus === "stale").length;
+      const missing = assets.filter((assetRow) => assetRow.priceStatus === "missing").length;
+      const unsupported = assets.filter((assetRow) => assetRow.priceStatus === "unsupported").length;
       const updates = assets
-        .map((a) => a.priceUpdatedAt)
+        .map((assetRow) => assetRow.priceUpdatedAt)
         .filter(Boolean)
         .sort();
       result.push({
@@ -111,21 +194,21 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
       });
     }
 
-    return result.sort((a, b) => a.market.localeCompare(b.market));
+    return result.sort((leftMarket, rightMarket) => leftMarket.market.localeCompare(rightMarket.market));
   }, [props.assets]);
 
   const overallHealth = useMemo(() => {
     const total = props.assets.length;
-    const fresh = props.assets.filter((a) => a.priceStatus === "fresh").length;
+    const fresh = props.assets.filter((assetRow) => assetRow.priceStatus === "fresh").length;
     return total > 0 ? (fresh / total) * 100 : 0;
   }, [props.assets]);
 
   const staleAssets = useMemo(
-    () => props.assets.filter((a) => a.priceStatus === "stale" || a.priceStatus === "missing"),
+    () => props.assets.filter((assetRow) => assetRow.priceStatus === "stale" || assetRow.priceStatus === "missing"),
     [props.assets],
   );
 
-  const healthTone = overallHealth >= 90 ? "green" : overallHealth >= 70 ? "amber" : "red";
+  const healthTone = overallHealth >= 90 ? "success" : overallHealth >= 70 ? "warning" : "danger";
   const HealthIcon = overallHealth >= 90 ? CheckCircle2 : overallHealth >= 70 ? AlertTriangle : XCircle;
   const externalSummary = props.externalHealth?.summary ?? [];
   const externalItems = props.externalHealth?.items ?? [];
@@ -149,8 +232,8 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
     [externalItems],
   );
   const externalTone = externalTotals.rateLimited > 0 || externalTotals.unauthorized > 0 || externalTotals.successRate < 80
-    ? "amber"
-    : "green";
+    ? "warning"
+    : "success";
 
   return (
     <DaaSurfacePanel
@@ -164,83 +247,30 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
         </DaaSurfaceStatusPill>
       }
     >
-      {/* 按市场分组统计 */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {marketHealth.map((m) => (
-          <div
-            key={m.market}
-            className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[var(--text)]">{m.market}</span>
-              <span className="text-xs text-[var(--muted)]">{m.total} 个标的</span>
-            </div>
-            <div className="mt-2 space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1 text-[var(--success)]">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  新鲜
-                </span>
-                <span className="text-[var(--text)]">{m.fresh}</span>
-              </div>
-              {m.stale > 0 && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1 text-amber-400">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    过期
-                  </span>
-                  <span className="text-[var(--text)]">{m.stale}</span>
-                </div>
-              )}
-              {m.missing > 0 && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1 text-red-400">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
-                    缺失
-                  </span>
-                  <span className="text-[var(--text)]">{m.missing}</span>
-                </div>
-              )}
-            </div>
-            {/* 健康度进度条 */}
-            <div className="mt-2">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--elevated)]">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${m.healthPct}%`,
-                    backgroundColor:
-                      m.healthPct >= 90
-                        ? "hsl(142 71% 45%)"
-                        : m.healthPct >= 70
-                          ? "hsl(45 93% 55%)"
-                          : "hsl(0 84% 60%)",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+      <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] lg:grid-cols-4">
+        {marketHealth.map((marketSnapshot, index) => (
+          <MarketHealthCell key={marketSnapshot.market} marketSnapshot={marketSnapshot} index={index} />
         ))}
       </div>
 
       {/* 过期/缺失标的列表 */}
       {staleAssets.length > 0 && (
-        <div className="mt-4 rounded-[12px] border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-amber-400">
+        <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-4 py-3">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--amber)]">
             <Clock className="h-3.5 w-3.5" />
             需要关注的标的 ({staleAssets.length})
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {staleAssets.slice(0, 20).map((a) => (
+            {staleAssets.slice(0, 20).map((assetRow) => (
               <span
-                key={a.assetKey}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  a.priceStatus === "missing"
-                    ? "bg-red-500/10 text-red-400"
-                    : "bg-amber-500/10 text-amber-400"
+                key={assetRow.assetKey}
+                className={`rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-medium ${
+                  assetRow.priceStatus === "missing"
+                    ? "bg-[var(--danger-bg)] text-[var(--danger)]"
+                    : "bg-[var(--amber-bg)] text-[var(--amber)]"
                 }`}
               >
-                {a.symbol} ({a.priceStatus === "missing" ? "缺失" : "过期"})
+                {assetRow.symbol} ({assetRow.priceStatus === "missing" ? "缺失" : "过期"})
               </span>
             ))}
             {staleAssets.length > 20 && (
@@ -270,30 +300,15 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
           </DaaSurfaceStatusPill>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-            <div className="text-xs text-[var(--muted)]">成功 / 总请求</div>
-            <div className="mt-1 text-lg font-semibold text-[var(--text)]">{externalTotals.success}/{externalTotals.total}</div>
-          </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-            <div className="text-xs text-[var(--muted)]">错误请求</div>
-            <div className="mt-1 text-lg font-semibold text-[var(--text)]">{externalTotals.errors}</div>
-          </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-            <div className="text-xs text-[var(--muted)]">429 限速</div>
-            <div className="mt-1 text-lg font-semibold text-amber-300">{externalTotals.rateLimited}</div>
-          </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-            <div className="text-xs text-[var(--muted)]">401/403/crumb</div>
-            <div className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-[var(--text)]">
-              <ShieldAlert className="h-4 w-4 text-[var(--faint)]" />
-              {externalTotals.unauthorized}
-            </div>
-          </div>
+        <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] lg:grid-cols-4">
+          <ExternalRequestCell label="成功 / 总请求" value={`${externalTotals.success}/${externalTotals.total}`} tone="success" index={0} />
+          <ExternalRequestCell label="错误请求" value={externalTotals.errors} tone={externalTotals.errors > 0 ? "warning" : "neutral"} index={1} />
+          <ExternalRequestCell label="429 限速" value={externalTotals.rateLimited} tone={externalTotals.rateLimited > 0 ? "warning" : "neutral"} index={2} />
+          <ExternalRequestCell label="401/403/crumb" value={externalTotals.unauthorized} tone={externalTotals.unauthorized > 0 ? "danger" : "neutral"} index={3} />
         </div>
 
         {externalSummary.length > 0 ? (
-          <div className="mt-3 overflow-hidden rounded-[8px] border border-[var(--border)]">
+          <div className="mt-3 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border)]">
             <div className="grid grid-cols-[1.4fr_0.9fr_0.8fr_0.8fr] gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--faint)]">
               <span>数据源 / 资源</span>
               <span>Host</span>
@@ -309,7 +324,7 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
                 >
                   <span className="min-w-0 truncate font-medium text-[var(--text)]">{item.provider} · {item.resource}</span>
                   <span className="min-w-0 truncate text-[var(--muted)]">{item.endpointHost || "-"}</span>
-                  <span className={rate >= 90 ? "text-[var(--success)]" : "text-amber-300"}>
+                  <span className={rate >= 90 ? "text-[var(--success)]" : "text-[var(--amber)]"}>
                     {formatPct(rate)} ({item.successCount}/{item.totalCount})
                   </span>
                   <span className="min-w-0 truncate text-[var(--muted)]">
@@ -320,14 +335,14 @@ export function DataHealthPanel(props: { assets: AssetHealthRow[]; externalHealt
             })}
           </div>
         ) : (
-          <div className="mt-3 rounded-[8px] border border-dashed border-[var(--border)] px-3 py-3 text-sm text-[var(--muted)]">
+          <div className="mt-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-3 py-3 text-sm text-[var(--muted)]">
             还没有外部请求记录。下一次刷新行情、宏观指标、新闻或基金持仓后，这里会显示外部数据源状态。
           </div>
         )}
 
         {externalErrors.length > 0 ? (
-          <div className="mt-3 rounded-[8px] border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
-            <div className="mb-2 text-xs font-semibold text-amber-300">最近错误</div>
+          <div className="mt-3 rounded-[var(--radius-sm)] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2.5">
+            <div className="mb-2 text-xs font-semibold text-[var(--amber)]">最近错误</div>
             <div className="space-y-1.5">
               {externalErrors.map((item) => (
                 <div key={item.id} className="flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:justify-between">

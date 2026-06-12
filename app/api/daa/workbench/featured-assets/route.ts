@@ -13,8 +13,8 @@ import type {
   WorkbenchFeaturedAssetItem,
 } from "@/src/daa/modules/workbench/workbenchTypes";
 import {
-  WORKBENCH_FEATURED_ASSETS_CATALOG_,
-  WORKBENCH_FEATURED_ROLE_ORDER_,
+  WORKBENCH_FEATURED_ASSETS_CATALOG,
+  WORKBENCH_FEATURED_ROLE_ORDER,
   type WorkbenchFeaturedAssetClass,
   type WorkbenchFeaturedMarket,
   type WorkbenchFeaturedRole,
@@ -74,7 +74,7 @@ function normalizeThemeFilter(value: unknown): FeaturedThemeFilter {
 
 function normalizeRoleFilter(value: unknown): FeaturedRoleFilter {
   const text = normalizeText(value).toLowerCase();
-  if (WORKBENCH_FEATURED_ROLE_ORDER_.includes(text as WorkbenchFeaturedRole)) return text as WorkbenchFeaturedRole;
+  if (WORKBENCH_FEATURED_ROLE_ORDER.includes(text as WorkbenchFeaturedRole)) return text as WorkbenchFeaturedRole;
   return "ALL";
 }
 
@@ -209,7 +209,7 @@ function buildGroupRows(input: {
   roleDescriptionZh: string;
   rows: WorkbenchFeaturedAssetItem[];
 }> {
-  const filtered = WORKBENCH_FEATURED_ASSETS_CATALOG_.filter((item) => {
+  const filtered = WORKBENCH_FEATURED_ASSETS_CATALOG.filter((item) => {
     if (input.marketFilter !== "ALL" && item.market !== input.marketFilter) return false;
     if (input.assetClassFilter !== "ALL" && item.assetClass !== input.assetClassFilter) return false;
     if (input.themeFilter !== "ALL" && item.themeKey !== input.themeFilter) return false;
@@ -217,7 +217,7 @@ function buildGroupRows(input: {
     return true;
   });
 
-  return WORKBENCH_FEATURED_ROLE_ORDER_.map((roleKey) => {
+  return WORKBENCH_FEATURED_ROLE_ORDER.map((roleKey) => {
     const roleRows = filtered.filter((item) => item.roleKey === roleKey);
     const first = roleRows[0];
     if (!first) return null;

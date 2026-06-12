@@ -1,6 +1,6 @@
 /**
- * GET /api/daa/agent/memories — 分页列出 Agent 记忆
- * DELETE /api/daa/agent/memories?id=xxx — 删除单条记忆
+ * GET /api/daa/agent/memories — 分页列出经验记录
+ * DELETE /api/daa/agent/memories?id=xxx — 删除单条经验记录
  */
 
 export const runtime = "nodejs";
@@ -36,7 +36,7 @@ export async function DELETE(req: Request) {
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
-    if (!id) return fail("VALIDATION_FAILED", "缺少记忆 ID", { status: 400 });
+    if (!id) return fail("VALIDATION_FAILED", "缺少经验记录 ID", { status: 400 });
 
     await deleteMemory(id);
     return ok({ deleted: true });

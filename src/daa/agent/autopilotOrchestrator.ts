@@ -12,11 +12,11 @@ import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalan
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
-import { buildAgentTargetWeightPlan as buildAgentTargetAllocationPlan } from "@/src/daa/automation/automationGuards";
+import { buildTargetWeightSuggestionPlan } from "@/src/daa/automation/automationGuards";
 import {
-  persistAgentTargetWeightPool,
-  resolveAiTargetWeightPoolConfig,
-} from "@/src/daa/automation/agentTargetWeightPool";
+  persistTargetWeightSuggestionPool,
+  resolveTargetWeightSuggestionPoolConfig,
+} from "@/src/daa/automation/targetWeightSuggestionPool";
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
 import {
   getDaaSystemConfig,
@@ -149,17 +149,17 @@ function buildSkippedTargetWeightPool(
   reason: string | null,
   config?: DaaSystemConfig,
 ): AutopilotLoopResult["targetWeightPool"] {
-  const aiTargetWeightPool = config ? resolveAiTargetWeightPoolConfig(config) : null;
+  const targetWeightSuggestionPool = config ? resolveTargetWeightSuggestionPoolConfig(config) : null;
   return {
     attempted: false,
-    enabled: aiTargetWeightPool?.enabled ?? false,
+    enabled: targetWeightSuggestionPool?.enabled ?? false,
     targetPlanAvailable: false,
     acceptedCount: 0,
     skippedCount: 0,
     attemptedCount: 0,
     persistedCount: 0,
     failedCount: 0,
-    minConfidence: aiTargetWeightPool?.minConfidence ?? 70,
+    minConfidence: targetWeightSuggestionPool?.minConfidence ?? 70,
     reason,
   };
 }
@@ -169,7 +169,7 @@ export function getAutopilotRebalanceBlockedReasonAfterRun(errors: string[]): st
     .map((item) => String(item || "").trim())
     .filter(Boolean);
   if (meaningfulErrors.length === 0) return null;
-  return `认知 Agent 本轮存在 ${meaningfulErrors.length} 个错误，自动调仓已降级为仅报告，避免把不完整推理直接转成交易。`;
+  return `投资助理本轮复核存在 ${meaningfulErrors.length} 个错误，自动调仓已降级为仅报告，避免把不完整推理直接转成交易。`;
 }
 
 export function validateAutopilotPrerequisites(config: DaaSystemConfig): {
@@ -188,7 +188,7 @@ export function validateAutopilotPrerequisites(config: DaaSystemConfig): {
   return {
     ready: missing.length === 0,
     missing,
-    reason: missing.length > 0 ? `自动驾驶无法生成调仓周期，缺少必要开关：${missing.join(", ")}` : null,
+    reason: missing.length > 0 ? `自动复核无法生成调仓周期，缺少必要开关：${missing.join(", ")}` : null,
   };
 }
 
@@ -210,7 +210,7 @@ async function ensureThesisCoverage(): Promise<AutopilotLoopResult["bootstrapped
   const count = await thesisStore.countThreads().catch(() => 0);
   const rows = await listDaaAssetUniverse().catch(() => []);
   const focusAssets = buildFocusAssets(rows);
-  if (focusAssets.length === 0) return { attempted: false, created: 0, errors: ["当前没有持仓或观察列表，跳过自动初始化论点。"] };
+  if (focusAssets.length === 0) return { attempted: false, created: 0, errors: ["当前没有持仓或观察列表，跳过自动建立初始投资判断。"] };
 
   const result = count === 0
     ? await bootstrapTheses(focusAssets)
@@ -218,12 +218,12 @@ async function ensureThesisCoverage(): Promise<AutopilotLoopResult["bootstrapped
   return { attempted: true, created: result.created, errors: result.errors };
 }
 
-type AgentTargetWeightPlan = ReturnType<typeof buildAgentTargetAllocationPlan>;
+type TargetWeightSuggestionPlan = ReturnType<typeof buildTargetWeightSuggestionPlan>;
 
-async function buildAgentTargetWeightPlan(input: {
+async function buildTargetWeightSuggestionPlanForRun(input: {
   row: DaaStoreSystemConfigRow;
   overlay: AgentStrategyOverlay | null;
-}): Promise<AgentTargetWeightPlan> {
+}): Promise<TargetWeightSuggestionPlan> {
   const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
   const currentTargetWeights = Object.fromEntries(
     bootstrap.assetUniverse.map((row) => [
@@ -231,42 +231,42 @@ async function buildAgentTargetWeightPlan(input: {
       Math.max(0, Number(row.targetWeightPct || 0) || 0) / 100,
     ]),
   );
-  const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(input.row.config);
-  return buildAgentTargetAllocationPlan({
+  const targetWeightSuggestionPool = resolveTargetWeightSuggestionPoolConfig(input.row.config);
+  return buildTargetWeightSuggestionPlan({
     overlay: input.overlay,
     knownAssetKeys: bootstrap.assetUniverse.map((row) => row.assetKey),
     currentTargetWeights,
     maxPositionPct: input.row.config.strategy.constraints.maxPositionPct,
-    minConfidence: aiTargetWeightPool.minConfidence,
+    minConfidence: targetWeightSuggestionPool.minConfidence,
   });
 }
 
-async function maybePersistAgentTargetWeightPool(input: {
+async function maybePersistTargetWeightSuggestionPool(input: {
   row: DaaStoreSystemConfigRow;
-  targetPlan: AgentTargetWeightPlan;
+  targetPlan: TargetWeightSuggestionPlan;
 }): Promise<AutopilotLoopResult["targetWeightPool"]> {
-  const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(input.row.config);
+  const targetWeightSuggestionPool = resolveTargetWeightSuggestionPoolConfig(input.row.config);
   const base: AutopilotLoopResult["targetWeightPool"] = {
     attempted: false,
-    enabled: aiTargetWeightPool.enabled,
+    enabled: targetWeightSuggestionPool.enabled,
     targetPlanAvailable: input.targetPlan != null,
     acceptedCount: input.targetPlan?.acceptedCount ?? 0,
     skippedCount: input.targetPlan?.skippedCount ?? 0,
     attemptedCount: 0,
     persistedCount: 0,
     failedCount: 0,
-    minConfidence: aiTargetWeightPool.minConfidence,
+    minConfidence: targetWeightSuggestionPool.minConfidence,
     reason: null,
   };
 
-  if (!aiTargetWeightPool.enabled) {
-    return { ...base, reason: "AI 目标权重池开关未开启。" };
+  if (!targetWeightSuggestionPool.enabled) {
+    return { ...base, reason: "目标权重建议池开关未开启。" };
   }
   if (!input.targetPlan) {
-    return { ...base, reason: "本轮未形成满足置信度、资产范围和论点支持条件的目标权重计划。" };
+    return { ...base, reason: "本轮未形成满足置信度、资产范围和投资判断依据条件的目标权重计划。" };
   }
 
-  const persisted = await persistAgentTargetWeightPool({
+  const persisted = await persistTargetWeightSuggestionPool({
     targetWeights: input.targetPlan.targetWeights,
     agentRunId: input.targetPlan.agentRunId,
     summary: input.targetPlan.summary,
@@ -298,7 +298,7 @@ async function executeAutopilotRebalance(input: {
 
 async function maybeRunAgentDrivenRebalance(input: {
   row: DaaStoreSystemConfigRow;
-  targetPlan: AgentTargetWeightPlan;
+  targetPlan: TargetWeightSuggestionPlan;
   source: AutopilotEventSource;
   reason: string;
   affectedSymbols?: string[];
@@ -321,7 +321,7 @@ async function maybeRunAgentDrivenRebalance(input: {
   if (input.source === "cron_cognitive_agent" && !input.targetPlan) {
     return {
       ...empty,
-      reason: "定期 Agent 审核未形成目标权重计划，本轮只更新认知状态，不创建调仓周期。",
+      reason: "定期后台复核未形成目标权重计划，本轮只更新复核状态，不创建调仓周期。",
     };
   }
 
@@ -342,8 +342,8 @@ async function maybeRunAgentDrivenRebalance(input: {
   const generated = await generateWorkbenchRebalanceCycle({
     triggerSource: rebalanceTriggerSource,
     triggerReason: input.targetPlan
-      ? `${rebalanceTriggerSource === "scheduled_review" ? "定期 AI 目标权重复盘" : "Agent 目标权重调仓"}: ${input.targetPlan.reason}；${input.targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
-      : `Agent 自动驾驶检查${eventContext ? `: ${eventContext}` : ""}`,
+      ? `${rebalanceTriggerSource === "scheduled_review" ? "定期目标权重复核" : "投资助理目标权重调仓"}: ${input.targetPlan.reason}；${input.targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
+      : `投资助理自动复核${eventContext ? `: ${eventContext}` : ""}`,
     manual: false,
     targetAllocationPlan: input.targetPlan ? {
       agentRunId: input.targetPlan.agentRunId,
@@ -391,7 +391,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     return buildSkippedResult({
       source: input.source,
       brainMode: brain.mode,
-      reason: "当前不是自动驾驶模式。",
+      reason: "当前不是自动复核授权。",
       config: row.config,
     });
   }
@@ -399,7 +399,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     return buildSkippedResult({
       source: input.source,
       brainMode: brain.mode,
-      reason: "认知 Agent 已关闭。",
+      reason: "投资助理复核已关闭。",
       config: row.config,
     });
   }
@@ -443,63 +443,63 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     logSwallowed("autopilot.overlay", error);
     return null;
   });
-  let targetPlan: AgentTargetWeightPlan = null;
+  let targetPlan: TargetWeightSuggestionPlan = null;
   let targetWeightPool: AutopilotLoopResult["targetWeightPool"] = rebalanceBlockedReason
     ? buildSkippedTargetWeightPool(rebalanceBlockedReason, row.config)
     : buildSkippedTargetWeightPool(null, row.config);
 
   if (!rebalanceBlockedReason) {
     let targetPlanError: string | null = null;
-    targetPlan = await buildAgentTargetWeightPlan({ row, overlay }).catch((error) => {
+    targetPlan = await buildTargetWeightSuggestionPlanForRun({ row, overlay }).catch((error) => {
       logSwallowed("autopilot.targetWeightPlan", error);
       targetPlanError = error instanceof Error ? error.message : String(error || "");
       return null;
     });
     if (targetPlanError) {
-      const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(row.config);
+      const targetWeightSuggestionPool = resolveTargetWeightSuggestionPoolConfig(row.config);
       targetWeightPool = {
         attempted: true,
-        enabled: aiTargetWeightPool.enabled,
+        enabled: targetWeightSuggestionPool.enabled,
         targetPlanAvailable: false,
         acceptedCount: 0,
         skippedCount: 0,
         attemptedCount: 0,
         persistedCount: 0,
         failedCount: 0,
-        minConfidence: aiTargetWeightPool.minConfidence,
-        reason: `AI 目标权重计划构建失败：${targetPlanError}`,
+        minConfidence: targetWeightSuggestionPool.minConfidence,
+        reason: `目标权重计划构建失败：${targetPlanError}`,
       };
     } else if (input.source === "cron_cognitive_agent") {
-      const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(row.config);
+      const targetWeightSuggestionPool = resolveTargetWeightSuggestionPoolConfig(row.config);
       targetWeightPool = {
         attempted: false,
-        enabled: aiTargetWeightPool.enabled,
+        enabled: targetWeightSuggestionPool.enabled,
         targetPlanAvailable: targetPlan != null,
         acceptedCount: targetPlan?.acceptedCount ?? 0,
         skippedCount: targetPlan?.skippedCount ?? 0,
         attemptedCount: 0,
         persistedCount: 0,
         failedCount: 0,
-        minConfidence: aiTargetWeightPool.minConfidence,
+        minConfidence: targetWeightSuggestionPool.minConfidence,
         reason: targetPlan
-          ? "定期 Agent 审核使用临时目标权重，只有进入再平衡周期或执行成交后才写入持久目标。"
-          : "定期 Agent 审核未形成目标权重计划。",
+          ? "定期复核使用临时目标权重，只有进入再平衡周期或执行成交后才写入持久目标。"
+          : "定期复核未形成目标权重计划。",
       };
     } else {
-      targetWeightPool = await maybePersistAgentTargetWeightPool({ row, targetPlan }).catch((error) => {
+      targetWeightPool = await maybePersistTargetWeightSuggestionPool({ row, targetPlan }).catch((error) => {
         logSwallowed("autopilot.targetWeightPool", error);
-        const aiTargetWeightPool = resolveAiTargetWeightPoolConfig(row.config);
+        const targetWeightSuggestionPool = resolveTargetWeightSuggestionPoolConfig(row.config);
         return {
           attempted: true,
-          enabled: aiTargetWeightPool.enabled,
+          enabled: targetWeightSuggestionPool.enabled,
           targetPlanAvailable: targetPlan != null,
           acceptedCount: targetPlan?.acceptedCount ?? 0,
           skippedCount: targetPlan?.skippedCount ?? 0,
           attemptedCount: 0,
           persistedCount: 0,
           failedCount: 0,
-          minConfidence: aiTargetWeightPool.minConfidence,
-          reason: "AI 目标权重池写入失败。",
+          minConfidence: targetWeightSuggestionPool.minConfidence,
+          reason: "目标权重建议池写入失败。",
         };
       });
     }
@@ -527,7 +527,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
           blockedReason: null,
           error: error instanceof Error ? error.message : String(error || ""),
         },
-        reason: "Agent 主动调仓执行失败。",
+        reason: "投资助理主动调仓执行失败。",
       };
     });
 

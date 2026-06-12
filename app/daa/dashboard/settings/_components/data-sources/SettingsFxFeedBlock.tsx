@@ -17,7 +17,7 @@ export function SettingsFxFeedBlock(props: {
   return (
     <SubsectionCard
       title="汇率换算"
-      description="决定跨币种估值要跟踪哪些汇率，保证持仓、交易记录和研究输出使用同一套换算口径。"
+      description="统一持仓、交易和复核输出的跨币种估值口径。"
     >
       <div>
         <CheckboxRow
@@ -39,7 +39,7 @@ export function SettingsFxFeedBlock(props: {
           启用汇率源
         </CheckboxRow>
 
-        <div style={{ marginTop: 14 }}>
+        <div className="mt-3.5">
           <FieldLabel>跟踪汇率币对</FieldLabel>
           <FormInput
             value={config.dataSources.fxFeed.pairs.join(", ")}

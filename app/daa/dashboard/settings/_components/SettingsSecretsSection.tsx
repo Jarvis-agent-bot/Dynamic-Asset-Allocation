@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { SectionCard } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 import { DaaSurfaceActionButton } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { emitDashboardDataUpdated } from "@/app/daa/dashboard/dashboardEvents";
+import { emitWorkbenchDataUpdated } from "@/app/daa/dashboard/workbenchEvents";
 import {
   deleteSecretValue,
   listSecrets,
@@ -15,17 +15,13 @@ import {
   type StoreSecretStatus,
   type StoreSecretTestMode,
   type StoreSecretTestResult,
-} from "@/src/daa/modules/store/dashboardStoreApiClient";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Group definitions
-// ─────────────────────────────────────────────────────────────────────────────
+} from "@/src/daa/modules/store/workbenchStoreApiClient";
 
 const GROUP_META: Record<string, { label: string; order: number }> = {
   llm: { label: "LLM / 研究模型", order: 0 },
   telegram: { label: "Telegram", order: 1 },
   feishu: { label: "飞书", order: 2 },
-  cron: { label: "定时任务", order: 3 },
+  cron: { label: "自动调度", order: 3 },
   fred: { label: "FRED 宏观数据", order: 4 },
   twitter_data: { label: "Twitter 数据", order: 5 },
   embedding: { label: "Embedding 向量", order: 6 },
@@ -34,17 +30,12 @@ const GROUP_META: Record<string, { label: string; order: number }> = {
 const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "fred_api_key", "embedding_api_key"]);
 const DELIVERABLE_KEYS = new Set(["telegram_bot_token", "feishu_webhook_url"]);
 
-/** 凭证注册/获取链接 */
 const SECRET_URLS: Record<string, { label: string; url: string }> = {
   fred_api_key: { label: "FRED 申请", url: "https://fred.stlouisfed.org/docs/api/api_key.html" },
   llm_api_key: { label: "DeepSeek 控制台", url: "https://platform.deepseek.com/api_keys" },
   twitterdata_token: { label: "TwitterData", url: "https://pro.twitterdata.com" },
   embedding_api_key: { label: "SiliconFlow 控制台", url: "https://cloud.siliconflow.cn/" },
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SecretRow
-// ─────────────────────────────────────────────────────────────────────────────
 
 function SecretRow({
   secret,
@@ -73,8 +64,8 @@ function SecretRow({
       setEditing(false);
       setValue("");
       toast.success(`${secret.label} 已保存`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "保存失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {
       setSaving(false);
     }
@@ -86,8 +77,8 @@ function SecretRow({
       const secrets = await deleteSecretValue(secret.key);
       onSaved(secrets);
       toast.success(`${secret.label} 已删除`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "删除失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
       setDeleting(false);
     }
@@ -98,8 +89,7 @@ function SecretRow({
   const isDeliverable = DELIVERABLE_KEYS.has(secret.key);
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-      {/* Label + source */}
+    <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-medium text-[var(--text)]">{secret.label}</span>
@@ -113,9 +103,9 @@ function SecretRow({
               {SECRET_URLS[secret.key].label} ↗
             </a>
           ) : null}
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+          <span className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-medium ${
             secret.source === "env"
-              ? "bg-blue-500/10 text-blue-400"
+              ? "bg-[var(--indigo-bg)] text-[var(--indigo)]"
               : secret.source === "db"
                 ? "bg-[var(--success-bg)] text-[var(--success)]"
                 : "bg-[var(--muted-bg)] text-[var(--muted)]"
@@ -125,7 +115,6 @@ function SecretRow({
           </span>
         </div>
 
-        {/* Masked value or editing input */}
         {editing ? (
           <div className="mt-2 flex items-center gap-2">
             <div className="relative flex-1">
@@ -136,7 +125,7 @@ function SecretRow({
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder={secret.sensitive ? "输入新值…" : "输入值…"}
-                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--elevated)] px-2.5 py-1.5 pr-8 text-[13px] text-[var(--text)] outline-none transition-colors focus:border-[var(--primary)]"
+                className="w-full rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--elevated)] px-2.5 py-1.5 pr-8 text-[13px] text-[var(--text)] outline-none transition-colors focus:border-[var(--primary)]"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void handleSave();
@@ -162,7 +151,7 @@ function SecretRow({
               <Check className="h-3.5 w-3.5" />
             </DaaSurfaceActionButton>
             <DaaSurfaceActionButton
-              tone="slate"
+              tone="neutral"
               onClick={() => { setEditing(false); setValue(""); }}
               className="p-1.5"
             >
@@ -175,7 +164,7 @@ function SecretRow({
               {secret.masked || "—"}
             </code>
             {testResult && (
-              <span className={`text-[11px] ${testResult.success ? "text-[var(--success)]" : "text-red-400"}`}>
+              <span className={`text-[11px] ${testResult.success ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
                 {testResult.success ? "✓" : "✗"} {testResult.message} ({testResult.latencyMs}ms)
               </span>
             )}
@@ -183,7 +172,6 @@ function SecretRow({
         )}
       </div>
 
-      {/* Actions */}
       {!editing && (
         <div className="flex items-center gap-1">
           {isTestable && secret.source !== "empty" && (
@@ -192,7 +180,7 @@ function SecretRow({
               onClick={() => onTest(secret.key, "connectivity")}
               disabled={testing}
               title="连通性测试"
-              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--primary)] disabled:opacity-40"
+              className="rounded-[var(--radius-sm)] p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--primary)] disabled:opacity-40"
             >
               <PlugZap className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
             </button>
@@ -203,7 +191,7 @@ function SecretRow({
               onClick={() => onTest(secret.key, "deliver")}
               disabled={testing}
               title="发送测试消息"
-              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--success)] disabled:opacity-40"
+              className="rounded-[var(--radius-sm)] p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--success)] disabled:opacity-40"
             >
               <Send className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
             </button>
@@ -213,7 +201,7 @@ function SecretRow({
               type="button"
               onClick={() => setEditing(true)}
               title={secret.source === "env" ? "环境变量优先，DB 值仅在无 env 时使用" : "编辑"}
-              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]"
+              className="rounded-[var(--radius-sm)] p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]"
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
@@ -224,7 +212,7 @@ function SecretRow({
               onClick={() => void handleDelete()}
               disabled={deleting}
               title="从数据库中删除"
-              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+              className="rounded-[var(--radius-sm)] p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] disabled:opacity-40"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -235,9 +223,38 @@ function SecretRow({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Section
-// ─────────────────────────────────────────────────────────────────────────────
+function SecretSummaryCell({
+  label,
+  value,
+  tone = "neutral",
+  index,
+}: {
+  label: string;
+  value: string;
+  tone?: "success" | "warning" | "neutral";
+  index: number;
+}) {
+  const toneClass = {
+    success: "text-[var(--success)]",
+    warning: "text-[var(--amber)]",
+    neutral: "text-[var(--text)]",
+  }[tone];
+  const borderClass = [
+    index % 2 === 0 ? "border-r border-[var(--border)]" : "",
+    index < 2 ? "border-b border-[var(--border)]" : "",
+    index % 4 === 3 ? "xl:border-r-0" : "xl:border-r xl:border-[var(--border)]",
+    "xl:border-b-0",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className={`min-w-0 bg-[var(--card)] px-3 py-2.5 ${borderClass}`}>
+      <div className="truncate text-[11px] font-semibold uppercase tracking-normal text-[var(--faint)]">{label}</div>
+      <div className={`mt-1 font-[var(--font-mono)] text-[20px] leading-none ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
 
 export function SettingsSecretsSection() {
   const [secrets, setSecrets] = useState<StoreSecretStatus[]>([]);
@@ -248,8 +265,8 @@ export function SettingsSecretsSection() {
   const loadSecrets = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listSecrets();
-      setSecrets(data);
+      const secretStatuses = await listSecrets();
+      setSecrets(secretStatuses);
     } catch {
       toast.error("加载凭证状态失败");
     } finally {
@@ -264,27 +281,26 @@ export function SettingsSecretsSection() {
   // 凭证保存/删除后同步本地列表，并广播给其它面板（如通知 tab 的凭证状态）。
   const handleSecretsChanged = useCallback((next: StoreSecretStatus[]) => {
     setSecrets(next);
-    emitDashboardDataUpdated();
+    emitWorkbenchDataUpdated();
   }, []);
 
   const handleTest = useCallback(async (key: string, mode: StoreSecretTestMode = "connectivity") => {
     setTestingKey(key);
     try {
-      const result = await testSecretConnectivity(key, mode);
-      setTestResults((prev) => ({ ...prev, [key]: result }));
-      if (result.success) {
-        toast.success(`${result.message}`);
+      const connectivityResult = await testSecretConnectivity(key, mode);
+      setTestResults((prev) => ({ ...prev, [key]: connectivityResult }));
+      if (connectivityResult.success) {
+        toast.success(`${connectivityResult.message}`);
       } else {
-        toast.error(`测试失败: ${result.message}`);
+        toast.error(`测试失败: ${connectivityResult.message}`);
       }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "测试失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "测试失败");
     } finally {
       setTestingKey(null);
     }
   }, []);
 
-  // Group secrets
   const groups = new Map<string, StoreSecretStatus[]>();
   for (const secret of secrets) {
     const list = groups.get(secret.group) || [];
@@ -308,38 +324,37 @@ export function SettingsSecretsSection() {
     <section id="settings-secrets" className="scroll-mt-28">
       <SectionCard title="凭证与密钥">
         {loading ? (
-          <div className="py-8 text-center text-sm text-[var(--muted)]">加载凭证状态…</div>
+          <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 text-sm text-[var(--muted)]">
+            正在加载凭证状态…
+          </div>
         ) : (
           <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] xl:grid-cols-4">
               {[
-                { label: "已配置", value: `${secretSummary.configured} / ${secretSummary.total}` },
-                { label: "环境变量", value: `${secretSummary.envCount}` },
-                { label: "数据库", value: `${secretSummary.dbCount}` },
-                { label: "未配置", value: `${secretSummary.missingCount}` },
-              ].map((item) => (
-                <div key={item.label} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--faint)]">{item.label}</div>
-                  <div className="mt-2 text-sm font-semibold text-[var(--text)]">{item.value}</div>
-                </div>
+                { label: "已配置", value: `${secretSummary.configured} / ${secretSummary.total}`, tone: "success" as const },
+                { label: "环境变量", value: `${secretSummary.envCount}`, tone: "neutral" as const },
+                { label: "数据库", value: `${secretSummary.dbCount}`, tone: "neutral" as const },
+                { label: "未配置", value: `${secretSummary.missingCount}`, tone: secretSummary.missingCount > 0 ? "warning" as const : "neutral" as const },
+              ].map((item, index) => (
+                <SecretSummaryCell key={item.label} label={item.label} value={item.value} tone={item.tone} index={index} />
               ))}
             </div>
 
-            {sortedGroups.map(([group, items]) => (
-              <div key={group} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+            {sortedGroups.map(([group, groupSecrets]) => (
+              <div key={group} className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-3.5 w-3.5 text-[var(--faint)]" />
-                    <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                    <span className="text-[12px] font-semibold uppercase tracking-normal text-[var(--faint)]">
                       {GROUP_META[group]?.label || group}
                     </span>
                   </div>
                   <div className="text-[11px] text-[var(--muted)]">
-                    已配置 {items.filter((item) => item.source !== "empty").length} / {items.length}
+                    已配置 {groupSecrets.filter((item) => item.source !== "empty").length} / {groupSecrets.length}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {items.map((secret) => (
+                  {groupSecrets.map((secret) => (
                     <SecretRow
                       key={secret.key}
                       secret={secret}
@@ -353,7 +368,7 @@ export function SettingsSecretsSection() {
               </div>
             ))}
 
-            <div className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-[12px] leading-5 text-[var(--faint)]">
+            <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] px-3 py-2.5 text-[12px] leading-5 text-[var(--faint)]">
               环境变量优先级最高，数据库值只在没有对应 env 时才会生效；删除数据库值不会影响已有 env 配置。
             </div>
           </div>

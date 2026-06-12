@@ -1,5 +1,5 @@
 /**
- * Agent Tool Registry V2 — 动态注册表
+ * 复核工具 Registry V2 — 动态注册表
  *
  * 借鉴 Hermes Agent 的自注册模式：每个工具文件在 import 时调用 registerTool()。
  * 支持按 category 查询、变量替换（链式调用）、审批检查。

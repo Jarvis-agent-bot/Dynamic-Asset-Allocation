@@ -97,7 +97,7 @@ export function buildInvestmentIntents(input: {
       source: "agent_thesis",
       action: "review_only",
       assetKeys: [],
-      thesis: input.triggerReason || "Agent 目标权重计划进入策略评估。",
+      thesis: input.triggerReason || "目标权重计划进入策略评估。",
       confidencePct: 80,
       expiresAt: intentExpiry(24),
       evidenceRefs: input.signals.slice(0, 12).map((signal) => signal.signalId),

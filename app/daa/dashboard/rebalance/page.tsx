@@ -1,15 +1,16 @@
 import { Suspense } from "react";
 import { DaaSurfacePageHeader } from "../_components/DaaSurfaceUI";
+import { WorkbenchLoadingState } from "../_components/WorkbenchFeedback";
 import RebalancePageClient from "./_components/RebalancePageClient";
 
 export default function RebalancePage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <DaaSurfacePageHeader
         title="调仓"
-        description="查看市场环境，审阅建议并执行再平衡"
+        description="审阅建议并执行再平衡。"
       />
-      <Suspense fallback={<div className="py-12 text-center text-sm text-muted-foreground">正在加载…</div>}>
+      <Suspense fallback={<WorkbenchLoadingState title="正在加载调仓工作台" description="同步市场环境与再平衡建议。" />}>
         <RebalancePageClient />
       </Suspense>
     </div>

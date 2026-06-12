@@ -81,7 +81,7 @@ export type StrategyLabHistoryItem = {
   metrics: BacktestMetrics;
 };
 
-export type StrategyLabAiAnalysis = {
+export type StrategyLabModelAnalysis = {
   source: "llm" | "local";
   summary: string[];
   risks: string[];

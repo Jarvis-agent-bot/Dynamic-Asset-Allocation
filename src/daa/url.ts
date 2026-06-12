@@ -1,8 +1,8 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-const DUMMY_ORIGIN_ = "https://daa.local";
-const DEFAULT_DASHBOARD_RETURN_TO_ = "/daa/dashboard";
-const DASHBOARD_ROUTE_PREFIXES_ = [
+const DAA_URL_DUMMY_ORIGIN = "https://daa.local";
+const DEFAULT_WORKBENCH_RETURN_TO = "/daa/dashboard";
+const WORKBENCH_ROUTE_PREFIXES = [
   "/daa/dashboard/portfolio",
   "/daa/dashboard/rebalance",
   "/daa/dashboard/settings",
@@ -11,36 +11,36 @@ const DASHBOARD_ROUTE_PREFIXES_ = [
   "/daa/dashboard/trades",
 ] as const;
 
-function isAllowedDashboardPath(pathname: string): boolean {
-  return DASHBOARD_ROUTE_PREFIXES_.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+function isAllowedWorkbenchPath(pathname: string): boolean {
+  return WORKBENCH_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 /**
- * Normalize a potentially-untrusted returnTo into a safe, canonical DAA dashboard path.
+ * Normalize a potentially-untrusted returnTo into a safe, canonical DAA workbench route path.
  *
  * - Only allow relative `/daa*` paths (avoid open redirects).
  * - 仅允许 DAA 资产首页体系路径，其他路径回落到默认首页入口。
  */
 export function normalizeDaaReturnTo(raw: unknown): string {
   const v = typeof raw === "string" ? raw.trim() : "";
-  if (!v) return DEFAULT_DASHBOARD_RETURN_TO_;
-  if (!v.startsWith("/")) return DEFAULT_DASHBOARD_RETURN_TO_;
-  if (v.startsWith("//")) return DEFAULT_DASHBOARD_RETURN_TO_;
+  if (!v) return DEFAULT_WORKBENCH_RETURN_TO;
+  if (!v.startsWith("/")) return DEFAULT_WORKBENCH_RETURN_TO;
+  if (v.startsWith("//")) return DEFAULT_WORKBENCH_RETURN_TO;
 
   try {
     // Use a dummy origin so URL can parse relative paths in Node + browsers.
-    const u = new URL(v, DUMMY_ORIGIN_);
+    const u = new URL(v, DAA_URL_DUMMY_ORIGIN);
 
     // Keep post-login redirects inside the DAA surface.
-    if (!u.pathname.startsWith("/daa")) return DEFAULT_DASHBOARD_RETURN_TO_;
+    if (!u.pathname.startsWith("/daa")) return DEFAULT_WORKBENCH_RETURN_TO;
 
     // Avoid redirect loops back into login.
     if (u.pathname === "/daa/login" || u.pathname.startsWith("/daa/login/")) {
-      return DEFAULT_DASHBOARD_RETURN_TO_;
+      return DEFAULT_WORKBENCH_RETURN_TO;
     }
 
     if (u.pathname === "/daa" || u.pathname === "/daa/") {
-      return `${DEFAULT_DASHBOARD_RETURN_TO_}${u.hash || ""}`;
+      return `${DEFAULT_WORKBENCH_RETURN_TO}${u.hash || ""}`;
     }
 
     // Canonicalize `/daa/dashboard` (and tolerate `/daa/dashboard/`).
@@ -48,15 +48,15 @@ export function normalizeDaaReturnTo(raw: unknown): string {
       return `/daa/dashboard${u.hash || ""}`;
     }
 
-    // Allow known deep links inside the authenticated dashboard shell.
-    if (isAllowedDashboardPath(u.pathname)) {
+    // Allow known deep links inside the authenticated workbench shell.
+    if (isAllowedWorkbenchPath(u.pathname)) {
       return `${u.pathname}${u.search}${u.hash}`;
     }
   } catch (err) {
     logSwallowed("url.normalizeDaaReturnTo", err);
   }
 
-  return DEFAULT_DASHBOARD_RETURN_TO_;
+  return DEFAULT_WORKBENCH_RETURN_TO;
 }
 
 /**
@@ -68,10 +68,10 @@ export function normalizeDaaReturnTo(raw: unknown): string {
 export function appendNoticeParam(path: string, notice: string): string {
   const p = String(path || "").trim();
   const n = String(notice || "").trim();
-  if (!p) return DEFAULT_DASHBOARD_RETURN_TO_;
+  if (!p) return DEFAULT_WORKBENCH_RETURN_TO;
 
   // Use a dummy origin so URL can parse relative paths in Node + browsers.
-  const u = new URL(p, DUMMY_ORIGIN_);
+  const u = new URL(p, DAA_URL_DUMMY_ORIGIN);
   if (n) u.searchParams.set("notice", n);
 
   return `${u.pathname}${u.search}${u.hash}`;

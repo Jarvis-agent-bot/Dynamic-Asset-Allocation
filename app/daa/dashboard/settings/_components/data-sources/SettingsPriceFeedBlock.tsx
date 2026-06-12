@@ -5,7 +5,6 @@ import {
   FieldLabel,
   NumberInput,
   SubsectionCard,
-  settingsGridCols2Style,
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
@@ -20,7 +19,7 @@ export function SettingsPriceFeedBlock(props: {
       title="行情与缓存"
       description="决定行情来源、刷新频率，以及本地缓存多久算新鲜、多久还能兜底服务。"
     >
-      <div style={settingsGridCols2Style}>
+      <div className="grid gap-4 md:grid-cols-2">
         <CheckboxRow
           checked={config.dataSources.priceFeed.enabled}
           onChange={(value) =>

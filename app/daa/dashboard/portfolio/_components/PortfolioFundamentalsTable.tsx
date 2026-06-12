@@ -58,9 +58,9 @@ function formatEps(value: number | null, currency: string): string {
 
 function formatAsOf(iso: string | null): string {
   if (!iso) return "暂无数据";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "暂无数据";
-  return d.toLocaleDateString(NUMBER_LOCALE, { month: "2-digit", day: "2-digit" });
+  const asOfDate = new Date(iso);
+  if (Number.isNaN(asOfDate.getTime())) return "暂无数据";
+  return asOfDate.toLocaleDateString(NUMBER_LOCALE, { month: "2-digit", day: "2-digit" });
 }
 
 function peTone(pe: number | null): string {
@@ -95,15 +95,15 @@ export function PortfolioFundamentalsTable() {
     else setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/daa/portfolio/fundamentals", { cache: "no-store" });
-      const json = (await res.json()) as ApiResponse;
-      if (!res.ok || !json.ok) {
-        throw new Error(json.error || `HTTP ${res.status}`);
+      const fundamentalsResponse = await fetch("/api/daa/portfolio/fundamentals", { cache: "no-store" });
+      const json = (await fundamentalsResponse.json()) as ApiResponse;
+      if (!fundamentalsResponse.ok || !json.ok) {
+        throw new Error(json.error || `HTTP ${fundamentalsResponse.status}`);
       }
       setData(json.data?.items ?? []);
       setAsOf(json.data?.asOf ?? null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "加载失败");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -115,16 +115,16 @@ export function PortfolioFundamentalsTable() {
   }, [load]);
 
   const sortedRows = useMemo(() => {
-    const withData = data.filter((r) => r.hasData);
-    const withoutData = data.filter((r) => !r.hasData);
+    const rowsWithData = data.filter((row) => row.hasData);
+    const rowsWithoutData = data.filter((row) => !row.hasData);
     return [
-      ...withData.sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)),
-      ...withoutData,
+      ...rowsWithData.sort((leftRow, rightRow) => (rightRow.marketCap ?? 0) - (leftRow.marketCap ?? 0)),
+      ...rowsWithoutData,
     ];
   }, [data]);
 
   return (
-    <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)]">
+    <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
         <div className="flex items-center gap-2">
           <TableProperties className="h-4 w-4 text-[var(--primary)]" />
@@ -143,22 +143,22 @@ export function PortfolioFundamentalsTable() {
       </header>
 
       {loading ? (
-        <div className="flex items-center gap-2 px-4 py-8 text-sm text-[var(--muted)]">
+        <div className="flex items-center gap-2 px-4 py-3 text-sm text-[var(--muted)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           加载基本面…
         </div>
       ) : null}
 
       {error ? (
-        <div className="m-4 flex items-center gap-2 rounded-[10px] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2 text-sm text-[var(--amber)]">
+        <div className="m-4 flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2 text-sm text-[var(--amber)]">
           <AlertCircle className="h-4 w-4" />
           {error}
         </div>
       ) : null}
 
       {!loading && !error && sortedRows.length === 0 ? (
-        <div className="m-4 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-8 text-center text-sm text-[var(--muted)]">
-          暂无持仓，基本面数据待 cron_fundamentals_refresh 写入后展示
+        <div className="m-4 rounded-[var(--radius-sm)] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3.5 py-3 text-sm text-[var(--muted)]">
+          暂无持仓。基本面数据会在下次数据刷新后展示。
         </div>
       ) : null}
 
@@ -212,7 +212,7 @@ export function PortfolioFundamentalsTable() {
             </tbody>
           </table>
           <div className="border-t border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-[11px] text-[var(--faint)]">
-            数据来源 Yahoo Finance（quoteSummary）· 此处现金流字段为 Yahoo `financialData.freeCashflow` 口径，更接近杠杆自由现金流；ETF / 商品 / 加密无个股基本面
+            数据来源 Yahoo Finance · 现金流采用 freeCashflow 口径；ETF / 商品 / 加密无个股基本面
           </div>
         </div>
       ) : null}

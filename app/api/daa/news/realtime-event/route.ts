@@ -4,7 +4,7 @@
  * 接收 Alpaca WS daemon 转发的实时新闻事件。
  * - 立即写入 daa_news_item_snapshot_v1（所有 mentioned symbols）
  * - 若事件涉及持仓/watchlist symbol，同步调用 LLM 分析 → 写 signal → 命中 majorEvent 时即时 TG push
- * - 不命中持仓的新闻仅存档，由 Agent cycle 按需读取
+ * - 不命中持仓的新闻仅存档，由投资助理复核循环按需读取
  *
  * 需要 DAA_CRON_TOKEN 认证。
  */

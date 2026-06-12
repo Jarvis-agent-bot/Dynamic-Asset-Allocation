@@ -8,19 +8,19 @@ import type { DaaChatPendingAction } from "./chatTypes";
 export function buildAssistantHelpText(): string {
   return [
     "你可以直接这样问我：",
-    "1. 大脑状态 / 你现在能做什么 / 当前接入什么模型",
-    "2. 切到顾问模式 / 切到操作员模式 / 切到自动驾驶模式",
+    "1. 投资助理状态 / 你现在能做什么 / 当前接入什么模型",
+    "2. 切到仅建议 / 切到手动复核 / 切到自动复核",
     "3. 组合状态 / 风险状态 / 市场状态 / 最近一次调仓",
-    "4. 运行一轮 Agent 调查 / 初始化论点 / 查看 Agent 日报",
+    "4. 运行一轮投资复核 / 建立初始投资判断 / 查看复核简报",
     "5. 生成调仓建议 / 执行调仓",
     "6. 买入 QQQ 10股 / 卖出 AAPL 5股（本地模拟）",
-    "7. 活跃论点 / Agent 日报 / 论点复核",
+    "7. 活跃投资判断 / 复核简报 / 投资判断复核",
     "8. 执行类命令会先进入待确认，回复“确认”才真正执行",
     "9. 如果要放弃待确认动作，直接回复“取消”",
   ].join("\n");
 }
 
-function formatPortfolioStatus(readModel: DaaAgentToolContext["readModel"]): string {
+function formatPortfolioSnapshot(readModel: DaaAgentToolContext["readModel"]): string {
   const allocation = readModel.allocationSummary;
   const topHoldings = allocation.topHoldings
     .slice(0, 4)
@@ -109,7 +109,7 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
   }));
 
   handlers.set("portfolio_status", async () => ({
-    text: formatPortfolioStatus(input.readModel),
+    text: formatPortfolioSnapshot(input.readModel),
     intentKind: "portfolio_status",
     pendingAction: input.currentPendingAction,
   }));
@@ -132,14 +132,14 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
     pendingAction: input.currentPendingAction,
   }));
 
-  // ── Cognitive Agent 查询 ──
+  // ── 投资助理复核查询 ──
 
   handlers.set("thesis_status", async () => {
     try {
       const { getActiveTheses } = await import("@/src/daa/agent/store/thesisStore");
       const theses = await getActiveTheses();
       if (theses.length === 0) {
-        return { text: "Agent 尚未初始化论点。请先在 Today 页面点击「初始化论点」。", intentKind: "thesis_status", pendingAction: input.currentPendingAction };
+        return { text: "初始投资判断尚未建立。请先在 Today 页面点击「建立判断」。", intentKind: "thesis_status", pendingAction: input.currentPendingAction };
       }
       const convictionEmoji: Record<string, string> = { high: "🟢", medium: "🟡", low: "🔴", uncertain: "⚪" };
       const lines = theses.slice(0, 10).map(t => {
@@ -147,12 +147,12 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         return `${convictionEmoji[t.conviction] ?? "⚪"} ${t.title} (${t.conviction}) — ${t.assetKeys.join(",")} — ${daysSince}天前更新`;
       });
       return {
-        text: `当前 ${theses.length} 个活跃论点：\n${lines.join("\n")}`,
+        text: `当前 ${theses.length} 个活跃投资判断：\n${lines.join("\n")}`,
         intentKind: "thesis_status",
         pendingAction: input.currentPendingAction,
       };
     } catch {
-      return { text: "查询论点状态失败，请稍后重试。", intentKind: "thesis_status", pendingAction: input.currentPendingAction };
+      return { text: "查询投资判断状态失败，请稍后重试。", intentKind: "thesis_status", pendingAction: input.currentPendingAction };
     }
   });
 
@@ -161,13 +161,13 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
       const { getLatestRun } = await import("@/src/daa/agent/store/agentRunStore");
       const run = await getLatestRun();
       if (!run?.briefing) {
-        return { text: "暂无 Agent 日报。请先运行一次 Agent 调查。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
+        return { text: "暂无复核简报。请先运行一次投资复核。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
       }
-      const header = `Agent 日报 (${new Date(run.createdAt).toLocaleString("zh-CN")})\n`;
+      const header = `复核简报 (${new Date(run.createdAt).toLocaleString("zh-CN")})\n`;
       const body = formatBriefingForChat(run.briefing);
       return { text: `${header}\n${body}`, intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
     } catch {
-      return { text: "查询 Agent 日报失败，请稍后重试。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
+      return { text: "查询复核简报失败，请稍后重试。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
     }
   });
 

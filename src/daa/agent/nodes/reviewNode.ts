@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Review 节点（检查到期待复盘的 thesis）
+ * 投资助理复核工作流 — Review 节点（检查到期待复盘的 thesis）
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
@@ -48,7 +48,7 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
                 const firstPrice = series[0].close;
                 const lastPrice = series[series.length - 1].close;
                 const changePct = ((lastPrice - firstPrice) / firstPrice * 100).toFixed(1);
-                priceChangeText = `\n该资产在论点存续期间(${daysSinceCreation}天)内涨跌幅为 ${changePct}%（从 $${firstPrice.toFixed(2)} 到 $${lastPrice.toFixed(2)}）`;
+                priceChangeText = `\n该资产在投资判断存续期间(${daysSinceCreation}天)内涨跌幅为 ${changePct}%（从 $${firstPrice.toFixed(2)} 到 $${lastPrice.toFixed(2)}）`;
               }
             }
           } catch (e) {
@@ -117,9 +117,9 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
             assetKey: thread.assetKeys[0] ?? null,
             symbol: thread.assetKeys[0] ? (parseDaaAssetKey(thread.assetKeys[0])?.symbol ?? thread.assetKeys[0]) : null,
             summary: data.shouldInvalidate
-              ? "复盘判定论点失效"
+              ? "复盘判定投资判断失效"
               : data.shouldArchive
-                ? "复盘判定论点归档"
+                ? "复盘判定投资判断归档"
                 : "复盘判定继续观察",
             reasoning: data.lesson || data.actualOutcome,
             confidencePct: data.accuracyScore,

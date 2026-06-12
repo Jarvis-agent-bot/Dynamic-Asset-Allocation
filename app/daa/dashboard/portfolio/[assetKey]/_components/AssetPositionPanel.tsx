@@ -52,11 +52,11 @@ function targetAuditSourceLabel(source: TargetWeightAuditRecord["source"]): stri
   return {
     manual_asset_patch: "手动",
     asset_upsert: "资产新增",
-    agent_target_weight_pool: "Agent",
+    agent_target_weight_pool: "目标建议",
     rebalance_execution: "成交同步",
     target_allocation_apply: "批量应用",
     portfolio_template_apply: "模板",
-    strategy_lab_apply: "策略实验室",
+    strategy_lab_apply: "策略测试台",
     candidate_assets_replace: "候选替换",
     system: "系统",
   }[source] || "系统";
@@ -89,10 +89,10 @@ export function AssetPositionPanel({
     : "significant";
 
   const gapColor = {
-    onTarget: "text-emerald-600",
-    slight: "text-slate-500",
-    moderate: "text-amber-600",
-    significant: "text-red-600",
+    onTarget: "text-[var(--success)]",
+    slight: "text-[var(--muted)]",
+    moderate: "text-[var(--amber)]",
+    significant: "text-[var(--danger)]",
   }[gapState];
 
   const gapLabel = {
@@ -116,7 +116,7 @@ export function AssetPositionPanel({
   const quickTargets = useMemo(() => {
     const base = [0, 2, 5, 10];
     if (targetPct > 10) base.push(Number(targetPct.toFixed(2)));
-    return [...new Set(base)].sort((a, b) => a - b);
+    return [...new Set(base)].sort((leftTargetPct, rightTargetPct) => leftTargetPct - rightTargetPct);
   }, [targetPct]);
 
   async function handleSubmit() {
@@ -125,8 +125,8 @@ export function AssetPositionPanel({
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-      <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2.5">
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]">
+      <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2.5">
         <Target className="h-4 w-4 text-[var(--primary)]" />
         <h3 className="text-sm font-semibold text-[var(--text)]">持仓与目标</h3>
       </div>
@@ -140,19 +140,12 @@ export function AssetPositionPanel({
               {actualPct.toFixed(2)}%
             </span>
           </div>
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-[var(--elevated)]">
-            <div
-              className="absolute inset-y-0 left-0 bg-[var(--primary)]"
-              style={{ width: `${Math.min(100, Math.max(0, actualPct))}%` }}
-            />
-            {hasTarget && (
-              <div
-                className="absolute inset-y-[-3px] w-px bg-[var(--text)]"
-                style={{ left: `${Math.min(100, Math.max(0, targetPct))}%` }}
-                title={`目标权重 ${targetPct.toFixed(2)}%`}
-              />
-            )}
-          </div>
+          <progress
+            aria-label="当前持仓权重"
+            className="block h-2 w-full appearance-none overflow-hidden rounded-[var(--radius-sm)] bg-[var(--elevated)] accent-[var(--primary)] [&::-moz-progress-bar]:bg-[var(--primary)] [&::-webkit-progress-bar]:bg-[var(--elevated)] [&::-webkit-progress-value]:bg-[var(--primary)]"
+            max={100}
+            value={Math.min(100, Math.max(0, actualPct))}
+          />
           <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--faint)]">
             <span>目标 {targetPct.toFixed(2)}%</span>
             <span className={cn("flex items-center gap-1 font-medium", gapColor)}>
@@ -162,29 +155,29 @@ export function AssetPositionPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+        <div className="grid overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] sm:grid-cols-2">
+          <div className="min-w-0 border-b border-[var(--border)] px-2.5 py-2 sm:border-r">
             <div className="text-[10px] text-[var(--muted)]">市值</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-xs font-semibold text-[var(--text)]">
               {formatCurrency(row.valuationBase ?? 0, baseCurrency)}
             </div>
           </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+          <div className="min-w-0 border-b border-[var(--border)] px-2.5 py-2">
             <div className="text-[10px] text-[var(--muted)]">最新价</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-xs font-semibold text-[var(--text)]">
               {formatCurrency(row.lastPrice, row.currency)}
             </div>
           </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+          <div className="min-w-0 border-b border-[var(--border)] px-2.5 py-2 sm:border-b-0 sm:border-r">
             <div className="text-[10px] text-[var(--muted)]">更新时间</div>
             <div className="mt-1 truncate font-[var(--font-mono)] text-xs font-semibold text-[var(--text)]">
               {formatDateTime(row.priceUpdatedAt)}
             </div>
           </div>
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+          <div className="min-w-0 px-2.5 py-2">
             <div className="text-[10px] text-[var(--muted)]">价格状态</div>
             <div className="mt-1 flex items-center gap-1.5">
-              <span className={cn("inline-flex rounded-[6px] border px-1.5 py-0.5 font-[var(--font-mono)] text-[10px] font-semibold", priceStatus.className)}>
+              <span className={cn("inline-flex rounded-[var(--radius-sm)] border px-1.5 py-0.5 font-[var(--font-mono)] text-[10px] font-semibold", priceStatus.className)}>
                 {priceStatus.label}
               </span>
               <span className="font-[var(--font-mono)] text-[10px] text-[var(--faint)]">{formatPriceAge(row.priceAgeSec)}</span>
@@ -192,7 +185,7 @@ export function AssetPositionPanel({
           </div>
         </div>
 
-        <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px]">
+        <div className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px]">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[var(--muted)]">数据源</span>
             <span className="truncate text-right font-[var(--font-mono)] text-[var(--text)]">{row.priceSource || "--"}</span>
@@ -200,28 +193,28 @@ export function AssetPositionPanel({
         </div>
 
         {targetZeroWithHolding ? (
-          <div className="rounded-[8px] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2 text-[11px] leading-5 text-[var(--amber)]">
-            当前仍有持仓，但目标权重为 0。系统会把它视为减仓候选；若要保留 SGOV，请手动设置目标权重。
+          <div className="rounded-[var(--radius-sm)] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3 py-2 text-[11px] leading-5 text-[var(--amber)]">
+            当前仍有持仓，但目标权重为 0。复核时优先确认是否减仓；若要保留，请手动设置目标权重。
           </div>
         ) : !hasTarget ? (
-          <div className="rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--muted)]">
-            尚未设置目标权重。保存后会写入目标配置，并参与调仓偏离计算。
+          <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--muted)]">
+            尚未设置目标权重。保存后纳入调仓偏离复核。
           </div>
         ) : null}
 
         {onUpdateTargetWeight ? (
-          <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
                 <div className="text-xs font-semibold text-[var(--text)]">手动目标权重</div>
                 <div className="mt-0.5 text-[11px] leading-4 text-[var(--muted)]">
-                  直接覆盖该资产 targetWeightHint，不必等待 AI 输出。
+                  直接覆盖该资产目标权重，并写入下次复核依据。
                 </div>
               </div>
               <span className="font-[var(--font-mono)] text-[11px] text-[var(--faint)]">0-100%</span>
             </div>
             <div className="flex gap-2">
-              <div className="flex h-10 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--card)] px-3 focus-within:border-[var(--primary)] focus-within:ring-2 focus-within:ring-[var(--primary-bg)]">
+              <div className="flex h-10 min-w-0 flex-1 items-center rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--card)] px-3 focus-within:border-[var(--primary)] focus-within:ring-2 focus-within:ring-[var(--primary-bg)]">
                 <input
                   type="number"
                   min="0"
@@ -242,7 +235,7 @@ export function AssetPositionPanel({
                 onClick={() => void handleSubmit()}
                 disabled={!dirty || updating}
                 className={cn(
-                  "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[8px] border px-3 text-xs font-semibold transition-colors",
+                  "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 text-xs font-semibold transition-colors",
                   dirty && !updating
                     ? "border-[var(--primary-border)] bg-[var(--primary)] text-white hover:opacity-90"
                     : "cursor-not-allowed border-[var(--border)] bg-[var(--elevated)] text-[var(--faint)]",
@@ -258,7 +251,7 @@ export function AssetPositionPanel({
                   key={value}
                   type="button"
                   onClick={() => setDraft(value.toFixed(2))}
-                  className="h-7 rounded-[7px] border border-[var(--border)] bg-[var(--card)] px-2 font-[var(--font-mono)] text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--primary-border)] hover:text-[var(--primary)]"
+                  className="h-7 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] px-2 font-[var(--font-mono)] text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--primary-border)] hover:text-[var(--primary)]"
                 >
                   {value.toFixed(value % 1 === 0 ? 0 : 2)}%
                 </button>
@@ -282,7 +275,7 @@ export function AssetPositionPanel({
               {targetWeightAudits.slice(0, 5).map((audit) => (
                 <div key={audit.id} className="py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="rounded-[6px] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
+                    <span className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
                       {targetAuditSourceLabel(audit.source)}
                     </span>
                     <span className="font-[var(--font-mono)] text-[10px] text-[var(--faint)]">
@@ -301,8 +294,8 @@ export function AssetPositionPanel({
               ))}
             </div>
           ) : (
-            <div className="rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[11px] leading-5 text-[var(--muted)]">
-              暂无历史记录。之后手动、Agent、策略实验室或模板修改目标权重时，会在这里留下复盘线索。
+            <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[11px] leading-5 text-[var(--muted)]">
+              暂无目标权重记录。之后手动、目标建议、策略测试台或模板调整时，会在这里形成复核线索。
             </div>
           )}
         </div>

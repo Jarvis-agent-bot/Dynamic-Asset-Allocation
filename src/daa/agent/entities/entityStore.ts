@@ -2,7 +2,7 @@
  * Entity Store — 实体图持久化层
  *
  * 表：daa_agent_entity + daa_memory_entity_link + daa_thesis_entity_link
- * 用于跨资产/跨论点的因果关联查询，和 pgvector 语义召回互补。
+ * 用于跨资产/跨投资判断的因果关联查询，和 pgvector 语义召回互补。
  */
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
@@ -165,7 +165,7 @@ export async function getMemoriesByEntity(
 }
 
 /**
- * 获取指定实体关联的论点。
+ * 获取指定实体关联的投资判断。
  */
 export async function getThesesByEntity(
   kind: EntityKind,

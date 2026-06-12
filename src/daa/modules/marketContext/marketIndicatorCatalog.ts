@@ -5,7 +5,7 @@ import type {
   DaaMarketIndicatorScope,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 
-export const MARKET_SCOPE_LABEL_ZH_: Record<DaaMarketIndicatorScope, string> = {
+export const MARKET_SCOPE_LABEL_ZH: Record<DaaMarketIndicatorScope, string> = {
   us_equity: "美股",
   hk_cn_equity: "港股 / 中概",
   crypto: "加密市场",
@@ -22,7 +22,7 @@ export type DaaMarketIndicatorMeaning = {
   usage: string;
 };
 
-export const MARKET_INDICATOR_KEYS_: DaaMarketIndicatorKey[] = [
+export const MARKET_INDICATOR_KEYS: DaaMarketIndicatorKey[] = [
   "vix",
   "qqq_spy_ratio",
   "fxi_volatility",
@@ -40,7 +40,7 @@ export const MARKET_INDICATOR_KEYS_: DaaMarketIndicatorKey[] = [
   "fed_balance_sheet",
 ];
 
-export const MARKET_INDICATOR_CONFIG_KEYS_: DaaMarketIndicatorConfigKey[] = [
+export const MARKET_INDICATOR_CONFIG_KEYS: DaaMarketIndicatorConfigKey[] = [
   "vix",
   "qqqSpyRatio",
   "fxiVolatility",
@@ -58,7 +58,7 @@ export const MARKET_INDICATOR_CONFIG_KEYS_: DaaMarketIndicatorConfigKey[] = [
   "fedBalanceSheet",
 ];
 
-export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY_: Record<DaaMarketIndicatorConfigKey, DaaMarketIndicatorKey> = {
+export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY: Record<DaaMarketIndicatorConfigKey, DaaMarketIndicatorKey> = {
   vix: "vix",
   qqqSpyRatio: "qqq_spy_ratio",
   fxiVolatility: "fxi_volatility",
@@ -76,7 +76,7 @@ export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY_: Record<DaaMarketIndicatorConfi
   fedBalanceSheet: "fed_balance_sheet",
 };
 
-export const MARKET_INDICATOR_CONFIG_KEY_BY_KEY_: Record<DaaMarketIndicatorKey, DaaMarketIndicatorConfigKey> = {
+export const MARKET_INDICATOR_CONFIG_KEY_BY_KEY: Record<DaaMarketIndicatorKey, DaaMarketIndicatorConfigKey> = {
   vix: "vix",
   qqq_spy_ratio: "qqqSpyRatio",
   fxi_volatility: "fxiVolatility",
@@ -94,7 +94,7 @@ export const MARKET_INDICATOR_CONFIG_KEY_BY_KEY_: Record<DaaMarketIndicatorKey, 
   fed_balance_sheet: "fedBalanceSheet",
 };
 
-export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
+export const MARKET_INDICATOR_META_CATALOG: Record<DaaMarketIndicatorKey, {
   label: string;
   category: DaaMarketIndicatorCategory;
   scope: DaaMarketIndicatorScope;
@@ -329,7 +329,7 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
   },
 };
 
-export const MARKET_SCOPE_KEY_ORDER_: DaaMarketIndicatorScope[] = [
+export const MARKET_SCOPE_KEY_ORDER: DaaMarketIndicatorScope[] = [
   "us_equity",
   "hk_cn_equity",
   "crypto",
@@ -340,10 +340,10 @@ export const MARKET_SCOPE_KEY_ORDER_: DaaMarketIndicatorScope[] = [
 
 export function getMarketIndicatorRefreshSymbols(config: DaaMarketIndicatorsConfig): string[] {
   const out = new Set<string>();
-  for (const key of MARKET_INDICATOR_KEYS_) {
-    const configKey = MARKET_INDICATOR_CONFIG_KEY_BY_KEY_[key];
+  for (const key of MARKET_INDICATOR_KEYS) {
+    const configKey = MARKET_INDICATOR_CONFIG_KEY_BY_KEY[key];
     if (!config.indicators[configKey]?.enabled) continue;
-    for (const symbol of MARKET_INDICATOR_META_CATALOG_[key].fixedSymbols) {
+    for (const symbol of MARKET_INDICATOR_META_CATALOG[key].fixedSymbols) {
       out.add(symbol);
     }
   }

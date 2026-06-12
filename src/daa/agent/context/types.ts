@@ -11,12 +11,12 @@
 
 export type ContextLayerName =
   | "system"        // 角色设定 + 输出格式
-  | "thesis"        // 当前论点详情
+  | "thesis"        // 当前投资判断详情
   | "portfolio"     // 相关持仓
   | "memory"        // pgvector 检索的历史记忆
-  | "trade_feedback" // 交易反馈证据
+  | "trade_feedback" // 交易反馈依据
   | "tools"         // 可用工具列表
-  | "strategy"      // 匹配的调查策略（Phase 2）
+  | "strategy"      // 匹配的复核策略（Phase 2）
   | "tool_results"  // ReAct 循环中的工具结果
   | "rules"         // 操作规则 + 输出格式
 

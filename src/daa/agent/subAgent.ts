@@ -1,5 +1,5 @@
 /**
- * Sub-Agent — 隔离的 ReAct 调查循环
+ * Sub-Agent — 隔离的 ReAct 复核循环
  *
  * 借鉴 Hermes Agent 的子 agent 委派模式：
  * - 父 agent 处理 investigationQueue[0]，子 agent 并行处理 [1..N]
@@ -62,7 +62,7 @@ const MAX_DEPTH = 2;
 // ── 主函数 ──
 
 /**
- * 运行一个隔离的子 agent 调查。
+ * 运行一个隔离的子 agent 复核。
  *
  * - 独立 ContextManager（受限预算）
  * - 受限工具集（仅 allowedCategories）
@@ -108,12 +108,12 @@ export async function runSubAgentInvestigation(
       .join(", ") || "无相关持仓";
 
     const cm = new ContextManager();
-    cm.addLayer("system", "你是一个投资研究子分析师。你的任务是快速调查一个特定论点并给出分析结论。");
-    cm.addLayer("thesis", `论点: ${cfg.thread.title}\n判断: ${cfg.thread.thesisText}\n信念: ${cfg.thread.conviction}\n资产: ${cfg.thread.assetKeys.join(", ")}`);
+    cm.addLayer("system", "你是一个投资研究子分析师。你的任务是快速复核一个特定投资判断并给出分析结论。");
+    cm.addLayer("thesis", `投资判断: ${cfg.thread.title}\n判断: ${cfg.thread.thesisText}\n信念: ${cfg.thread.conviction}\n资产: ${cfg.thread.assetKeys.join(", ")}`);
     cm.addLayer("portfolio", portfolioText);
     cm.addLayer("memory", memoryText, { wrapTag: "memory-context" });
     cm.addLayer("tools", toolDefsText);
-    cm.addLayer("rules", `请使用工具收集数据，然后给出结论。最多 ${cfg.maxRounds} 轮工具调用。输出严格 JSON。
+    cm.addLayer("rules", `请使用工具收集复核依据，然后给出结论。最多 ${cfg.maxRounds} 轮工具调用。输出严格 JSON。
 
 选择工具: {"action":"tool_calls","tool_calls":[{"name":"...","params":{}}],"reasoning":"..."}
 最终结论: {"action":"result","result":{"thesisChanged":true/false,"updatedThesis":"...","newConviction":"high/medium/low/uncertain","evidenceType":"supporting/contradicting/neutral","evidenceSummary":"...","surprises":[],"invalidationConditions":"...","suggestedReviewDays":14,"nextActions":["..."]}}`);
@@ -177,7 +177,7 @@ export async function runSubAgentInvestigation(
     }
 
     if (!investigateOutput && toolsCalled.length > 0) {
-      cm.addToolResultRound("所有工具轮次已结束。请立即基于已收集的证据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。");
+      cm.addToolResultRound("所有工具轮次已结束。请立即基于已收集的依据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。");
       const forceContext = cm.build(cfg.tokenBudget!);
       const { data: forceData, tokensUsed: forceTokens } = await callDeepSeekJson<ReactAction>(
         forceContext.prompt,

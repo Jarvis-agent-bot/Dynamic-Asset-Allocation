@@ -10,9 +10,9 @@ export {
   findChatMessageByExternalMessageId,
 } from "./chatMessageRepo";
 export {
-  getChatSessionMemory,
-  saveChatSessionMemory,
-} from "./chatMemoryRepo";
+  getChatSessionState,
+  saveChatSessionState,
+} from "./chatSessionStateRepo";
 export {
   appendChatToolCall,
 } from "./chatToolCallRepo";

@@ -1,5 +1,5 @@
 /**
- * Strategy Store — 调查策略的 CRUD 和匹配
+ * Strategy Store — 复核策略的 CRUD 和匹配
  *
  * 对应 DB 表 daa_agent_strategies（已在 runtimeMigrations 中创建）。
  */

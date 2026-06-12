@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTradesReadModel } from "@/src/daa/modules/read/readApi";
 import type { TradesReadModel } from "@/src/daa/modules/read/readModels";
 import type { TradeTicketStatus } from "@/src/daa/modules/trade/tradeTypes";
-import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
+import { useWorkbenchAutoRefresh } from "./useWorkbenchAutoRefresh";
 
 export type TradeTab = "cycles" | "orders";
 
@@ -58,7 +58,7 @@ export function useTradesModel(input: {
 } = {}) {
   const tradeLimit = input.tradeLimit;
   const reportLimit = input.reportLimit;
-  const [data, setData] = useState<TradesReadModel | null>(null);
+  const [tradesModel, setTradesModel] = useState<TradesReadModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -91,17 +91,17 @@ export function useTradesModel(input: {
     else setLoading(true);
     setError("");
     try {
-      const next = await getTradesReadModel({
+      const nextTradesModel = await getTradesReadModel({
         tradeLimit,
         reportLimit,
         ...filters,
       });
       // 丢弃过期请求：快速切换筛选/刷新时，先发后到的旧响应不得覆盖最新结果。
       if (reqId !== requestIdRef.current) return;
-      setData(next);
-    } catch (e) {
+      setTradesModel(nextTradesModel);
+    } catch (loadError) {
       if (reqId !== requestIdRef.current) return;
-      setError(e instanceof Error ? e.message : "加载交易记录失败");
+      setError(loadError instanceof Error ? loadError.message : "加载交易记录失败");
     } finally {
       if (reqId === requestIdRef.current) {
         if (silent) setRefreshing(false);
@@ -110,21 +110,27 @@ export function useTradesModel(input: {
     }
   }, [reportLimit, tradeLimit, filters]);
 
-  useDashboardAutoRefresh(load);
+  useWorkbenchAutoRefresh(load);
 
   const cycles = useMemo(
-    () => [...(data?.records.cycles || [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
-    [data?.records.cycles],
+    () => [...(tradesModel?.records.cycles || [])].sort(
+      (leftCycle, rightCycle) => Date.parse(rightCycle.createdAt) - Date.parse(leftCycle.createdAt),
+    ),
+    [tradesModel?.records.cycles],
   );
-  const totalOrderCount = data?.records.orders?.length ?? 0;
+  const totalOrderCount = tradesModel?.records.orders?.length ?? 0;
   const orders = useMemo(
-    () => [...(data?.records.orders || [])].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, ORDERS_DISPLAY_CAP),
-    [data?.records.orders],
+    () => [...(tradesModel?.records.orders || [])].sort(
+      (leftOrder, rightOrder) => Date.parse(rightOrder.updatedAt) - Date.parse(leftOrder.updatedAt),
+    ).slice(0, ORDERS_DISPLAY_CAP),
+    [tradesModel?.records.orders],
   );
   const ordersTruncated = totalOrderCount > ORDERS_DISPLAY_CAP;
   const sortedReports = useMemo(
-    () => [...(data?.reports || [])].sort((a, b) => Date.parse(b.reportCreatedAt) - Date.parse(a.reportCreatedAt)),
-    [data?.reports],
+    () => [...(tradesModel?.reports || [])].sort(
+      (leftReport, rightReport) => Date.parse(rightReport.reportCreatedAt) - Date.parse(leftReport.reportCreatedAt),
+    ),
+    [tradesModel?.reports],
   );
 
   const completedCycleCount = cycles.filter((cycle) => cycle.status === "completed").length;
@@ -144,10 +150,11 @@ export function useTradesModel(input: {
   ]);
 
   return {
-    baseCurrency: data?.baseCurrency ?? "USD",
-    records: data?.records ?? { cycles: [], orders: [] },
-    reports: data?.reports ?? [],
-    ledgerMeta: data?.ledgerMeta ?? {
+    tradesModel,
+    baseCurrency: tradesModel?.baseCurrency ?? "USD",
+    records: tradesModel?.records ?? { cycles: [], orders: [] },
+    reports: tradesModel?.reports ?? [],
+    ledgerMeta: tradesModel?.ledgerMeta ?? {
       ledgerStartTs: null,
       openingBalance: 0,
       archivedCycleCount: 0,

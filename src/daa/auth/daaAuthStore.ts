@@ -409,8 +409,8 @@ export async function hasAnyDaaAuthAccounts(): Promise<boolean> {
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
-const DAA_DEV_DEFAULT_USERNAME_ = "admin";
-const DAA_DEV_DEFAULT_PASSWORD_ = "admin123";
+const DAA_DEV_DEFAULT_USERNAME = "admin";
+const DAA_DEV_DEFAULT_PASSWORD = "admin123";
 
 function isDevDefaultAccountEnabled(): boolean {
   if ((process.env.NODE_ENV || "").toLowerCase() === "production") return false;
@@ -426,8 +426,8 @@ export async function ensureDevDefaultDaaAuthAccount(): Promise<{ created: boole
 
   if (await hasAnyDaaAuthAccounts()) return { created: false, account: null };
 
-  const username = normalizeUsernameStrict(process.env.DAA_AUTH_DEV_DEFAULT_USERNAME || DAA_DEV_DEFAULT_USERNAME_);
-  const password = String(process.env.DAA_AUTH_DEV_DEFAULT_PASSWORD || DAA_DEV_DEFAULT_PASSWORD_);
+  const username = normalizeUsernameStrict(process.env.DAA_AUTH_DEV_DEFAULT_USERNAME || DAA_DEV_DEFAULT_USERNAME);
+  const password = String(process.env.DAA_AUTH_DEV_DEFAULT_PASSWORD || DAA_DEV_DEFAULT_PASSWORD);
 
   try {
     const account = await bootstrapCreateFirstDaaAuthAccount({
@@ -454,7 +454,7 @@ export async function bootstrapCreateFirstDaaAuthAccount(args: {
   const username = normalizeUsernameStrict(args.username);
   const passwordHash = hashPassword(resolvePasswordForStorage(args.password));
 
-  // First admin should always be able to administer the dashboard.
+  // First admin should always be able to administer the DAA workspace.
   const roles = uniqRoles(args.roles);
   if (!roles.includes("editor")) roles.unshift("editor");
 

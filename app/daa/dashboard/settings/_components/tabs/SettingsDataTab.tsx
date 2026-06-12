@@ -4,7 +4,7 @@ import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_compon
 import { SettingsSecretsSection } from "@/app/daa/dashboard/settings/_components/SettingsSecretsSection";
 import type { SettingsConfigSetter } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
-import type { StoreExternalRequestLogsResult } from "@/src/daa/modules/store/dashboardStoreApiClient";
+import type { StoreExternalRequestLogsResult } from "@/src/daa/modules/store/workbenchStoreApiClient";
 
 export type SettingsDataHealthAsset = {
   assetKey: string;

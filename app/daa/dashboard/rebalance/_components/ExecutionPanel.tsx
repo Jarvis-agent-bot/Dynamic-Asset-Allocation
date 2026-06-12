@@ -42,10 +42,10 @@ export function ExecutionPanel(props: {
   const hasSelected = props.selectedProposalCount > 0;
 
   return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className={props.compact ? "grid gap-4" : "grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start"}>
         <div className="space-y-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">执行面板</div>
+          <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">执行面板</div>
 
           {/* 周期状态 */}
           {cycle ? (
@@ -62,20 +62,20 @@ export function ExecutionPanel(props: {
           {/* 选中统计 */}
           {hasCycle && hasProposals ? (
             <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
                 <div className="text-[var(--muted)]">选中</div>
                 <div className="mt-1 font-[var(--font-mono)] text-[var(--text)]">
                   {props.selectedProposalCount} / {cycle?.proposals?.length ?? 0}
                 </div>
               </div>
-              <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
                 <div className="text-[var(--muted)]">金额</div>
                 <div className="mt-1 font-[var(--font-mono)] text-[var(--text)]">
                   {hasSelected ? formatCurrency(props.selectedProposalNotional, props.baseCurrency) : "未选择"}
                 </div>
               </div>
               {riskCheck ? (
-                <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
+                <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
                   <div className="mb-1 text-[var(--muted)]">风控</div>
                   <DaaSurfaceStatusPill tone={riskOverallTone(riskCheck.overallStatus)}>
                     {riskStatusLabel(riskCheck.overallStatus)}
@@ -91,8 +91,8 @@ export function ExecutionPanel(props: {
             if (top.length === 0) return null;
             const blocked = riskCheck?.overallStatus === "block";
             return (
-              <div className={`rounded-[10px] border px-3 py-2.5 ${blocked ? "border-red-500/22 bg-red-500/8" : "border-amber-400/22 bg-amber-500/8"}`}>
-                <div className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wider ${blocked ? "text-red-200" : "text-amber-200"}`}>
+              <div className={`rounded-[var(--radius-md)] border px-3 py-2.5 ${blocked ? "border-[var(--danger-border)] bg-[var(--danger-bg)]" : "border-[var(--amber-border)] bg-[var(--amber-bg)]"}`}>
+                <div className={`mb-1.5 text-[10px] font-semibold uppercase tracking-normal ${blocked ? "text-[var(--danger)]" : "text-[var(--amber)]"}`}>
                   {blocked ? "执行前阻断" : "执行前提示"} · {top.length}/{(riskCheck?.items?.length ?? 0)} 项
                 </div>
                 <ul className="space-y-1.5">
@@ -115,7 +115,7 @@ export function ExecutionPanel(props: {
           {!hasCycle ? (
             <DaaSurfaceActionButton
               tone="primary"
-              className="h-10 w-full justify-center rounded-[12px]"
+              className="h-10 w-full justify-center rounded-[var(--radius-sm)]"
               onClick={() => void props.onGenerateCycle()}
               disabled={props.busy}
             >
@@ -125,7 +125,7 @@ export function ExecutionPanel(props: {
           ) : props.isCurrentCycleTerminal ? (
             <DaaSurfaceActionButton
               tone="primary"
-              className="h-10 w-full justify-center rounded-[12px]"
+              className="h-10 w-full justify-center rounded-[var(--radius-sm)]"
               onClick={() => void props.onGenerateCycle()}
               disabled={props.busy}
             >
@@ -137,7 +137,7 @@ export function ExecutionPanel(props: {
               {hasSelected ? (
                 <DaaSurfaceActionButton
                   tone="success"
-                  className="h-10 w-full justify-center rounded-[12px]"
+                  className="h-10 w-full justify-center rounded-[var(--radius-sm)]"
                   onClick={() => props.onOpenExecuteDialog("selected")}
                   disabled={!props.canExecuteSelected || props.busy}
                 >
@@ -147,8 +147,8 @@ export function ExecutionPanel(props: {
 
               {props.canExecuteAll ? (
                 <DaaSurfaceActionButton
-                  tone="slate"
-                  className="h-9 w-full justify-center rounded-[10px] text-xs"
+                  tone="neutral"
+                  className="h-9 w-full justify-center rounded-[var(--radius-sm)] text-xs"
                   onClick={() => props.onOpenExecuteDialog("all")}
                   disabled={props.busy}
                 >
@@ -157,8 +157,8 @@ export function ExecutionPanel(props: {
               ) : null}
 
               <DaaSurfaceActionButton
-                tone="slate"
-                className="h-8 w-full justify-center rounded-[10px] text-xs"
+                tone="neutral"
+                className="h-8 w-full justify-center rounded-[var(--radius-sm)] text-xs"
                 onClick={props.onCancelCycle}
                 disabled={props.busy}
               >

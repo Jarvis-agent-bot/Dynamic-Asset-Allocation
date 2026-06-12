@@ -1,5 +1,4 @@
 import type {
-  CSSProperties,
   Dispatch,
   InputHTMLAttributes,
   ReactNode,
@@ -8,18 +7,19 @@ import type {
 } from "react";
 import { useId, useState } from "react";
 
+import { cn } from "@/lib/utils";
 import type { DaaMarketIndicatorConfigKey, DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
-export const SETTINGS_NAV_ITEMS_ = [
+export const SETTINGS_NAV_ITEMS = [
   { id: "strategy", label: "策略与风控" },
-  { id: "brain", label: "大脑" },
+  { id: "brain", label: "投资助理" },
   { id: "data", label: "数据与连接" },
   { id: "notification", label: "通知" },
 ] as const;
 
-export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS_)[number]["id"];
+export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS)[number]["id"];
 
-export const MARKET_INDICATOR_ITEMS_: Array<{
+export const MARKET_INDICATOR_ITEMS: Array<{
   key: DaaMarketIndicatorConfigKey;
   label: string;
   hint: string;
@@ -44,59 +44,24 @@ export const MARKET_INDICATOR_ITEMS_: Array<{
 
 export type SettingsConfigSetter = Dispatch<SetStateAction<DaaSystemConfig | null>>;
 
-export const settingsGridCols2Style: CSSProperties = {
-  display: "grid",
-  gap: 18,
-  gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-};
+const settingsControlClassName =
+  "w-full rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--elevated)] px-3 py-2 text-[13px] text-[var(--text)] outline-none transition-[border-color,box-shadow,background] placeholder:text-[var(--faint)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-bg)] disabled:cursor-not-allowed disabled:opacity-60";
 
-export const settingsGridCols3Style: CSSProperties = {
-  display: "grid",
-  gap: 16,
-  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-};
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: "9px 12px",
-  borderRadius: 10,
-  border: "1px solid var(--border-strong)",
-  background: "var(--elevated)",
-  color: "var(--text)",
-  fontSize: 13,
-  fontFamily: "var(--font-body)",
-  outline: "none",
-  boxSizing: "border-box",
-  transition: "border-color 0.15s, box-shadow 0.15s, background 0.15s",
-};
-
-const selectStyle: CSSProperties = {
-  ...inputStyle,
-  appearance: "none",
-  cursor: "pointer",
-};
+const settingsPresetButtonClassName =
+  "inline-flex items-center rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition-colors hover:border-[var(--primary)]/35 hover:bg-[var(--hover)] hover:text-[var(--text)]";
 
 export function FormInput(props: InputHTMLAttributes<HTMLInputElement>) {
   const generatedId = useId();
   const controlId = props.id ?? generatedId;
   const controlName = props.name ?? controlId;
+  const { className, ...inputProps } = props;
 
   return (
     <input
-      {...props}
+      {...inputProps}
       id={controlId}
       name={controlName}
-      style={inputStyle}
-      onFocus={(e) => {
-        e.currentTarget.style.borderColor = "var(--primary)";
-        e.currentTarget.style.boxShadow = "0 0 0 3px var(--primary-bg)";
-        props.onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        e.currentTarget.style.borderColor = "var(--border-strong)";
-        e.currentTarget.style.boxShadow = "none";
-        props.onBlur?.(e);
-      }}
+      className={cn(settingsControlClassName, className)}
     />
   );
 }
@@ -105,23 +70,14 @@ export function FormSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
   const generatedId = useId();
   const controlId = props.id ?? generatedId;
   const controlName = props.name ?? controlId;
+  const { className, ...selectProps } = props;
 
   return (
     <select
-      {...props}
+      {...selectProps}
       id={controlId}
       name={controlName}
-      style={selectStyle}
-      onFocus={(e) => {
-        e.currentTarget.style.borderColor = "var(--primary)";
-        e.currentTarget.style.boxShadow = "0 0 0 3px var(--primary-bg)";
-        props.onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        e.currentTarget.style.borderColor = "var(--border-strong)";
-        e.currentTarget.style.boxShadow = "none";
-        props.onBlur?.(e);
-      }}
+      className={cn(settingsControlClassName, "appearance-none cursor-pointer", className)}
     />
   );
 }
@@ -168,16 +124,7 @@ export function NumberInput(props: {
 
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 600,
-        color: "var(--muted)",
-        marginBottom: 8,
-        letterSpacing: "0.08em",
-        textTransform: "uppercase",
-      }}
-    >
+    <div className="mb-2 text-[11px] font-semibold uppercase tracking-normal text-[var(--muted)]">
       {children}
     </div>
   );
@@ -198,26 +145,19 @@ export function CheckboxRow({
 
   return (
     <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        cursor: disabled ? "not-allowed" : "pointer",
-        fontSize: 13,
-        color: disabled ? "var(--muted)" : "var(--text)",
-        userSelect: "none",
-        opacity: disabled ? 0.72 : 1,
-      }}
+      className={cn(
+        "flex items-center gap-2 select-none text-[13px]",
+        disabled ? "cursor-not-allowed text-[var(--muted)] opacity-70" : "cursor-pointer text-[var(--text)]",
+      )}
     >
       <input
         type="checkbox"
         id={generatedId}
         name={generatedId}
-        className="daa-checkbox"
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        style={{ accentColor: "var(--primary)" }}
+        className="h-3.5 w-3.5 rounded border-[var(--border-strong)] bg-transparent accent-[var(--primary)]"
       />
       {children}
     </label>
@@ -234,30 +174,16 @@ export function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <div
-      style={{
-        borderRadius: 18,
-        border: "1px solid var(--border)",
-        background: "linear-gradient(180deg, var(--surface), var(--card))",
-        overflow: "hidden",
-        boxShadow: "0 16px 34px rgba(15,23,42,0.08)",
-      }}
-    >
-      <div
-        style={{
-          padding: "16px 18px",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--elevated)",
-        }}
-      >
-        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", letterSpacing: "0.01em" }}>{title}</div>
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]">
+      <div className="border-b border-[var(--border)] bg-[var(--elevated)] px-4 py-3">
+        <div className="text-[15px] font-bold tracking-normal text-[var(--text)]">{title}</div>
         {description ? (
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 5, lineHeight: 1.7 }}>
+          <div className="mt-1 text-xs leading-6 text-[var(--muted)]">
             {description}
           </div>
         ) : null}
       </div>
-      <div style={{ padding: "18px" }}>{children}</div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }
@@ -273,34 +199,16 @@ export function SubsectionCard({
   children: ReactNode;
 }) {
   return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px solid var(--border)",
-        background: "linear-gradient(180deg, var(--surface), var(--surface))",
-        padding: 16,
-      }}
-    >
-      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", letterSpacing: "0.01em" }}>{title}</div>
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3.5">
+      <div className="text-[13px] font-bold tracking-normal text-[var(--text)]">{title}</div>
       {description ? (
-        <div style={{ marginTop: 5, fontSize: 12, color: "var(--muted)", lineHeight: 1.75 }}>
+        <div className="mt-1 text-xs leading-6 text-[var(--muted)]">
           {description}
         </div>
       ) : null}
-      <div style={{ marginTop: 14 }}>{children}</div>
+      <div className="mt-3.5">{children}</div>
     </div>
   );
 }
 
-export const settingsPresetButtonStyle: CSSProperties = {
-  padding: "7px 12px",
-  borderRadius: 999,
-  fontSize: 12,
-  cursor: "pointer",
-  border: "1px solid var(--border-strong)",
-  background: "var(--surface)",
-  color: "var(--muted)",
-  fontFamily: "var(--font-body)",
-  transition: "all 0.15s",
-  fontWeight: 600,
-};
+export { settingsPresetButtonClassName };

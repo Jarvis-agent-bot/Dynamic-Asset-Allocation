@@ -9,10 +9,10 @@ import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipL
 import { cn } from "@/lib/utils";
 
 const COLORS = {
-  primary: "hsl(199 89% 60%)",
-  muted: "hsl(215 16% 57%)",
-  grid: "hsla(215,16%,57%,0.12)",
-  band: "hsla(199,89%,60%,0.08)",
+  primary: "var(--primary)",
+  primaryBg: "var(--primary-bg)",
+  muted: "var(--faint)",
+  grid: "var(--border)",
 };
 
 const TIME_RANGES = [
@@ -38,11 +38,11 @@ export function IndicatorChart(props: {
   const [range, setRange] = useState<RangeKey>("6M");
 
   const data = useMemo(() => {
-    const days = TIME_RANGES.find((r) => r.key === range)?.days ?? 180;
+    const days = TIME_RANGES.find((timeRange) => timeRange.key === range)?.days ?? 180;
     const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
     return props.series
-      .filter((p) => p.date >= cutoff)
-      .map((p) => ({ label: p.date.slice(5), date: p.date, value: p.value }));
+      .filter((point) => point.date >= cutoff)
+      .map((point) => ({ label: point.date.slice(5), date: point.date, value: point.value }));
   }, [props.series, range]);
 
   const changePct = useMemo(() => {
@@ -53,7 +53,11 @@ export function IndicatorChart(props: {
   }, [data]);
 
   if (data.length < 2) {
-    return <div className="flex h-[300px] items-center justify-center text-sm text-[var(--muted)]">数据不足</div>;
+    return (
+      <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border-strong)] px-3 py-2 text-xs text-[var(--muted)]">
+        数据不足，暂不绘制指标曲线。
+      </div>
+    );
   }
 
   const tooltipFormatter: Formatter<ValueType, NameType> = (value) => [`${toTooltipNumber(value).toFixed(4)} ${props.unit}`, props.label];
@@ -62,22 +66,22 @@ export function IndicatorChart(props: {
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex gap-1">
-          {TIME_RANGES.map((r) => (
+          {TIME_RANGES.map((timeRange) => (
             <button
-              key={r.key}
+              key={timeRange.key}
               type="button"
-              onClick={() => setRange(r.key)}
+              onClick={() => setRange(timeRange.key)}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                range === r.key ? "bg-[hsla(199,89%,60%,0.16)] text-[hsl(199,89%,60%)]" : "text-[var(--muted)] hover:text-[var(--text)]",
+                "rounded-[var(--radius-sm)] px-2.5 py-1 text-xs font-medium transition-colors",
+                range === timeRange.key ? "bg-[var(--primary-bg)] text-[var(--primary)]" : "text-[var(--muted)] hover:text-[var(--text)]",
               )}
             >
-              {r.label}
+              {timeRange.label}
             </button>
           ))}
         </div>
         {changePct != null ? (
-          <span className={cn("text-xs font-medium", changePct >= 0 ? "text-[var(--success)]" : "text-red-400")}>
+          <span className={cn("text-xs font-medium", changePct >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]")}>
             {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
           </span>
         ) : null}
@@ -101,7 +105,7 @@ export function IndicatorChart(props: {
               itemStyle={daaChartTooltipItemStyle}
               labelStyle={daaChartTooltipLabelStyle}
               formatter={tooltipFormatter}
-              labelFormatter={(l) => `日期: ${l}`}
+              labelFormatter={(label) => `日期: ${label}`}
             />
             <Line type="monotone" dataKey="value" stroke={COLORS.primary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
           </LineChart>

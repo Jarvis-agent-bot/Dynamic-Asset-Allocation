@@ -19,6 +19,16 @@ import {
   ColorType,
   CrosshairMode,
 } from "lightweight-charts";
+import {
+  INDICATOR_LABELS,
+  KLINE_CHART_THEME,
+  KLINE_TERMINAL_CLASSNAMES,
+  MA_LINES,
+  TIME_RANGES,
+  type IndicatorKey,
+  type PriceSeriesInterval,
+  type RangeKey,
+} from "@/app/daa/dashboard/_shared/assetKlineChartTheme";
 
 type PriceBar = {
   date: string;
@@ -28,10 +38,6 @@ type PriceBar = {
   close: number;
   volume?: number;
 };
-
-type PriceSeriesInterval = "1d" | "1h";
-type RangeKey = "1D" | "5D" | "1M" | "3M" | "1Y";
-type IndicatorKey = "ma" | "ema" | "boll" | "volume" | "macd" | "kdj";
 
 type CrosshairSnapshot = {
   date: string;
@@ -97,48 +103,6 @@ export type KlineTradeMarker = {
   qty: number;
   price: number;
 };
-
-const TIME_RANGES: { key: RangeKey; label: string; days: number; interval: PriceSeriesInterval }[] = [
-  { key: "1D", label: "1日", days: 2, interval: "1h" },
-  { key: "5D", label: "5日", days: 10, interval: "1h" },
-  { key: "1M", label: "1月", days: 30, interval: "1d" },
-  { key: "3M", label: "3月", days: 90, interval: "1d" },
-  { key: "1Y", label: "1年", days: 365, interval: "1d" },
-];
-
-const MA_LINES = [
-  { key: "ma5", period: 5, label: "MA5", color: "#f7b500" },
-  { key: "ma10", period: 10, label: "MA10", color: "#d957ff" },
-  { key: "ma20", period: 20, label: "MA20", color: "#2bb6ff" },
-  { key: "ma60", period: 60, label: "MA60", color: "#8b7cf6" },
-] as const;
-
-const INDICATOR_LABELS: { key: IndicatorKey; label: string }[] = [
-  { key: "ma", label: "MA" },
-  { key: "ema", label: "EMA" },
-  { key: "boll", label: "BOLL" },
-  { key: "volume", label: "VOL" },
-  { key: "macd", label: "MACD" },
-  { key: "kdj", label: "KDJ" },
-];
-
-const COLORS = {
-  bg: "#050607",
-  panel: "#090d10",
-  panelSoft: "#0d1216",
-  grid: "rgba(107, 114, 128, 0.12)",
-  gridStrong: "rgba(148, 163, 184, 0.18)",
-  text: "#d6dde5",
-  muted: "#8a939f",
-  faint: "#59636f",
-  up: "#00c076",
-  down: "#f84960",
-  amber: "#f7b500",
-  cyan: "#2bb6ff",
-  purple: "#8b7cf6",
-  volumeUp: "rgba(0, 192, 118, 0.42)",
-  volumeDown: "rgba(248, 73, 96, 0.42)",
-} as const;
 
 function finiteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -231,7 +195,7 @@ function toVolumeData(bars: PriceBar[]): HistogramData[] {
       return [{
         time,
         value: bar.volume ?? 0,
-        color: bar.close >= barOpen(bar) ? COLORS.volumeUp : COLORS.volumeDown,
+        color: bar.close >= barOpen(bar) ? KLINE_CHART_THEME.volumeUp : KLINE_CHART_THEME.volumeDown,
       }];
     });
 }
@@ -338,7 +302,7 @@ function computeMACD(bars: PriceBar[], fast = 12, slow = 26, signal = 9): MacdBu
       histogram.push({
         time,
         value: round(value),
-        color: value >= 0 ? "rgba(0, 192, 118, 0.7)" : "rgba(248, 73, 96, 0.7)",
+        color: value >= 0 ? KLINE_CHART_THEME.histogramUp : KLINE_CHART_THEME.histogramDown,
       });
     }
   }
@@ -348,7 +312,7 @@ function computeMACD(bars: PriceBar[], fast = 12, slow = 26, signal = 9): MacdBu
 
 function computeKDJ(bars: PriceBar[], period = 9): KdjBundle {
   const k: LineData[] = [];
-  const d: LineData[] = [];
+  const dLine: LineData[] = [];
   const j: LineData[] = [];
   let previousK = 50;
   let previousD = 50;
@@ -365,14 +329,14 @@ function computeKDJ(bars: PriceBar[], period = 9): KdjBundle {
     if (time == null) continue;
 
     k.push({ time, value: round(kValue, 2) });
-    d.push({ time, value: round(dValue, 2) });
+    dLine.push({ time, value: round(dValue, 2) });
     j.push({ time, value: round(jValue, 2) });
 
     previousK = kValue;
     previousD = dValue;
   }
 
-  return { k, d, j };
+  return { k, d: dLine, j };
 }
 
 function decimalsForPrice(value: number): number {
@@ -527,14 +491,14 @@ function applyPaneHeights(chart: IChartApi, visibility: Record<IndicatorKey, boo
 function applyLowerPaneScale(chart: IChartApi, paneIndex: number) {
   chart.priceScale("right", paneIndex).applyOptions({
     borderVisible: false,
-    textColor: COLORS.faint,
+    textColor: KLINE_CHART_THEME.faint,
     scaleMargins: { top: 0.12, bottom: 0.12 },
   });
 }
 
 function indicatorTextColor(value: number | null | undefined): string {
-  if (!finiteNumber(value) || value === 0) return "text-[#8a939f]";
-  return value > 0 ? "text-[#00c076]" : "text-[#f84960]";
+  if (!finiteNumber(value) || value === 0) return KLINE_TERMINAL_CLASSNAMES.muted;
+  return value > 0 ? KLINE_TERMINAL_CLASSNAMES.positive : KLINE_TERMINAL_CLASSNAMES.negative;
 }
 
 function isPriceNearVisibleRange(price: number, candles: CandlestickData[]): boolean {
@@ -629,16 +593,16 @@ export function AssetKlineChart({
       if (market) qs.set("market", market);
       if (startDate) qs.set("start", startDate);
 
-      const res = await fetch(`/api/daa/market/yfinance/price-series?${qs}`, {
+      const priceSeriesResponse = await fetch(`/api/daa/market/yfinance/price-series?${qs}`, {
         cache: "no-store",
       });
-      if (!res.ok) {
-        if (res.status === 401) throw new Error("登录已过期，请刷新页面重新登录");
-        if (res.status === 502) throw new Error("行情数据源暂时不可用，请稍后重试");
-        throw new Error(`请求失败 (${res.status})`);
+      if (!priceSeriesResponse.ok) {
+        if (priceSeriesResponse.status === 401) throw new Error("登录已过期，请刷新页面重新登录");
+        if (priceSeriesResponse.status === 502) throw new Error("行情数据源暂时不可用，请稍后重试");
+        throw new Error(`请求失败 (${priceSeriesResponse.status})`);
       }
 
-      const json = await res.json();
+      const json = await priceSeriesResponse.json();
       const data = json?.data ?? json;
       const series: PriceBar[] = Array.isArray(data.series) ? data.series : [];
       const completeSeries = series.filter(hasCompleteOhlc);
@@ -757,36 +721,36 @@ export function AssetKlineChart({
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: COLORS.bg },
-        textColor: COLORS.muted,
+        background: { type: ColorType.Solid, color: KLINE_CHART_THEME.bg },
+        textColor: KLINE_CHART_THEME.muted,
         fontFamily: "var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
         fontSize: 11,
         panes: {
-          separatorColor: COLORS.gridStrong,
-          separatorHoverColor: "rgba(43, 182, 255, 0.45)",
+          separatorColor: KLINE_CHART_THEME.gridStrong,
+          separatorHoverColor: KLINE_CHART_THEME.paneSeparatorHover,
           enableResize: true,
         },
       },
       grid: {
-        vertLines: { color: COLORS.grid },
-        horzLines: { color: COLORS.grid },
+        vertLines: { color: KLINE_CHART_THEME.grid },
+        horzLines: { color: KLINE_CHART_THEME.grid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: "rgba(214, 221, 229, 0.26)",
-          labelBackgroundColor: COLORS.panelSoft,
+          color: KLINE_CHART_THEME.crosshairLine,
+          labelBackgroundColor: KLINE_CHART_THEME.panelSoft,
           style: 3,
         },
         horzLine: {
-          color: "rgba(214, 221, 229, 0.26)",
-          labelBackgroundColor: COLORS.panelSoft,
+          color: KLINE_CHART_THEME.crosshairLine,
+          labelBackgroundColor: KLINE_CHART_THEME.panelSoft,
           style: 3,
         },
       },
       rightPriceScale: {
         borderVisible: false,
-        textColor: COLORS.faint,
+        textColor: KLINE_CHART_THEME.faint,
         scaleMargins: { top: 0.08, bottom: 0.06 },
       },
       timeScale: {
@@ -815,12 +779,12 @@ export function AssetKlineChart({
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: COLORS.up,
-      downColor: COLORS.down,
+      upColor: KLINE_CHART_THEME.up,
+      downColor: KLINE_CHART_THEME.down,
       borderVisible: false,
-      wickUpColor: COLORS.up,
-      wickDownColor: COLORS.down,
-      priceLineColor: "rgba(214, 221, 229, 0.42)",
+      wickUpColor: KLINE_CHART_THEME.up,
+      wickDownColor: KLINE_CHART_THEME.down,
+      priceLineColor: KLINE_CHART_THEME.priceLine,
       priceLineWidth: 1,
       lastValueVisible: true,
     }, 0);
@@ -835,7 +799,7 @@ export function AssetKlineChart({
     }, 0));
 
     const ema12 = chart.addSeries(LineSeries, {
-      color: "#00d1ff",
+      color: KLINE_CHART_THEME.emaFast,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -843,7 +807,7 @@ export function AssetKlineChart({
       visible: false,
     }, 0);
     const ema26 = chart.addSeries(LineSeries, {
-      color: "#ff9f43",
+      color: KLINE_CHART_THEME.emaSlow,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -852,7 +816,7 @@ export function AssetKlineChart({
     }, 0);
 
     const bollUpper = chart.addSeries(LineSeries, {
-      color: "rgba(139, 124, 246, 0.9)",
+      color: KLINE_CHART_THEME.bollBand,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -860,7 +824,7 @@ export function AssetKlineChart({
       visible: false,
     }, 0);
     const bollMid = chart.addSeries(LineSeries, {
-      color: "rgba(247, 181, 0, 0.85)",
+      color: KLINE_CHART_THEME.bollMiddle,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -868,7 +832,7 @@ export function AssetKlineChart({
       visible: false,
     }, 0);
     const bollLower = chart.addSeries(LineSeries, {
-      color: "rgba(139, 124, 246, 0.9)",
+      color: KLINE_CHART_THEME.bollBand,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -889,14 +853,14 @@ export function AssetKlineChart({
       base: 0,
     }, 2);
     const macdDif = chart.addSeries(LineSeries, {
-      color: COLORS.cyan,
+      color: KLINE_CHART_THEME.cyan,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
     }, 2);
     const macdDea = chart.addSeries(LineSeries, {
-      color: COLORS.amber,
+      color: KLINE_CHART_THEME.amber,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -904,21 +868,21 @@ export function AssetKlineChart({
     }, 2);
 
     const kdjK = chart.addSeries(LineSeries, {
-      color: COLORS.cyan,
+      color: KLINE_CHART_THEME.cyan,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
     }, 3);
     const kdjD = chart.addSeries(LineSeries, {
-      color: COLORS.amber,
+      color: KLINE_CHART_THEME.amber,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
     }, 3);
     const kdjJ = chart.addSeries(LineSeries, {
-      color: COLORS.purple,
+      color: KLINE_CHART_THEME.purple,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -1081,7 +1045,7 @@ export function AssetKlineChart({
             items.push({
               time,
               position: "belowBar",
-              color: COLORS.up,
+              color: KLINE_CHART_THEME.up,
               shape: "arrowUp",
               size: 1.25,
               text: `买 ${aggregate.buys.toFixed(2)}`,
@@ -1091,7 +1055,7 @@ export function AssetKlineChart({
             items.push({
               time,
               position: "aboveBar",
-              color: COLORS.down,
+              color: KLINE_CHART_THEME.down,
               shape: "arrowDown",
               size: 1.25,
               text: `卖 ${aggregate.sells.toFixed(2)}`,
@@ -1117,7 +1081,7 @@ export function AssetKlineChart({
     ) {
       costLineRef.current = candleSeriesRef.current.createPriceLine({
         price: costBasisPerShare,
-        color: COLORS.amber,
+        color: KLINE_CHART_THEME.amber,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -1136,33 +1100,33 @@ export function AssetKlineChart({
   }, []);
 
   return (
-    <div className={`flex min-h-[520px] flex-col bg-[#050607] text-[#d6dde5] ${className ?? ""}`}>
-      <div className="border-b border-[#161b20] bg-[#090d10]">
+    <div className={`flex min-h-[520px] flex-col ${KLINE_TERMINAL_CLASSNAMES.root} ${className ?? ""}`}>
+      <div className={`border-b ${KLINE_TERMINAL_CLASSNAMES.header}`}>
         <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 px-3">
           <div className="flex items-center gap-5 text-sm font-semibold">
-            <button type="button" className="border-b-2 border-[#d6dde5] py-3 text-[#d6dde5]">
+            <button type="button" className={`border-b-2 border-current py-3 ${KLINE_TERMINAL_CLASSNAMES.text}`}>
               图表
             </button>
           </div>
-          <div className="hidden items-center gap-2 font-[var(--font-mono)] text-[11px] text-[#8a939f] lg:flex">
-            <span className="rounded-[5px] border border-[#202832] bg-[#050607] px-2 py-1 text-[#d6dde5]">
+          <div className={`hidden items-center gap-2 font-[var(--font-mono)] text-[11px] ${KLINE_TERMINAL_CLASSNAMES.muted} lg:flex`}>
+            <span className={`${KLINE_TERMINAL_CLASSNAMES.badge} px-2 py-1 ${KLINE_TERMINAL_CLASSNAMES.text}`}>
               价格图
             </span>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#111820] px-3 py-2">
+        <div className={`flex flex-wrap items-center justify-between gap-2 border-t ${KLINE_TERMINAL_CLASSNAMES.subHeaderBorder} px-3 py-2`}>
           <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 font-[var(--font-mono)] text-[11px] text-[#59636f]">周期</span>
+            <span className={`mr-1 font-[var(--font-mono)] text-[11px] ${KLINE_TERMINAL_CLASSNAMES.faint}`}>周期</span>
             {TIME_RANGES.map((item) => (
               <button
                 key={item.key}
                 type="button"
                 onClick={() => setRange(item.key)}
-                className={`h-6 min-w-8 rounded-[4px] px-2 font-[var(--font-mono)] text-[11px] transition-colors ${
+                className={`h-6 min-w-8 rounded-[var(--radius-sm)] px-2 font-[var(--font-mono)] text-[11px] transition-colors ${
                   range === item.key
-                    ? "bg-[#1a222a] text-white"
-                    : "text-[#8a939f] hover:bg-[#10161b] hover:text-[#d6dde5]"
+                    ? KLINE_TERMINAL_CLASSNAMES.controlActive
+                    : KLINE_TERMINAL_CLASSNAMES.controlIdle
                 }`}
               >
                 {item.label}
@@ -1176,10 +1140,10 @@ export function AssetKlineChart({
                 key={item.key}
                 type="button"
                 onClick={() => toggleIndicator(item.key)}
-                className={`h-6 rounded-[4px] px-2 font-[var(--font-mono)] text-[11px] transition-colors ${
+                className={`h-6 rounded-[var(--radius-sm)] px-2 font-[var(--font-mono)] text-[11px] transition-colors ${
                   indicatorVisibility[item.key]
-                    ? "bg-[#15202a] text-[#d6dde5]"
-                    : "text-[#59636f] hover:bg-[#10161b] hover:text-[#8a939f]"
+                    ? KLINE_TERMINAL_CLASSNAMES.indicatorActive
+                    : KLINE_TERMINAL_CLASSNAMES.indicatorIdle
                 }`}
               >
                 {item.label}
@@ -1190,28 +1154,28 @@ export function AssetKlineChart({
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <div className="pointer-events-none absolute left-3 top-3 z-[5] max-w-[calc(100%-1.5rem)] space-y-1 rounded-[8px] border border-[#1a222a] bg-[#090d10]/95 px-2.5 py-2 font-[var(--font-mono)] text-[11px] leading-tight shadow-[0_10px_24px_rgba(0,0,0,0.32)] backdrop-blur-sm">
+        <div className={`pointer-events-none absolute left-3 top-3 z-[5] max-w-[calc(100%-1.5rem)] space-y-1 rounded-[var(--radius-md)] border px-2.5 py-2 font-[var(--font-mono)] text-[11px] leading-tight backdrop-blur-sm ${KLINE_TERMINAL_CLASSNAMES.panel}`}>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
-            <span className="font-semibold text-[#d6dde5]">{symbol} · {currentInterval.toUpperCase()} · {market || "MARKET"}</span>
-            <span className="text-[#8a939f]">开 <b className="font-normal text-[#b8c0ca]">{formatPrice(displayData?.open)}</b></span>
-            <span className="text-[#8a939f]">高 <b className="font-normal text-[#00c076]">{formatPrice(displayData?.high)}</b></span>
-            <span className="text-[#8a939f]">低 <b className="font-normal text-[#f84960]">{formatPrice(displayData?.low)}</b></span>
-            <span className="text-[#8a939f]">收 <b className="font-normal text-[#d6dde5]">{formatPrice(displayData?.close)}</b></span>
-            <span className="text-[#8a939f]">量 <b className="font-normal text-[#b8c0ca]">{formatVolume(displayData?.volume)}</b></span>
+            <span className={`font-semibold ${KLINE_TERMINAL_CLASSNAMES.text}`}>{symbol} · {currentInterval.toUpperCase()} · {market || "MARKET"}</span>
+            <span className={KLINE_TERMINAL_CLASSNAMES.muted}>开 <b className={`font-normal ${KLINE_TERMINAL_CLASSNAMES.subtleValue}`}>{formatPrice(displayData?.open)}</b></span>
+            <span className={KLINE_TERMINAL_CLASSNAMES.muted}>高 <b className={`font-normal ${KLINE_TERMINAL_CLASSNAMES.positive}`}>{formatPrice(displayData?.high)}</b></span>
+            <span className={KLINE_TERMINAL_CLASSNAMES.muted}>低 <b className={`font-normal ${KLINE_TERMINAL_CLASSNAMES.negative}`}>{formatPrice(displayData?.low)}</b></span>
+            <span className={KLINE_TERMINAL_CLASSNAMES.muted}>收 <b className={`font-normal ${KLINE_TERMINAL_CLASSNAMES.text}`}>{formatPrice(displayData?.close)}</b></span>
+            <span className={KLINE_TERMINAL_CLASSNAMES.muted}>量 <b className={`font-normal ${KLINE_TERMINAL_CLASSNAMES.subtleValue}`}>{formatVolume(displayData?.volume)}</b></span>
           </div>
           {indicatorVisibility.ma ? (
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-              <span className="text-[#f7b500]">MA5 {formatPrice(displayIndicators.ma5)}</span>
-              <span className="text-[#d957ff]">MA10 {formatPrice(displayIndicators.ma10)}</span>
-              <span className="text-[#2bb6ff]">MA20 {formatPrice(displayIndicators.ma20)}</span>
-              <span className="text-[#8b7cf6]">MA60 {formatPrice(displayIndicators.ma60)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.warning}>MA5 {formatPrice(displayIndicators.ma5)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.movingAverageMid}>MA10 {formatPrice(displayIndicators.ma10)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.cyan}>MA20 {formatPrice(displayIndicators.ma20)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.purple}>MA60 {formatPrice(displayIndicators.ma60)}</span>
             </div>
           ) : null}
           {indicatorVisibility.macd ? (
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-              <span className="text-[#8a939f]">MACD 12 26 close 9</span>
-              <span className="text-[#2bb6ff]">DIF {formatPrice(displayIndicators.macdDif, 3)}</span>
-              <span className="text-[#f7b500]">DEA {formatPrice(displayIndicators.macdDea, 3)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.muted}>MACD 12 26 close 9</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.cyan}>DIF {formatPrice(displayIndicators.macdDif, 3)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.warning}>DEA {formatPrice(displayIndicators.macdDea, 3)}</span>
               <span className={indicatorTextColor(displayIndicators.macdHist)}>
                 HIST {formatSigned(displayIndicators.macdHist, 3)}
               </span>
@@ -1219,43 +1183,43 @@ export function AssetKlineChart({
           ) : null}
           {indicatorVisibility.kdj ? (
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-              <span className="text-[#8a939f]">KDJ 9 3 3</span>
-              <span className="text-[#2bb6ff]">K {formatPrice(displayIndicators.kdjK)}</span>
-              <span className="text-[#f7b500]">D {formatPrice(displayIndicators.kdjD)}</span>
-              <span className="text-[#8b7cf6]">J {formatPrice(displayIndicators.kdjJ)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.muted}>KDJ 9 3 3</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.cyan}>K {formatPrice(displayIndicators.kdjK)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.warning}>D {formatPrice(displayIndicators.kdjD)}</span>
+              <span className={KLINE_TERMINAL_CLASSNAMES.purple}>J {formatPrice(displayIndicators.kdjJ)}</span>
             </div>
           ) : null}
         </div>
 
-        <div className="absolute right-3 top-3 z-[5] hidden max-w-[min(520px,calc(100%-1.5rem))] flex-wrap items-center justify-end gap-1.5 rounded-[8px] border border-[#1a222a] bg-[#090d10]/95 px-2 py-1.5 font-[var(--font-mono)] text-[10px] text-[#8a939f] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm lg:flex">
-          <span className="rounded-[5px] border border-[#202832] bg-[#050607] px-1.5 py-0.5" title={`${effectiveSource} · ${effectiveUpstream}`}>
+        <div className={`absolute right-3 top-3 z-[5] hidden max-w-[min(520px,calc(100%-1.5rem))] flex-wrap items-center justify-end gap-1.5 rounded-[var(--radius-md)] border px-2 py-1.5 font-[var(--font-mono)] text-[10px] backdrop-blur-sm lg:flex ${KLINE_TERMINAL_CLASSNAMES.muted} ${KLINE_TERMINAL_CLASSNAMES.panel}`}>
+          <span className={`${KLINE_TERMINAL_CLASSNAMES.badge} px-1.5 py-0.5`} title={`${effectiveSource} · ${effectiveUpstream}`}>
             {effectiveSource} · {effectiveUpstream}
           </span>
-          <span className="rounded-[5px] border border-[#202832] bg-[#050607] px-1.5 py-0.5">
+          <span className={`${KLINE_TERMINAL_CLASSNAMES.badge} px-1.5 py-0.5`}>
             {currentInterval.toUpperCase()} · {dataSource ? `${dataSource.rows}/${dataSource.rawCount}` : "--"}
           </span>
-          <span className={`rounded-[5px] border px-1.5 py-0.5 ${isDelayed ? "border-[#5a3a12] bg-[#1a1206] text-[#f7b500]" : "border-[#123827] bg-[#061812] text-[#00c076]"}`}>
+          <span className={`rounded-[var(--radius-sm)] border px-1.5 py-0.5 ${isDelayed ? KLINE_TERMINAL_CLASSNAMES.statusWarning : KLINE_TERMINAL_CLASSNAMES.statusHealthy}`}>
             {isDelayed ? "延迟" : "新鲜"} · {formatChartTime(effectiveUpdatedAt, currentInterval)}
           </span>
-          <span className={`rounded-[5px] border px-1.5 py-0.5 ${ohlcvComplete ? "border-[#123827] bg-[#061812] text-[#00c076]" : "border-[#5a3a12] bg-[#1a1206] text-[#f7b500]"}`}>
+          <span className={`rounded-[var(--radius-sm)] border px-1.5 py-0.5 ${ohlcvComplete ? KLINE_TERMINAL_CLASSNAMES.statusHealthy : KLINE_TERMINAL_CLASSNAMES.statusWarning}`}>
             {ohlcvComplete ? "OHLCV 完整" : "OHLCV 不完整"}
           </span>
-          {visibleCostBasis != null ? <span className="text-[#f7b500]">成本 {formatPrice(visibleCostBasis)}</span> : null}
+          {visibleCostBasis != null ? <span className={KLINE_TERMINAL_CLASSNAMES.warning}>成本 {formatPrice(visibleCostBasis)}</span> : null}
           {tradeSummary.total > 0 ? (
             <span>
-              买/卖 <b className="font-normal text-[#d6dde5]">{tradeSummary.buys}/{tradeSummary.sells}</b>
+              买/卖 <b className={`font-normal ${KLINE_TERMINAL_CLASSNAMES.text}`}>{tradeSummary.buys}/{tradeSummary.sells}</b>
             </span>
           ) : null}
         </div>
 
         {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#050607]/92">
-            <span className="font-[var(--font-mono)] text-xs text-[#8a939f]">加载行情数据...</span>
+          <div className={`absolute inset-0 z-10 flex items-center justify-center ${KLINE_TERMINAL_CLASSNAMES.loadingOverlay}`}>
+            <span className={`font-[var(--font-mono)] text-xs ${KLINE_TERMINAL_CLASSNAMES.muted}`}>加载行情数据...</span>
           </div>
         )}
         {error && !loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#050607]/92">
-            <span className="text-sm text-[#8a939f]">{error}</span>
+          <div className={`absolute inset-0 z-10 flex items-center justify-center ${KLINE_TERMINAL_CLASSNAMES.loadingOverlay}`}>
+            <span className={`text-sm ${KLINE_TERMINAL_CLASSNAMES.muted}`}>{error}</span>
           </div>
         )}
         <div ref={containerRef} className="h-[560px] w-full xl:h-[640px]" />

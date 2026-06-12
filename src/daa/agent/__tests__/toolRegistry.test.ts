@@ -1,5 +1,5 @@
 /**
- * Agent Tool Registry — 单元测试
+ * 复核工具 Registry — 单元测试
  *
  * 测试动态注册表的工具调用路由、state-dependent 工具、参数校验。
  */

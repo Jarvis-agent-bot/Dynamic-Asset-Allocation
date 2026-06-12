@@ -129,7 +129,7 @@ describe("assistant-planner", () => {
     });
   });
 
-  it("LLM 可以规划 thesis_status 和 agent_briefing 这类 Agent 查询", async () => {
+  it("LLM 可以规划 thesis_status 和 agent_briefing 这类投资助理查询", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: true,
       provider: "openai",
@@ -141,7 +141,7 @@ describe("assistant-planner", () => {
     vi.mocked(callLlm).mockResolvedValue({
       text: JSON.stringify({
         intent: "thesis_status",
-        reason: "用户在问活跃论点",
+        reason: "用户在问活跃投资判断",
         answer: "",
         trade: {
           side: "BUY",
@@ -155,7 +155,7 @@ describe("assistant-planner", () => {
     });
 
     const result = await planAssistantIntent({
-      userText: "现在有哪些活跃论点？",
+      userText: "现在有哪些活跃投资判断？",
       allowExecution: true,
       contextDigest: "",
       systemDigest: "",
@@ -197,7 +197,7 @@ describe("assistant-planner", () => {
     });
 
     const result = await planAssistantIntent({
-      userText: "帮我跑一轮 agent 调查",
+      userText: "帮我跑一轮投资助理复核",
       allowExecution: true,
       contextDigest: "",
       systemDigest: "当前 LLM 路由：分析解读：启用 / openai / gpt-5.4 / llm-api.onekeytest.com",
@@ -225,7 +225,7 @@ describe("assistant-planner", () => {
     vi.mocked(callLlm).mockResolvedValue({
       text: JSON.stringify({
         intent: "brain_set_mode",
-        reason: "用户要求切换到自动驾驶",
+        reason: "用户要求切换到自动复核",
         answer: "",
         brainMode: "autopilot",
         trade: {
@@ -240,10 +240,10 @@ describe("assistant-planner", () => {
     });
 
     const result = await planAssistantIntent({
-      userText: "切到自动驾驶模式",
+      userText: "切到自动复核授权",
       allowExecution: true,
       contextDigest: "",
-      systemDigest: "大脑模式：操作员模式；配置写入关闭；自动调仓只接受目标权重计划",
+      systemDigest: "投资助理授权：手动复核授权；配置写入关闭；自动调仓只接受目标权重计划",
       sessionSummary: "",
       recentConversation: "",
       pendingActionDescription: "无",

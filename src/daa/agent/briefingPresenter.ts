@@ -5,9 +5,9 @@
  * - formatBriefingForTelegram: TG HTML 推送
  * - formatBriefingForChat: Web/TG 对话查询的纯文本
  *
- * 设计原则：TG 日报是"例外报告"。只在需要人介入（高严重度意外 / 目标权重计划 /
- * regime 覆盖建议）时展开完整日报，否则降级为三行摘要；Agent 的工作过程细节
- * （论点数、记忆数、覆盖遥测）属于 Web 端，不进推送。
+ * 设计原则：TG 简报是"复核报告"。只在需要人介入（高优先级变化 / 目标权重计划 /
+ * regime 覆盖建议）时展开完整简报，否则降级为三行摘要；投资助理的工作过程细节
+ * （投资判断数、会话摘要数、覆盖遥测）属于 Web 端，不进推送。
  */
 
 import type { DailyBriefing, Surprise, CognitionGap, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
@@ -81,7 +81,7 @@ export interface BriefingActionItem {
   text: string;
 }
 
-/** 风险暴露 + 论点冲突合并后的资产维度视图 */
+/** 风险暴露 + 投资判断不一致合并后的资产维度视图 */
 export interface AssetThesisRiskGroup {
   assetKey: string;
   weightPct: number;
@@ -103,12 +103,12 @@ export interface BriefingPresentation {
     intents: Array<{ label: string; targetPct: number; confidence: number }>;
     reasoning: string | null;
   } | null;
-  /** 仅当自动驾驶产生实际动作（已设目标 / 已接受计划）时非 null */
+  /** 仅当自动复核产生实际动作（已设目标 / 已接受计划）时非 null */
   autopilotLine: string | null;
   counts: { surprises: number; dueForReview: number; riskAssets: number };
 }
 
-/** severity 达到该阈值的意外才进入"今日待办"并触发完整日报 */
+/** severity 达到该阈值的变化才进入"今日待办"并触发完整简报 */
 export const BRIEFING_ACTION_SEVERITY = 7;
 
 const RISK_LEVEL_LABEL: Record<string, string> = { critical: "严重", high: "高", medium: "中" };
@@ -156,7 +156,7 @@ function groupThesisRisksByAsset(briefing: DailyBriefing, portfolio?: BriefingPo
     }
   }
 
-  // 论点冲突：只保留 severity=high 的，作为资产组的注解（不再独立成板块）
+  // 投资判断不一致：只保留 severity=high 的，作为资产组的注解（不再独立成板块）
   for (const conflict of briefing.thesisConflicts ?? []) {
     if (conflict.severity !== "high") continue;
     for (const assetKey of conflict.overlappingAssets) {
@@ -218,7 +218,7 @@ export function presentBriefing(briefing: DailyBriefing, portfolio?: BriefingPor
     });
   }
 
-  // 自动驾驶覆盖：纯遥测，只在产生实际动作时上报一行
+  // 自动复核覆盖：纯遥测，只在产生实际动作时上报一行
   const c = briefing.autopilotCoverage;
   const autopilotLine = c && (c.watchlistTargetedAssets > 0 || c.acceptedBrainPlanIntents > 0)
     ? `已设目标 ${c.watchlistTargetedAssets} 个 | 目标计划已接受 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`
@@ -258,10 +258,10 @@ function renderAssetRiskLine(g: AssetThesisRiskGroup): string[] {
   const weightText = g.weightPct > 0 ? ` ${(g.weightPct * 100).toFixed(1)}%` : "";
   const parts: string[] = [];
   if (g.topImpact) {
-    parts.push(`风险论点 ${g.impactCount} 个（最高「${g.topImpact.thesisTitle}」暴露 ${(g.topImpact.totalExposurePct * 100).toFixed(1)}%）`);
+    parts.push(`风险判断 ${g.impactCount} 个（最高「${g.topImpact.thesisTitle}」暴露 ${(g.topImpact.totalExposurePct * 100).toFixed(1)}%）`);
   }
   if (g.conflictPairs.length > 0) {
-    parts.push(`方向冲突 ${g.conflictPairs.length} 组`);
+    parts.push(`方向不一致 ${g.conflictPairs.length} 组`);
   }
   const lines = [`• ${g.riskLevelLabel ? `[${g.riskLevelLabel}] ` : ""}${formatAssetLabelByKey(g.assetKey)}${weightText} — ${parts.join("；")}`];
   if (g.conflictPairs[0]) {
@@ -277,17 +277,17 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: Briefin
   const lines: string[] = [];
 
   if (p.mode === "digest") {
-    lines.push("<b>\u{1F9E0} Agent 日报</b> · 今日无需操作");
+    lines.push("<b>\u{1F9ED} 复核简报</b> · 今日无需操作");
     if (meta.portfolio) lines.push(portfolioOverviewLine(meta.portfolio));
     const watching: string[] = [];
     if (p.counts.surprises > 0) watching.push(`变化 ${p.counts.surprises} 条`);
-    if (p.counts.dueForReview > 0) watching.push(`论点复核 ${p.counts.dueForReview} 个`);
-    if (p.counts.riskAssets > 0) watching.push(`论点风险 ${p.counts.riskAssets} 项`);
-    lines.push(watching.length > 0 ? `观察中：${watching.join(" · ")} — 详情见 Web 仪表盘` : "今日平稳，无观察项。");
+    if (p.counts.dueForReview > 0) watching.push(`投资判断复核 ${p.counts.dueForReview} 个`);
+    if (p.counts.riskAssets > 0) watching.push(`投资判断风险 ${p.counts.riskAssets} 项`);
+    lines.push(watching.length > 0 ? `观察中：${watching.join(" · ")} — 详情见 Web 工作站` : "今日平稳，无观察项。");
     return lines.join("\n");
   }
 
-  lines.push("<b>\u{1F9E0} Agent 日报</b>\n");
+  lines.push("<b>\u{1F9ED} 复核简报</b>\n");
 
   lines.push("<b>\u{1F4CC} 今日待办</b>");
   for (const a of p.actions) lines.push(`• ${a.text}`);
@@ -314,7 +314,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: Briefin
   }
 
   if (p.dueForReview.length > 0) {
-    lines.push("<b>\u{1F50D} 论点复核</b>");
+    lines.push("<b>\u{1F50D} 投资判断复核</b>");
     for (const g of p.dueForReview) {
       lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
       if (g.suggestedInvestigation) lines.push(`  ↳ ${formatBriefingTextExcerpt(g.suggestedInvestigation, 80)}`);
@@ -332,7 +332,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: Briefin
   }
 
   if (p.thesisRisks.length > 0) {
-    lines.push("<b>⚠️ 论点风险</b> <i>(按持仓聚合)</i>");
+    lines.push("<b>⚠️ 投资判断风险</b> <i>(按持仓聚合)</i>");
     for (const g of p.thesisRisks) lines.push(...renderAssetRiskLine(g));
     lines.push("");
   }
@@ -366,8 +366,8 @@ export function formatBriefingForChat(briefing: DailyBriefing, meta: BriefingRen
     parts.push("今日无需操作。");
     const watching: string[] = [];
     if (p.counts.surprises > 0) watching.push(`变化 ${p.counts.surprises} 条`);
-    if (p.counts.dueForReview > 0) watching.push(`论点复核 ${p.counts.dueForReview} 个`);
-    if (p.counts.riskAssets > 0) watching.push(`论点风险 ${p.counts.riskAssets} 项`);
+    if (p.counts.dueForReview > 0) watching.push(`投资判断复核 ${p.counts.dueForReview} 个`);
+    if (p.counts.riskAssets > 0) watching.push(`投资判断风险 ${p.counts.riskAssets} 项`);
     if (watching.length > 0) parts.push(`观察中：${watching.join(" · ")}`);
   } else {
     parts.push("📌 今日待办:");
@@ -379,7 +379,7 @@ export function formatBriefingForChat(briefing: DailyBriefing, meta: BriefingRen
     for (const s of p.surprises) parts.push(`  [${s.severityScore}/10] ${s.title}: ${formatBriefingTextExcerpt(s.description, 120)}`);
   }
   if (p.dueForReview.length > 0) {
-    parts.push("\n🔍 论点复核:");
+    parts.push("\n🔍 投资判断复核:");
     for (const g of p.dueForReview) {
       parts.push(`  ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
       if (g.suggestedInvestigation) parts.push(`    ↳ ${formatBriefingTextExcerpt(g.suggestedInvestigation, 80)}`);
@@ -390,7 +390,7 @@ export function formatBriefingForChat(briefing: DailyBriefing, meta: BriefingRen
     for (const m of p.mindChangeConditions) parts.push(`  「${m.thesisTitle}」(${m.currentConviction}): ${formatBriefingTextExcerpt(m.conditions.slice(0, 2).join("; "), 120)}`);
   }
   if (p.thesisRisks.length > 0) {
-    parts.push("\n⚠️ 论点风险:");
+    parts.push("\n⚠️ 投资判断风险:");
     for (const g of p.thesisRisks) parts.push(...renderAssetRiskLine(g).map(l => `  ${l.replace(/^• /, "• ").trim()}`));
   }
   if (p.plan) {

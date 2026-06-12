@@ -1,5 +1,5 @@
 /**
- * GET /api/daa/agent/theses — 获取所有活跃研究论点 + 最近证据
+ * GET /api/daa/agent/theses — 获取所有活跃投资判断 + 最近依据
  */
 
 export const runtime = "nodejs";
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const assetKey = url.searchParams.get("assetKey")?.trim();
 
-    // assetKey 过滤模式：返回该资产相关的 thesis + 各自最新 3 条证据
+    // assetKey 过滤模式：返回该资产相关的 thesis + 各自最新 3 条依据
     if (assetKey) {
       const theses = await getThesesByAssetKey(assetKey);
       const evidenceMap = theses.length > 0

@@ -2,7 +2,7 @@
  * GET /api/daa/news/intelligence
  *
  * 只读新闻智能层：事件图、组合影响、候选发现。
- * 注意：候选发现只是研究线索，不会自动加入观察列表或触发交易。
+ * 注意：候选发现只是复核线索，不会自动加入观察列表或触发交易。
  */
 
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";

@@ -1,5 +1,5 @@
 /**
- * Cognitive Agent — Surface 节点（生成 DailyBriefing + 可选 TG 推送）
+ * 投资助理复核工作流 — Surface 节点（生成 DailyBriefing + 可选 TG 推送）
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
@@ -16,21 +16,21 @@ import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
-import { shouldSendAgentBriefingTelegram } from "@/src/daa/automation/automationGuards";
+import { shouldSendReviewBriefingTelegram } from "@/src/daa/automation/automationGuards";
 import { buildAutopilotCoverageSummary } from "@/src/daa/agent/autopilotCoverage";
 import { getCurrentRunId } from "@/src/daa/agent/tools/registry";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 import { recordAgentDecisionAudits } from "@/src/daa/agent/store/agentDecisionAuditStore";
 
 /**
- * 代码直出“自动跟踪清单”（原 cognitionGaps）。
+ * 代码直出“待复核清单”（原 cognitionGaps）。
  *
  * 原来这里交给 LLM 做 "结构化清单 → JSON → 改写成自然语言 → JSON" 的来回翻译，
- * 既浪费 token 又容易产生幻觉（LLM 会胡编权重值、调查天数）。本函数是确定性的：
+ * 既浪费 token 又容易产生幻觉（LLM 会胡编权重值、复核天数）。本函数是确定性的：
  *
  * - 触发条件（二选一）：
    *   (1) thesis conviction=uncertain 且关联持仓或观察列表（必须尽快给出明确判断）
-   *   (2) 持仓权重 > 5% 或观察列表 thesis 距上次有效调查超过 7 天
+   *   (2) 持仓权重 > 5% 或观察列表 thesis 距上次有效复核超过 7 天
  * - 同 assetKey 多 thesis 去重，取最陈旧的一条
  * - triggerReason / focusHint 字段直接用 thesis 数据拼接，不再让 LLM 改写
  */
@@ -56,18 +56,18 @@ function computeDueForReview(
         ? (
           days <= 1
             ? (weight > 0
-              ? `论点刚进入观察态，等待下一轮证据确认（权重 ${(weight * 100).toFixed(1)}%）`
-              : "观察列表论点刚进入观察态，等待下一轮证据确认")
+              ? `投资判断刚进入观察态，等待下一轮依据确认（权重 ${(weight * 100).toFixed(1)}%）`
+              : "观察列表判断刚进入观察态，等待下一轮依据确认")
             : (weight > 0
-              ? `论点仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，上次有效调查 ${days} 天前）`
-              : `观察列表论点仍处观察态，尚未形成高置信度方向（上次有效调查 ${days} 天前）`)
+              ? `投资判断仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，上次有效复核 ${days} 天前）`
+              : `观察列表判断仍处观察态，尚未形成高置信度方向（上次有效复核 ${days} 天前）`)
         )
         : (weight > 0
-          ? `高权重持仓需要调查：权重 ${(weight * 100).toFixed(1)}%，上次有效调查 ${days} 天前`
-          : `观察列表论点需要调查：上次有效调查 ${days} 天前`);
+          ? `高权重持仓需要复核：权重 ${(weight * 100).toFixed(1)}%，上次有效复核 ${days} 天前`
+          : `观察列表判断需要复核：上次有效复核 ${days} 天前`);
       const focusHint = t.invalidationConditions
         ? `核对失效条件：${t.invalidationConditions.slice(0, 80)}`
-        : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视论点：${t.title}`);
+        : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视判断：${t.title}`);
 
       candidates.push({
         assetKey,
@@ -188,8 +188,8 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
       });
     }
 
-    // Feature C: Thesis 冲突检测（代码层 — 资产重叠 + 方向矛盾）
-    // P0-2: uncertain 多为 prioritizeNode 创建的调查型 thesis（如"评估XX"），不是真正的反方观点，需排除
+    // Feature C: Thesis 判断关系检测（代码层 — 资产重叠 + 方向矛盾）
+    // P0-2: uncertain 多为 prioritizeNode 创建的复核型 thesis（如"评估XX"），不是真正的反方观点，需排除
     const directionalTheses = theses.filter(t => t.conviction !== "uncertain");
     const thesisConflicts: ThesisConflict[] = [];
     for (let i = 0; i < directionalTheses.length; i++) {
@@ -198,10 +198,10 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         const b = directionalTheses[j];
         const overlap = a.assetKeys.filter(k => b.assetKeys.includes(k));
         if (overlap.length === 0) continue;
-        // 方向矛盾：必须是 high/medium 和 low 的真正对立（两边都是看多或都是看空则不冲突）
+        // 方向不一致：必须是 high/medium 和 low 的真正对立（两边都是看多或都是看空则不算不一致）
         const aBullish = a.conviction === "high" || a.conviction === "medium";
         const bBullish = b.conviction === "high" || b.conviction === "medium";
-        if (aBullish === bBullish) continue; // 同方向不冲突
+        if (aBullish === bBullish) continue; // 同方向不算不一致
         const severity = overlap.length >= 2 ? "high" : (a.conviction === "high" || b.conviction === "high") ? "high" : "medium";
         thesisConflicts.push({
           thesisA: { id: a.id, title: a.title, conviction: a.conviction },
@@ -243,7 +243,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
       estimatedCost: totalTkn * DEEPSEEK_AVG_COST_PER_TOKEN,
     };
 
-    // 策略顾问 LLM — 生成 Agent 目标权重计划
+    // 目标权重建议 LLM — 生成投资助理目标权重计划
     if (state.agentConfig?.enabled !== false && !shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
       try {
         // 策略参数实时从 systemConfig 读取，避免 agentConfig 副本陈旧
@@ -411,7 +411,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
     // 尝试推送 Telegram（非阻塞）
     try {
       const system = await getDaaSystemConfig();
-      if (!shouldSendAgentBriefingTelegram(system.config)) {
+      if (!shouldSendReviewBriefingTelegram(system.config)) {
         return {
           briefing, // 将完整 briefing 传入状态
           totalTokens: tokensUsed,

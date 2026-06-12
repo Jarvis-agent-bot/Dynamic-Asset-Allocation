@@ -1,5 +1,5 @@
 /**
- * GET /api/daa/agent/thesis/[id] — 获取论点详情（含证据链 + 复盘历史）
+ * GET /api/daa/agent/thesis/[id] — 获取投资判断详情（含依据链 + 复盘历史）
  */
 
 export const runtime = "nodejs";
@@ -14,10 +14,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     if (denied) return denied;
 
     const id = params.id;
-    if (!id) return fail("VALIDATION_FAILED", "缺少论点 ID", { status: 400 });
+    if (!id) return fail("VALIDATION_FAILED", "缺少投资判断 ID", { status: 400 });
 
     const result = await getThesisWithEvidence(id);
-    if (!result) return fail("NOT_FOUND", "论点不存在", { status: 404 });
+    if (!result) return fail("NOT_FOUND", "投资判断不存在", { status: 404 });
 
     const reviews = await getReviewsByThreadId(id);
 

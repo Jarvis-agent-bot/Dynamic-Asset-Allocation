@@ -5,16 +5,16 @@ import { BellRing, RefreshCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
-import { emitDashboardDataUpdated, emitDashboardRefresh } from "@/app/daa/dashboard/dashboardEvents";
-import { DashboardEmptyState, DashboardErrorNotice, DashboardSuccessNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { emitWorkbenchDataUpdated, emitWorkbenchRefresh } from "@/app/daa/dashboard/workbenchEvents";
+import { WorkbenchEmptyState, WorkbenchErrorNotice, WorkbenchSuccessNotice } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfaceActionButton, DaaSurfacePageHeader, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import {
-  SETTINGS_NAV_ITEMS_,
+  SETTINGS_NAV_ITEMS,
   type SettingsNavItemId,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 import { useSettingsDirty } from "@/app/daa/dashboard/settings/_components/useSettingsDirty";
-import { SettingsBrainTab } from "@/app/daa/dashboard/settings/_components/tabs/SettingsBrainTab";
+import { SettingsAssistantAutomationTab } from "@/app/daa/dashboard/settings/_components/tabs/SettingsAssistantAutomationTab";
 import { SettingsDataTab, type SettingsDataHealthAsset } from "@/app/daa/dashboard/settings/_components/tabs/SettingsDataTab";
 import { SettingsNotificationTab } from "@/app/daa/dashboard/settings/_components/tabs/SettingsNotificationTab";
 import { SettingsStrategyTab } from "@/app/daa/dashboard/settings/_components/tabs/SettingsStrategyTab";
@@ -27,12 +27,12 @@ import {
   refreshMarketIndicators,
   saveSystemConfig,
   type StoreExternalRequestLogsResult,
-} from "@/src/daa/modules/store/dashboardStoreApiClient";
+} from "@/src/daa/modules/store/workbenchStoreApiClient";
 
 function resolveSectionFromHash(hash: string): SettingsNavItemId | null {
   const id = hash.replace(/^#settings-/, "").trim();
   if (id === "secrets") return "data";
-  const matched = SETTINGS_NAV_ITEMS_.find((item) => item.id === id);
+  const matched = SETTINGS_NAV_ITEMS.find((item) => item.id === id);
   return matched?.id ?? null;
 }
 
@@ -55,12 +55,12 @@ export default function SettingsPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await getSystemConfig();
-      setVersion(res.version);
-      setConfig(res.config);
-      setBaselineConfig(res.config);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "加载设置失败");
+      const systemConfigResponse = await getSystemConfig();
+      setVersion(systemConfigResponse.version);
+      setConfig(systemConfigResponse.config);
+      setBaselineConfig(systemConfigResponse.config);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "加载设置失败");
     } finally {
       setLoading(false);
     }
@@ -68,15 +68,15 @@ export default function SettingsPage() {
 
   const refreshDataHealthAssets = useCallback(async () => {
     try {
-      const wb = await getWorkbenchReadModel({ syncPrices: false });
+      const workbenchModel = await getWorkbenchReadModel({ syncPrices: false });
       setDataHealthAssets(
-        wb.bootstrap.assetUniverse.map((a) => ({
-          assetKey: a.assetKey,
-          symbol: a.symbol,
-          market: a.market,
-          priceStatus: a.priceStatus,
-          priceUpdatedAt: a.priceUpdatedAt,
-          priceAgeSec: a.priceAgeSec,
+        workbenchModel.bootstrap.assetUniverse.map((assetRow) => ({
+          assetKey: assetRow.assetKey,
+          symbol: assetRow.symbol,
+          market: assetRow.market,
+          priceStatus: assetRow.priceStatus,
+          priceUpdatedAt: assetRow.priceUpdatedAt,
+          priceAgeSec: assetRow.priceAgeSec,
         })),
       );
     } catch {
@@ -174,22 +174,22 @@ export default function SettingsPage() {
       setConfig(saved.config);
       setBaselineConfig(saved.config);
       setHint(`保存成功 ${formatDateTime(saved.updatedAt)}；已生成的再平衡周期需重新生成/刷新建议后才会应用新配置`);
-      emitDashboardDataUpdated();
+      emitWorkbenchDataUpdated();
       return true;
-    } catch (e) {
-      if (e instanceof ApiClientError && (e.status === 409 || e.code === "VERSION_CONFLICT")) {
-        const latestVersion = typeof e.details === "object" && e.details && "latestVersion" in (e.details as Record<string, unknown>)
-          ? Number((e.details as Record<string, unknown>).latestVersion)
+    } catch (error) {
+      if (error instanceof ApiClientError && (error.status === 409 || error.code === "VERSION_CONFLICT")) {
+        const latestVersion = typeof error.details === "object" && error.details && "latestVersion" in (error.details as Record<string, unknown>)
+          ? Number((error.details as Record<string, unknown>).latestVersion)
           : Number.NaN;
         if (typeof latestVersion === "number" && latestVersion > 0) {
           setError(`配置已被其他操作更新，请刷新后重试（最新版本 ${Math.trunc(latestVersion)}）`);
         } else {
-          toast.error("配置版本冲突，请刷新页面重试。");
+          toast.error("配置已被其他操作更新，请刷新页面重试。");
           setError("配置已被其他操作更新，请刷新后重试");
         }
         return false;
       }
-      setError(e instanceof Error ? e.message : "保存失败");
+      setError(error instanceof Error ? error.message : "保存失败");
       return false;
     } finally {
       setSaving(false);
@@ -205,9 +205,9 @@ export default function SettingsPage() {
       const message = `市场状态层已刷新，更新 ${result.refreshedCount} 项指标`;
       setHint(message);
       toast.success(message);
-      emitDashboardRefresh({ source: "settings_market_refresh" });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "刷新市场状态层失败";
+      emitWorkbenchRefresh({ source: "settings_market_refresh" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "刷新市场状态层失败";
       setError(message);
       toast.error(message);
     } finally {
@@ -223,7 +223,7 @@ export default function SettingsPage() {
   const activeContent = useMemo(() => {
     if (!config) return null;
     if (activeSection === "brain") {
-      return <SettingsBrainTab config={config} setConfig={setConfig} />;
+      return <SettingsAssistantAutomationTab config={config} setConfig={setConfig} />;
     }
     if (activeSection === "data") {
       return (
@@ -243,33 +243,33 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6 lg:space-y-7">
+      <div className="space-y-4">
         <DaaSurfacePageHeader eyebrow="系统控制" title="设置" />
-        <DashboardEmptyState title="正在加载设置…" description="正在同步最新配置与市场状态层，请稍候。" className="px-5 py-16" />
+        <WorkbenchEmptyState title="正在加载设置…" description="同步配置与市场状态。" className="px-4 py-4" />
       </div>
     );
   }
 
   if (!config) {
     return (
-      <div className="space-y-6 lg:space-y-7">
+      <div className="space-y-4">
         <DaaSurfacePageHeader
           eyebrow="系统控制"
           title="设置"
           actions={(
-            <DaaSurfaceActionButton tone="primary" className="h-9 rounded-full px-4 text-xs" onClick={() => void load()}>
+            <DaaSurfaceActionButton tone="primary" className="h-9 rounded-[var(--radius-sm)] px-4 text-xs" onClick={() => void load()}>
               <RefreshCcw className="h-3.5 w-3.5" />
               重新加载设置
             </DaaSurfaceActionButton>
           )}
         />
-        <DashboardErrorNotice title="设置加载失败" description={error || "设置服务暂时不可用，请稍后重试。"} />
+        <WorkbenchErrorNotice title="设置加载失败" description={error || "设置服务暂时不可用，请稍后重试。"} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 lg:space-y-7">
+    <div className="space-y-4 lg:space-y-5">
       <DaaSurfacePageHeader
         eyebrow="系统控制"
         title="设置"
@@ -278,7 +278,7 @@ export default function SettingsPage() {
             {isDirty ? (
               <DaaSurfaceActionButton
                 tone="primary"
-                className="h-9 rounded-full px-4 text-xs"
+                className="h-9 rounded-[var(--radius-sm)] px-4 text-xs"
                 onClick={() => void saveConfig()}
                 disabled={loading || saving}
               >
@@ -287,43 +287,45 @@ export default function SettingsPage() {
               </DaaSurfaceActionButton>
             ) : null}
             <DaaSurfaceActionButton
-              tone="slate"
-              className="h-9 rounded-full px-4 text-xs"
+              tone="neutral"
+              className="h-9 rounded-[var(--radius-sm)] px-4 text-xs"
               onClick={() => void handleRefreshMarketContext()}
               disabled={loading || saving || marketRefreshing}
             >
               <RefreshCcw className={`h-3.5 w-3.5 ${marketRefreshing ? "animate-spin" : ""}`} />
               {marketRefreshing ? "刷新市场中…" : "刷新市场状态层"}
             </DaaSurfaceActionButton>
-            <DaaSurfaceStatusPill tone={isDirty ? "amber" : "green"}>{isDirty ? "存在未保存修改" : "已与当前版本同步"}</DaaSurfaceStatusPill>
-            <DaaSurfaceStatusPill tone="slate">配置版本 {version ?? "-"}</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone={isDirty ? "warning" : "success"}>{isDirty ? "存在未保存修改" : "已与当前版本同步"}</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone="neutral">配置版本 {version ?? "-"}</DaaSurfaceStatusPill>
           </div>
         )}
       />
 
-      <DashboardErrorNotice title="设置操作失败" description={error} />
-      <DashboardSuccessNotice title="设置已更新" description={hint} />
+      <WorkbenchErrorNotice title="设置操作失败" description={error} />
+      <WorkbenchSuccessNotice title="设置已更新" description={hint} />
 
-      <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--card),var(--surface))] px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+      <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
-            {SETTINGS_NAV_ITEMS_.map((item) => (
+            {SETTINGS_NAV_ITEMS.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => handleSectionChange(item.id)}
-                className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${
+                className={`inline-flex min-h-9 items-center gap-2 rounded-[var(--radius-sm)] border px-3 py-1.5 text-sm transition-colors ${
                   activeSection === item.id
                     ? "border-[var(--primary)] bg-[var(--primary-bg)] text-[var(--text)]"
                     : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                 }`}
               >
                 <span>{item.label}</span>
-                {sectionDirtyMap[item.id] ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--amber)]" /> : null}
+                {sectionDirtyMap[item.id] ? (
+                  <span className="border-l border-[var(--amber-border)] pl-2 text-[10px] font-medium text-[var(--amber)]">未保存</span>
+                ) : null}
               </button>
             ))}
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted)]">
+          <div className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--muted)]">
             <BellRing className="h-4 w-4 text-[var(--faint)]" />
             {dataHealthSummary.label}
           </div>

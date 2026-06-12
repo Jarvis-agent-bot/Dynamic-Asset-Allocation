@@ -83,12 +83,12 @@ export default function DaaUserMenuDialog() {
   async function logout() {
     setLogoutBusy(true);
     try {
-      const res = await fetch("/api/daa/auth/logout", {
+      const logoutResponse = await fetch("/api/daa/auth/logout", {
         method: "POST",
         headers: { accept: "application/json" },
       });
 
-      if (res.ok) {
+      if (logoutResponse.ok) {
         invalidateDaaAuthSessionCache();
         window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}&notice=signed_out`;
         return;

@@ -5,7 +5,7 @@
  *
  * Tier 定义：
  * - fast: 便宜/快速模型，用于 observe 数据整理、上下文摘要压缩、优先级排序
- * - strong: 主力/贵模型，用于 investigate 推理、reflect 反思、review 复盘、surface 日报
+ * - strong: 主力/贵模型，用于 investigate 推理、reflect 反思、review 复盘、surface 复核简报
  *
  * 路由逻辑：
  * - strong tier → 使用系统配置的主 LLM（resolveLlmConfig）

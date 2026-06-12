@@ -3,15 +3,15 @@
  *
  * 借鉴 Hermes Agent 的 Skill 系统：
  * - Hermes 的 Skill 是通用 Markdown 文件，自动从经验中生成
- * - DAA 的 Strategy 是投资调查策略模板，从高准确率 run 中提炼
+ * - DAA 的 Strategy 是投资复核策略模板，从高准确率 run 中提炼
  *
- * 策略模板不生成代码，而是生成"调查指导"：
+ * 策略模板不生成代码，而是生成"复核指导"：
  * - 什么条件下触发
  * - 推荐的工具组合
  * - 注入 investigate prompt 的策略提示
  */
 
-// ── 调查策略模板 ──
+// ── 复核策略模板 ──
 
 export interface InvestigationStrategy {
   id: string;

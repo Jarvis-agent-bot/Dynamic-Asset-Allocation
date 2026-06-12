@@ -50,8 +50,8 @@ export function WatchlistSearchBar(props: {
     try {
       const rows = await props.onSearch({ q: q.trim(), market: "ALL", assetClass: "ALL", region: "ALL" });
       setResults(rows);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "搜索失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "搜索失败");
     } finally {
       setSearching(false);
     }
@@ -63,8 +63,8 @@ export function WatchlistSearchBar(props: {
     setAddingKey(key);
     try {
       await props.onAddAsset(item);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "加入失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加入失败");
     } finally {
       setAddingKey(null);
     }
@@ -76,8 +76,8 @@ export function WatchlistSearchBar(props: {
     setAddingKey(key);
     try {
       await props.onRemoveAsset(item);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "移除失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "移除失败");
     } finally {
       setAddingKey(null);
     }
@@ -91,7 +91,7 @@ export function WatchlistSearchBar(props: {
     <div className="space-y-3">
       {/* 搜索栏 */}
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[var(--elevated)] px-3 py-2">
+        <div className="flex flex-1 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--elevated)] px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-[var(--faint)]" />
           <input
             value={q}
@@ -112,7 +112,7 @@ export function WatchlistSearchBar(props: {
         </div>
         <DaaSurfaceActionButton
           tone="primary"
-          className="h-10 shrink-0 rounded-[12px] px-4"
+          className="h-10 shrink-0 rounded-[var(--radius-sm)] px-4"
           onClick={() => void handleSearch()}
           disabled={searching || !q.trim()}
         >
@@ -120,8 +120,8 @@ export function WatchlistSearchBar(props: {
           搜索
         </DaaSurfaceActionButton>
         <DaaSurfaceActionButton
-          tone="slate"
-          className="h-10 shrink-0 rounded-[12px] px-3"
+          tone="neutral"
+          className="h-10 shrink-0 rounded-[var(--radius-sm)] px-3"
           onClick={() => setFeaturedOpen(true)}
         >
           <Sparkles className="h-4 w-4" />
@@ -133,7 +133,7 @@ export function WatchlistSearchBar(props: {
       {hasSearched ? (
         <div className="space-y-1">
           {results.length === 0 ? (
-            <div className="py-4 text-center text-xs text-[var(--muted)]">未找到匹配资产，试试其他关键词</div>
+            <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-2.5 py-2 text-xs text-[var(--muted)]">未找到匹配资产，试试其他关键词</div>
           ) : (
             results.slice(0, 8).map((item) => {
               const joined = isJoined(item);
@@ -143,7 +143,7 @@ export function WatchlistSearchBar(props: {
               return (
                 <div
                   key={`${item.market}::${item.symbol}`}
-                  className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-[var(--elevated)]"
+                  className="flex items-center gap-3 rounded-[var(--radius-sm)] px-3 py-2.5 transition-colors hover:bg-[var(--elevated)]"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
@@ -158,8 +158,8 @@ export function WatchlistSearchBar(props: {
                     </div>
                   </div>
                   <DaaSurfaceActionButton
-                    tone={joined ? "slate" : "primary"}
-                    className="h-8 shrink-0 rounded-full px-3 text-xs"
+                    tone={joined ? "neutral" : "primary"}
+                    className="h-8 shrink-0 rounded-[var(--radius-sm)] px-3 text-xs"
                     disabled={busy || props.loading}
                     onClick={() => void (joined ? handleRemove(item) : handleAdd(item))}
                   >
@@ -233,8 +233,8 @@ function FeaturedAssetsDialog(props: {
     setAddingKey(key);
     try {
       await props.onAddAsset(item);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "加入失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "加入失败");
     } finally {
       setAddingKey(null);
     }
@@ -246,8 +246,8 @@ function FeaturedAssetsDialog(props: {
     setAddingKey(key);
     try {
       await props.onRemoveAsset(item);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "移除失败");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "移除失败");
     } finally {
       setAddingKey(null);
     }
@@ -291,7 +291,7 @@ function FeaturedAssetsDialog(props: {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DaaSurfaceDialogShell
-        accent="indigo"
+        accent="info"
         className="max-w-[800px] max-h-[80dvh]"
         title="配置候选池"
         description="按配置用途、市场和品种筛选高流动性资产，用于构建目标配置。"
@@ -300,36 +300,36 @@ function FeaturedAssetsDialog(props: {
         {/* 筛选器 */}
         <div className="flex flex-wrap gap-4">
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">配置用途</div>
+            <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">配置用途</div>
             <div className="flex flex-wrap gap-1.5">
-              {ROLES.map((m) => (
-                <DaaSurfaceFilterChip key={m.value} active={role === m.value} onClick={() => { setRole(m.value); }}>
-                  {m.label}
+              {ROLES.map((roleOption) => (
+                <DaaSurfaceFilterChip key={roleOption.value} active={role === roleOption.value} onClick={() => { setRole(roleOption.value); }}>
+                  {roleOption.label}
                 </DaaSurfaceFilterChip>
               ))}
             </div>
           </div>
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">市场</div>
+            <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">市场</div>
             <div className="flex flex-wrap gap-1.5">
-              {MARKETS.map((m) => (
-                <DaaSurfaceFilterChip key={m.value} active={market === m.value} onClick={() => { setMarket(m.value); }}>
-                  {m.label}
+              {MARKETS.map((marketOption) => (
+                <DaaSurfaceFilterChip key={marketOption.value} active={market === marketOption.value} onClick={() => { setMarket(marketOption.value); }}>
+                  {marketOption.label}
                 </DaaSurfaceFilterChip>
               ))}
             </div>
           </div>
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">品种</div>
+            <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">品种</div>
             <div className="flex flex-wrap gap-1.5">
-              {CLASSES.map((c) => (
-                <DaaSurfaceFilterChip key={c.value} active={assetClass === c.value} onClick={() => { setAssetClass(c.value); }}>
-                  {c.label}
+              {CLASSES.map((classOption) => (
+                <DaaSurfaceFilterChip key={classOption.value} active={assetClass === classOption.value} onClick={() => { setAssetClass(classOption.value); }}>
+                  {classOption.label}
                 </DaaSurfaceFilterChip>
               ))}
             </div>
           </div>
-          <DaaSurfaceActionButton tone="primary" className="mt-auto h-8 rounded-full px-4 text-xs" onClick={() => void loadData()} disabled={loading}>
+          <DaaSurfaceActionButton tone="primary" className="mt-auto h-8 rounded-[var(--radius-sm)] px-4 text-xs" onClick={() => void loadData()} disabled={loading}>
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             刷新
           </DaaSurfaceActionButton>
@@ -346,7 +346,7 @@ function FeaturedAssetsDialog(props: {
               <div className="text-sm font-semibold text-[var(--text)]">{group.groupLabelZh}</div>
               <div className="mt-0.5 text-xs leading-5 text-[var(--muted)]">{group.groupDescriptionZh}</div>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]">
               {group.items.map((item) => {
                 const joined = isJoined(item);
                 const busy = addingKey === assetKey(item);
@@ -355,7 +355,7 @@ function FeaturedAssetsDialog(props: {
                 return (
                   <div
                     key={`${item.market}::${item.symbol}`}
-                    className="flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
+                    className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--elevated)]"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -364,9 +364,9 @@ function FeaturedAssetsDialog(props: {
                       </div>
                       <div className="mt-0.5 text-[11px] leading-4 text-[var(--muted)]">{note}</div>
                       <div className="mt-1 flex flex-wrap gap-1.5">
-                        <DaaSurfaceStatusPill tone="slate">{item.typeDisp}</DaaSurfaceStatusPill>
-                        <DaaSurfaceStatusPill tone="slate">{marketLabel(item)} · {item.currency}</DaaSurfaceStatusPill>
-                        <DaaSurfaceStatusPill tone="slate">参考 {item.suggestedWeightBandZh}</DaaSurfaceStatusPill>
+                        <DaaSurfaceStatusPill tone="neutral">{item.typeDisp}</DaaSurfaceStatusPill>
+                        <DaaSurfaceStatusPill tone="neutral">{marketLabel(item)} · {item.currency}</DaaSurfaceStatusPill>
+                        <DaaSurfaceStatusPill tone="neutral">参考 {item.suggestedWeightBandZh}</DaaSurfaceStatusPill>
                       </div>
                       {item.price > 0 ? (
                         <div className="mt-0.5 font-[var(--font-mono)] text-xs text-[var(--text)]">
@@ -375,8 +375,8 @@ function FeaturedAssetsDialog(props: {
                       ) : null}
                     </div>
                     <DaaSurfaceActionButton
-                      tone={joined ? "slate" : "primary"}
-                      className="h-8 shrink-0 rounded-full px-3 text-xs"
+                      tone={joined ? "neutral" : "primary"}
+                      className="h-8 shrink-0 rounded-[var(--radius-sm)] px-3 text-xs"
                       disabled={busy || props.loading}
                       onClick={() => void (joined ? handleRemove(item) : handleAdd(item))}
                     >

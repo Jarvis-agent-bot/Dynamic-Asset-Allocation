@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp, Filter, HelpCircle, RefreshCcw } from "lucide-r
 import type { WorkbenchRebalanceCycleReport } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
-import { DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { WorkbenchErrorNotice } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import type { TradesModel, TradeTab, TradeFilters } from "@/app/daa/dashboard/_hooks/useTradesModel";
 import { cn } from "@/lib/utils";
 import {
@@ -19,33 +19,25 @@ import {
   daaSurfaceDenseFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
-/* ------------------------------------------------------------------ */
-/*  Label helpers                                                      */
-/* ------------------------------------------------------------------ */
-
-const STATUS_TONE: Record<string, "cyan" | "amber" | "green" | "indigo" | "slate"> = {
-  generated: "indigo", reviewing: "amber", executing: "cyan", completed: "green", cancelled: "slate",
+const STATUS_TONE: Record<string, "primary" | "warning" | "success" | "info" | "neutral"> = {
+  generated: "info", reviewing: "warning", executing: "primary", completed: "success", cancelled: "neutral",
 };
 
-function cycleStatusLabel(s: string): string {
-  return { generated: "已生成", reviewing: "审阅中", executing: "执行中", completed: "已完成", cancelled: "已取消" }[s] || s;
+function cycleStatusLabel(status: string): string {
+  return { generated: "已生成", reviewing: "审阅中", executing: "执行中", completed: "已完成", cancelled: "已取消" }[status] || status;
 }
 
-function orderStatusLabel(s: string): string {
-  return { ready: "待执行", submitted: "已提交", partially_filled: "部分成交", executed: "已执行", rejected: "已拒绝", canceled: "已取消" }[s] || s;
+function orderStatusLabel(status: string): string {
+  return { ready: "待执行", submitted: "已提交", partially_filled: "部分成交", executed: "已执行", rejected: "已拒绝", canceled: "已取消" }[status] || status;
 }
 
-function orderStatusTone(s: string): "cyan" | "amber" | "green" | "indigo" | "slate" {
-  return { ready: "cyan" as const, submitted: "indigo" as const, partially_filled: "amber" as const, executed: "green" as const, rejected: "amber" as const, canceled: "slate" as const }[s] || "slate";
+function orderStatusTone(status: string): "primary" | "warning" | "success" | "info" | "neutral" {
+  return { ready: "primary" as const, submitted: "info" as const, partially_filled: "warning" as const, executed: "success" as const, rejected: "warning" as const, canceled: "neutral" as const }[status] || "neutral";
 }
 
-function triggerSourceLabel(s: string): string {
-  return { scheduled_review: "定期复盘", drift: "偏移", risk: "风险", cash_idle: "现金闲置" }[s] || "手动";
+function triggerSourceLabel(source: string): string {
+  return { scheduled_review: "定期复盘", drift: "偏移", risk: "风险", cash_idle: "现金闲置" }[source] || "手动";
 }
-
-/* ------------------------------------------------------------------ */
-/*  Header                                                             */
-/* ------------------------------------------------------------------ */
 
 export function TradesHeader({ model }: { model: TradesModel }) {
   return (
@@ -62,10 +54,6 @@ export function TradesHeader({ model }: { model: TradesModel }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Compact overview: metrics + filter in one row                      */
-/* ------------------------------------------------------------------ */
-
 export function TradesCompactOverview({ model }: { model: TradesModel }) {
   const [showFilters, setShowFilters] = useState(false);
   const hasActiveFilter = Boolean(model.filters.startDate || model.filters.endDate || model.filters.symbol || model.filters.side || model.filters.status);
@@ -76,30 +64,28 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
 
   return (
     <div className="space-y-3">
-      {/* 概览指标行 */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] px-5 py-3">
-        <Metric label="再平衡" value={`${model.cycles.length}`} sub={`完成 ${model.completedCycleCount}`} />
-        <Separator />
-        <Metric label="订单" value={`${model.orders.length}`} sub={`成交 ${model.executedOrderCount}`} />
-        <Separator />
-        <Metric label="成交额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} />
-        <Separator />
-        <Metric
-          label="已实现 P&L"
-          value={formatCurrency(model.realizedPnl, model.baseCurrency)}
-          tone={model.realizedPnl >= 0 ? "green" : "red"}
-          hint="来自已完成调仓周期复盘报告的实现损益合计，含手续费与汇率影响"
-        />
-
-        <div className="ml-auto flex items-center gap-2">
+      <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)]">
+        <div className="grid grid-cols-2 md:grid-cols-4">
+          <Metric label="调仓周期" value={`${model.cycles.length}`} sub={`完成 ${model.completedCycleCount}`} index={0} />
+          <Metric label="订单" value={`${model.orders.length}`} sub={`成交 ${model.executedOrderCount}`} index={1} />
+          <Metric label="成交额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} index={2} />
+          <Metric
+            label="已实现 P&L"
+            value={formatCurrency(model.realizedPnl, model.baseCurrency)}
+            tone={model.realizedPnl >= 0 ? "success" : "danger"}
+            hint="来自已完成调仓周期复盘报告的实现损益合计，含手续费与汇率影响"
+            index={3}
+          />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2">
           {model.latestActivityAt ? (
             <span className="text-[11px] text-[var(--faint)]">最近 {formatDateTime(model.latestActivityAt)}</span>
-          ) : null}
+          ) : <span className="text-[11px] text-[var(--faint)]">暂无交易活动</span>}
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              "flex min-h-10 items-center gap-1 rounded-[8px] px-3 py-1.5 text-xs font-medium transition-colors",
+              "flex min-h-10 items-center gap-1 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-medium transition-colors",
               showFilters || hasActiveFilter ? "bg-[var(--primary-bg)] text-[var(--primary)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
@@ -109,19 +95,18 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
         </div>
       </div>
 
-      {/* 可折叠筛选区 */}
       {showFilters ? (
-        <div className="flex flex-wrap items-end gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+        <div className="flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">开始</span>
+            <span className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">开始</span>
             <input type="date" value={model.filters.startDate ?? ""} onChange={(e) => updateFilter({ startDate: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[130px]")} />
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">结束</span>
+            <span className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">结束</span>
             <input type="date" value={model.filters.endDate ?? ""} onChange={(e) => updateFilter({ endDate: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[130px]")} />
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">标的</span>
+            <span className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">标的</span>
             <input type="text" placeholder="AAPL" value={model.filters.symbol ?? ""} onChange={(e) => updateFilter({ symbol: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[100px]")} />
           </label>
           <div className="flex items-center gap-1.5 pb-0.5">
@@ -129,7 +114,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
             <DaaSurfaceFilterChip active={model.filters.side === "SELL"} onClick={() => updateFilter({ side: model.filters.side === "SELL" ? undefined : "SELL" })}>卖出</DaaSurfaceFilterChip>
           </div>
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">状态</span>
+            <span className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">状态</span>
             <select value={model.filters.status ?? ""} onChange={(e) => updateFilter({ status: (e.target.value || undefined) as TradeFilters["status"] })} className={cn(daaSurfaceDenseFieldClassName, "w-[100px]")}>
               <option value="">全部</option>
               <option value="ready">待执行</option>
@@ -140,7 +125,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
             </select>
           </label>
           {hasActiveFilter ? (
-            <DaaSurfaceActionButton tone="slate" className="mb-0.5 text-xs" onClick={() => model.setFilters({})}>清除</DaaSurfaceActionButton>
+            <DaaSurfaceActionButton tone="neutral" className="mb-0.5 text-xs" onClick={() => model.setFilters({})}>清除</DaaSurfaceActionButton>
           ) : null}
         </div>
       ) : null}
@@ -148,10 +133,19 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
   );
 }
 
-function Metric(props: { label: string; value: string; sub?: string; tone?: "green" | "red"; hint?: string }) {
+function Metric(props: { label: string; value: string; sub?: string; tone?: "success" | "danger"; hint?: string; index: number }) {
+  const borderClass = [
+    props.index % 2 === 0 ? "border-r border-[var(--border)]" : "",
+    props.index < 2 ? "border-b border-[var(--border)]" : "",
+    props.index % 4 === 3 ? "md:border-r-0" : "md:border-r md:border-[var(--border)]",
+    "md:border-b-0",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div>
-      <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+    <div className={`min-w-0 bg-[var(--card)] px-3 py-2.5 ${borderClass}`}>
+      <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">
         {props.label}
         {props.hint ? (
           <span className="inline-flex" title={props.hint}>
@@ -159,7 +153,7 @@ function Metric(props: { label: string; value: string; sub?: string; tone?: "gre
           </span>
         ) : null}
       </div>
-      <div className={cn("font-[var(--font-mono)] text-sm font-semibold", props.tone === "green" ? "text-[var(--success)]" : props.tone === "red" ? "text-red-400" : "text-[var(--text)]")}>
+      <div className={cn("font-[var(--font-mono)] text-sm font-semibold", props.tone === "success" ? "text-[var(--success)]" : props.tone === "danger" ? "text-[var(--danger)]" : "text-[var(--text)]")}>
         {props.value}
       </div>
       {props.sub ? <div className="text-[10px] text-[var(--faint)]">{props.sub}</div> : null}
@@ -167,21 +161,9 @@ function Metric(props: { label: string; value: string; sub?: string; tone?: "gre
   );
 }
 
-function Separator() {
-  return <div className="hidden h-8 w-px bg-[var(--border)] md:block" />;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Error state                                                        */
-/* ------------------------------------------------------------------ */
-
 export function TradesErrorState({ error }: { error: string }) {
-  return <DashboardErrorNotice title="交易记录加载失败" description={error} />;
+  return <WorkbenchErrorNotice title="交易记录加载失败" description={error} />;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Tabs panel                                                         */
-/* ------------------------------------------------------------------ */
 
 const TAB_META: Record<TradeTab, string> = {
   cycles: "调仓周期",
@@ -192,7 +174,7 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
   const safeTab: TradeTab = model.activeTab === "cycles" || model.activeTab === "orders" ? model.activeTab : "cycles";
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-1" role="tablist">
+      <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-1" role="tablist">
         {(Object.keys(TAB_META) as TradeTab[]).map((tab) => (
           <button
             key={tab}
@@ -201,7 +183,7 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
             aria-selected={tab === safeTab}
             onClick={() => model.setActiveTab(tab)}
             className={cn(
-              "min-h-10 rounded-[10px] px-3 py-2 text-sm transition-colors",
+              "min-h-10 rounded-[var(--radius-sm)] px-3 py-2 text-sm transition-colors",
               tab === safeTab ? "bg-[var(--primary-bg)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
@@ -216,10 +198,6 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Cycles timeline（含复盘报告内联展开）                                */
-/* ------------------------------------------------------------------ */
-
 function CyclesTimeline({ model }: { model: TradesModel }) {
   const reportsByCycle = useMemo(() => {
     const map = new Map<string, WorkbenchRebalanceCycleReport>();
@@ -232,7 +210,7 @@ function CyclesTimeline({ model }: { model: TradesModel }) {
       <DaaSurfaceEmptyState
         title="暂无调仓周期"
         description="前往调仓页生成首个调仓建议。"
-        className="py-14"
+        className="py-4"
         action={<Link href="/daa/dashboard/rebalance" className="text-sm text-[var(--primary)] hover:underline">前往调仓 →</Link>}
       />
     );
@@ -240,35 +218,35 @@ function CyclesTimeline({ model }: { model: TradesModel }) {
 
   return (
     <div className="space-y-2">
-      {model.cycles.map((c) => {
-        const report = reportsByCycle.get(c.cycleId) ?? null;
-        const expanded = model.expandedReportCycleId === c.cycleId;
-        const count = c.executionSummary
-          ? (c.executionSummary.ordersExecuted ?? 0) + (c.executionSummary.ordersSubmitted ?? 0) + (c.executionSummary.ordersFailed ?? 0)
-          : c.executedOrders.length;
-        const notional = c.executionSummary?.totalNotional ?? 0;
+      {model.cycles.map((cycle) => {
+        const report = reportsByCycle.get(cycle.cycleId) ?? null;
+        const expanded = model.expandedReportCycleId === cycle.cycleId;
+        const orderCount = cycle.executionSummary
+          ? (cycle.executionSummary.ordersExecuted ?? 0) + (cycle.executionSummary.ordersSubmitted ?? 0) + (cycle.executionSummary.ordersFailed ?? 0)
+          : cycle.executedOrders.length;
+        const cycleNotional = cycle.executionSummary?.totalNotional ?? 0;
         const canExpand = report != null;
 
         return (
-          <div key={c.cycleId} className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
+          <div key={cycle.cycleId} className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]">
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
                 <Link
-                  href={`/daa/dashboard/rebalance?cycleId=${c.cycleId}`}
+                  href={`/daa/dashboard/rebalance?cycleId=${cycle.cycleId}`}
                   className="font-[var(--font-mono)] text-sm text-[var(--primary)] hover:underline"
                 >
-                  {c.cycleId.slice(0, 8)}
+                  {cycle.cycleId.slice(0, 8)}
                 </Link>
-                <DaaSurfaceStatusPill tone={STATUS_TONE[c.status] ?? "slate"}>{cycleStatusLabel(c.status)}</DaaSurfaceStatusPill>
-                <span className="text-xs text-[var(--faint)]">{triggerSourceLabel(c.triggerSource)}</span>
-                <span className="text-xs text-[var(--muted)]">订单 {count} · {formatCurrency(notional, model.baseCurrency)}</span>
+                <DaaSurfaceStatusPill tone={STATUS_TONE[cycle.status] ?? "neutral"}>{cycleStatusLabel(cycle.status)}</DaaSurfaceStatusPill>
+                <span className="text-xs text-[var(--faint)]">{triggerSourceLabel(cycle.triggerSource)}</span>
+                <span className="text-xs text-[var(--muted)]">订单 {orderCount} · {formatCurrency(cycleNotional, model.baseCurrency)}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="hidden text-xs text-[var(--faint)] sm:inline">{formatDateTime(c.createdAt)}</span>
+                <span className="hidden text-xs text-[var(--faint)] sm:inline">{formatDateTime(cycle.createdAt)}</span>
                 {canExpand ? (
                   <button
                     type="button"
-                    onClick={() => model.setExpandedReportCycleId(expanded ? null : c.cycleId)}
+                    onClick={() => model.setExpandedReportCycleId(expanded ? null : cycle.cycleId)}
                     className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                   >
                     {expanded ? "收起复盘" : "查看复盘"}
@@ -284,7 +262,7 @@ function CyclesTimeline({ model }: { model: TradesModel }) {
               <div className="space-y-3 border-t border-[var(--border)] px-4 py-3">
                 <div className="grid gap-3 md:grid-cols-3">
                   <MetricBlock title="执行概览" items={[
-                    `订单 ${count}`,
+                    `订单 ${orderCount}`,
                     `金额 ${formatCurrency(report.executionSummary?.totalNotional ?? 0, model.baseCurrency)}`,
                     `费用 ${formatCurrency(report.pnlAttribution.feeTotal, model.baseCurrency)}`,
                   ]} />
@@ -301,7 +279,7 @@ function CyclesTimeline({ model }: { model: TradesModel }) {
                 </div>
                 <div className="flex flex-wrap gap-4 text-xs text-[var(--muted)]">
                   <span>权益 {formatCurrency(report.beforeSnapshot.totalEquity, model.baseCurrency)} → {formatCurrency(report.afterSnapshot.totalEquity, model.baseCurrency)}</span>
-                  <span>贡献前三: {report.pnlAttribution.topContributors.slice(0, 3).map((c) => `${c.symbol} ${formatCurrency(c.pnl, model.baseCurrency)}`).join("、") || "—"}</span>
+                  <span>贡献前三: {report.pnlAttribution.topContributors.slice(0, 3).map((contributor) => `${contributor.symbol} ${formatCurrency(contributor.pnl, model.baseCurrency)}`).join("、") || "—"}</span>
                 </div>
               </div>
             ) : null}
@@ -311,10 +289,6 @@ function CyclesTimeline({ model }: { model: TradesModel }) {
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Orders                                                             */
-/* ------------------------------------------------------------------ */
 
 function OrdersPanel({ model }: { model: TradesModel }) {
   const [visibleCount, setVisibleCount] = useState(50);
@@ -327,14 +301,14 @@ function OrdersPanel({ model }: { model: TradesModel }) {
       <DaaSurfaceEmptyState
         title="暂无订单记录"
         description="完成一次调仓执行后订单会自动出现。"
-        className="py-14"
+        className="py-4"
         action={<Link href="/daa/dashboard/rebalance" className="text-sm text-[var(--primary)] hover:underline">前往调仓 →</Link>}
       />
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--border)]">
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)]">
       <table className="w-full border-collapse bg-[var(--surface)]">
         <thead>
           <tr>
@@ -342,25 +316,25 @@ function OrdersPanel({ model }: { model: TradesModel }) {
           </tr>
         </thead>
         <tbody>
-          {model.orders.slice(0, visibleCount).map((o) => (
-            <tr key={o.ticketId} className="transition-colors hover:bg-[var(--surface)]">
-              <TD mono>{o.symbol}</TD>
+          {model.orders.slice(0, visibleCount).map((order) => (
+            <tr key={order.ticketId} className="transition-colors hover:bg-[var(--elevated)]">
+              <TD mono>{order.symbol}</TD>
               <TD>
-                <span className={o.side === "BUY" ? "text-[var(--success)]" : "text-red-400"}>
-                  {o.side === "BUY" ? "买入" : "卖出"}
+                <span className={order.side === "BUY" ? "text-[var(--success)]" : "text-[var(--danger)]"}>
+                  {order.side === "BUY" ? "买入" : "卖出"}
                 </span>
               </TD>
-              <TD><DaaSurfaceStatusPill tone={orderStatusTone(o.status)}>{orderStatusLabel(o.status)}</DaaSurfaceStatusPill></TD>
-              <TD mono align="right">{o.qty.toFixed(4)}</TD>
-              <TD mono align="right">{formatCurrency(o.avgFillPrice || o.price, o.instrumentCurrency || "USD")}</TD>
-              <TD align="right">{formatDateTime(o.updatedAt)}</TD>
+              <TD><DaaSurfaceStatusPill tone={orderStatusTone(order.status)}>{orderStatusLabel(order.status)}</DaaSurfaceStatusPill></TD>
+              <TD mono align="right">{order.qty.toFixed(4)}</TD>
+              <TD mono align="right">{formatCurrency(order.avgFillPrice || order.price, order.instrumentCurrency || "USD")}</TD>
+              <TD align="right">{formatDateTime(order.updatedAt)}</TD>
             </tr>
           ))}
         </tbody>
       </table>
       {model.orders.length > visibleCount ? (
         <div className="border-t border-[var(--border)] px-4 py-2 text-center">
-          <button type="button" className="text-xs text-[var(--primary)] hover:underline" onClick={() => setVisibleCount((p) => p + 50)}>
+          <button type="button" className="text-xs text-[var(--primary)] hover:underline" onClick={() => setVisibleCount((previousVisibleCount) => previousVisibleCount + 50)}>
             加载更多（剩余 {model.orders.length - visibleCount}）
           </button>
         </div>
@@ -376,8 +350,8 @@ function OrdersPanel({ model }: { model: TradesModel }) {
 
 function MetricBlock(props: { title: string; items: string[] }) {
   return (
-    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--elevated)] px-3 py-2.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{props.title}</div>
+    <div className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--elevated)] px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]">{props.title}</div>
       <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
         {props.items.map((item, i) => <div key={i}>{item}</div>)}
       </div>
@@ -385,17 +359,13 @@ function MetricBlock(props: { title: string; items: string[] }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Table primitives                                                   */
-/* ------------------------------------------------------------------ */
-
 function TH({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return <th className="border-b border-[var(--border)] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]" style={{ textAlign: align }}>{children}</th>;
+  return <th className={cn("border-b border-[var(--border)] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-normal text-[var(--faint)]", align === "right" ? "text-right" : "text-left")}>{children}</th>;
 }
 
 function TD({ children, align = "left", mono }: { children: React.ReactNode; align?: "left" | "right"; mono?: boolean }) {
   return (
-    <td className={cn("border-b border-[var(--border)] px-4 py-2.5 text-sm", mono ? "font-[var(--font-mono)] text-[var(--text)]" : "text-[var(--muted)]")} style={{ textAlign: align }}>
+    <td className={cn("border-b border-[var(--border)] px-4 py-2.5 text-sm", align === "right" ? "text-right" : "text-left", mono ? "font-[var(--font-mono)] text-[var(--text)]" : "text-[var(--muted)]")}>
       {children}
     </td>
   );

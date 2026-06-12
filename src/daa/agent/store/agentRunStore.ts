@@ -1,5 +1,5 @@
 /**
- * Agent Run Store — Agent 运行记录的持久化层
+ * 复核运行 Store — 投资助理复核运行记录的持久化层
  */
 
 import { randomUUID } from "node:crypto";

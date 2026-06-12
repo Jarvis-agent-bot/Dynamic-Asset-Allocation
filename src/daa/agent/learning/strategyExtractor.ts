@@ -1,9 +1,9 @@
 /**
- * Strategy Extractor — 从高准确率 run 中提炼调查策略
+ * Strategy Extractor — 从高准确率 run 中提炼复核策略
  *
  * 借鉴 Hermes 的 Skill 自生成：
- * - 不是生成代码，而是生成"调查策略模板"
- * - 例如："当 VIX > 25 时，优先调查防御性资产的估值信号"
+ * - 不是生成代码，而是生成"复核策略模板"
+ * - 例如："当 VIX > 25 时，优先复核防御性资产的估值信号"
  *
  * 由 learnNode 在每个 cycle 的 review 阶段后调用。
  */
@@ -13,10 +13,10 @@ import { createStrategy, listStrategies } from "@/src/daa/agent/learning/strateg
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 /**
- * 尝试从一个成功的 Agent run 中提炼调查策略。
+ * 尝试从一个成功的复核运行中提炼复核策略。
  *
  * 条件：
- * - run 必须有 thesesUpdated > 0（确实产生了有效调查）
+ * - run 必须有 thesesUpdated > 0（确实产生了有效复核）
  * - 工具组合至少 2 个不同工具（单工具无法提炼组合模式）
  *
  * 策略提取不调 LLM（Phase 2 阶段用规则提炼，Phase 3 可升级为 LLM 提炼）。
@@ -64,18 +64,18 @@ export async function extractStrategyFromRun(
       compute_correlation: "相关性",
       simulate_rebalance: "模拟调仓",
       evaluate_self_accuracy: "准确率",
-      query_thesis_history: "论点历史",
+      query_thesis_history: "判断历史",
       query_past_decisions: "决策回顾",
     };
     const toolNames = uniqueTools.map(t => toolLabels[t] ?? t).join("+");
     const name = `${input.regime ?? "通用"}_${toolNames}`;
 
     // 生成 prompt template
-    const promptTemplate = `基于历史经验，在 ${triggerConditions} 条件下，推荐先使用 ${uniqueTools.slice(0, 3).join("→")} 的调查顺序。此组合在过去的调查中有效产出了论点更新。`;
+    const promptTemplate = `基于历史经验，在 ${triggerConditions} 条件下，推荐先使用 ${uniqueTools.slice(0, 3).join("→")} 的复核顺序。此组合在过去的复核中有效产出了投资判断更新。`;
 
     const strategy = await createStrategy({
       name,
-      description: `从 run ${input.runId} 提炼：${triggerConditions} 条件下的 ${uniqueTools.length} 工具组合策略`,
+      description: `从 run ${input.runId} 提炼：${triggerConditions} 条件下的 ${uniqueTools.length} 工具组合复核策略`,
       triggerConditions,
       toolSequence: uniqueTools,
       promptTemplate,

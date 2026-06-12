@@ -14,7 +14,7 @@ import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfi
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
-import { buildDailyReportText, DAILY_REPORT_PARSE_MODE } from "@/src/daa/notify/dailyReportBuilder";
+import { buildDailyReviewText, DAILY_REVIEW_PARSE_MODE } from "@/src/daa/notify/dailyReviewBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
@@ -72,11 +72,11 @@ function buildNotifyText(input: {
   lines.push(`触发原因：${input.triggerReason}`);
   lines.push(`风控状态：${input.riskStatus}`);
 
-  // AI summary section
+  // Model summary section
   const snap = input.agentDecisionSnapshot;
   if (snap && snap.status === "ok" && snap.summary) {
     lines.push("");
-    lines.push("*AI 判断*");
+    lines.push("*模型判断*");
     lines.push(snap.summary.slice(0, 100));
     if (snap.keyRisks.length > 0) {
       lines.push(`风险: ${snap.keyRisks.slice(0, 2).join("; ")}`);
@@ -188,7 +188,7 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
           generatedCycleForAutoExecute = cycle;
 
           // Send notifications for onSuggestionGenerated
-          // 抑制 0 提案推送：Agent 判断"今日无须调仓"时不发 TG/飞书（噪声消息）
+          // 抑制 0 提案推送：复核判断为“今日无须调仓”时不发 TG/飞书（噪声消息）
           let telegramSent = false;
           let feishuSent = false;
           if (cycle && generated.created && cycle.proposals.length > 0) {
@@ -289,11 +289,11 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
         }
 
         // ── Phase D: daily report (independent of autoGenerateEnabled) ──
-        const wantTgReport = notif.telegram.enabled && notif.telegram.dailyReport;
-        const wantFsReport = notif.feishu.enabled && notif.feishu.dailyReport;
-        // 若 Cognitive Agent 启用，则 agent_briefing 已覆盖每日报告的所有信息
-        // （持仓、意外、认知缺口、风险暴露等），无条件跳过 daily_report 避免重复推送。
-        // 仅当用户主动关闭 Cognitive Agent 时，daily_report 才作为 fallback 发送。
+        const wantTgReview = notif.telegram.enabled && notif.telegram.dailyReport;
+        const wantFsReview = notif.feishu.enabled && notif.feishu.dailyReport;
+        // 若投资助理复核启用，则 agent_briefing 已覆盖每日复核通知的所有信息
+        // （持仓、需要复核的变化、判断不一致、风险暴露等），无条件跳过 daily_report 避免重复推送。
+        // 仅当用户主动关闭投资助理复核时，daily_report 才作为 fallback 发送。
         const agentEnabled = system.config.cognitiveAgent?.enabled !== false;
         let dailyReport: { sent: boolean; telegram: boolean; feishu: boolean } = {
           sent: false,
@@ -301,32 +301,32 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
           feishu: false,
         };
 
-        if ((wantTgReport || wantFsReport) && !agentEnabled) {
+        if ((wantTgReview || wantFsReview) && !agentEnabled) {
           try {
             // 当日去重：防止 cron 重试或手动触发导致重复发送
             const alreadySentToday = await hasTodayNotification("daily_report").catch(() => false);
             if (alreadySentToday) {
-              console.log("[dailyAnalysis] 每日报告已于今日发送，跳过重复发送");
+              console.log("[dailyAnalysis] 每日复核已于今日发送，跳过重复发送");
             } else {
               const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
-              const reportText = await buildDailyReportText(bootstrap);
+              const reviewText = await buildDailyReviewText(bootstrap);
 
               const sends: Promise<void>[] = [];
-              if (wantTgReport) {
+              if (wantTgReview) {
                 sends.push(
-                  sendTelegramByEnv(reportText, {
+                  sendTelegramByEnv(reviewText, {
                     eventType: "daily_report",
                     triggerSource: "cron_daily_analysis",
                     jobId,
                     cycleId: autoGenerate.cycleId,
-                    parseMode: DAILY_REPORT_PARSE_MODE as "HTML",
+                    parseMode: DAILY_REVIEW_PARSE_MODE as "HTML",
                     requestJson: { reportType: "daily_analysis" },
                   }).then((sent) => { dailyReport.telegram = sent; }),
                 );
               }
-              if (wantFsReport) {
+              if (wantFsReview) {
                 sends.push(
-                  sendFeishuByEnv(reportText, {
+                  sendFeishuByEnv(reviewText, {
                     eventType: "daily_report",
                     triggerSource: "cron_daily_analysis",
                     jobId,
@@ -339,7 +339,7 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
               dailyReport.sent = dailyReport.telegram || dailyReport.feishu;
             }
           } catch (err) {
-            logSwallowed("dailyAnalysisRoute.dailyReport", err);
+            logSwallowed("dailyAnalysisRoute.dailyReview", err);
           }
         }
 

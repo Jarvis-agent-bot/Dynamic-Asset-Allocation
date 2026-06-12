@@ -1,10 +1,10 @@
 /**
- * Cognitive Agent OS — 核心类型定义
+ * Investment Review Assistant OS — 核心类型定义
  *
- * thesis-driven 认知 Agent 的数据模型。
+ * investment-judgment-driven 投资助理复核链路的数据模型。
  */
 
-// ── 研究线索 ──
+// ── 投资判断（内部沿用 thesis/thread 契约） ──
 
 export type ThesisStatus = "active" | "paused" | "archived" | "invalidated";
 export type ThesisConviction = "high" | "medium" | "low" | "uncertain";
@@ -21,11 +21,11 @@ export interface ResearchThread {
   assetKeys: string[];
   tags: string[];
   priorityScore: number;
-  /** 人最近一次看到该判断的时间。它不代表 Agent 做过调查。 */
+  /** 人最近一次看到该判断的时间。它不代表投资助理做过复核。 */
   lastSeenAt?: string | null;
-  /** Agent 最近一次完成有效调查的时间。Today 页“太久没看”优先看这个字段。 */
+  /** 投资助理最近一次完成有效复核的时间。Today 页“太久没看”优先看这个字段。 */
   lastInvestigatedAt?: string | null;
-  /** 最近一次有证据写入的时间。 */
+  /** 最近一次有依据写入的时间。 */
   lastEvidenceAt?: string | null;
   /** 最近一次由人或执行层形成决策的时间。 */
   lastDecisionAt?: string | null;
@@ -34,7 +34,7 @@ export interface ResearchThread {
   updatedAt: string;
 }
 
-// ── 证据 ──
+// ── 判断依据 ──
 
 export type EvidenceType = "supporting" | "contradicting" | "neutral";
 export type EvidenceSource = "market_data" | "news" | "technical" | "valuation" | "agent_reasoning" | "human" | "trade_outcome";
@@ -50,7 +50,7 @@ export interface EvidenceItem {
   createdAt: string;
 }
 
-// ── Agent 运行记录 ──
+// ── 投资助理运行记录 ──
 
 export type AgentRunStatus = "running" | "completed" | "completed_with_errors" | "failed" | "interrupted";
 export type AgentTrigger = "scheduled" | "manual" | "event_driven";
@@ -88,7 +88,7 @@ export interface ReasoningTrace {
   durationMs: number;
 }
 
-// ── Agent 记忆 ──
+// ── 投资助理记忆 ──
 
 export type MemoryType = "pattern" | "lesson" | "preference" | "fact";
 
@@ -104,24 +104,7 @@ export interface AgentMemory {
   lastAccessed: string;
 }
 
-// ── 决策复盘 ──
-
-type ReviewWindow = "7d" | "30d" | "90d";
-
-export interface ThesisReview {
-  id: string;
-  threadId: string;
-  reviewWindow: ReviewWindow;
-  thesisAtTime: string;
-  convictionAtTime: string;
-  actualOutcome: string | null;
-  accuracyScore: number | null;
-  lessonsLearned: string | null;
-  generatedMemoryIds: string[];
-  createdAt: string;
-}
-
-// ── Agent 输出 ──
+// ── 投资助理输出 ──
 
 export interface Surprise {
   title: string;
@@ -150,7 +133,7 @@ export interface MindChangeCondition {
   monitoringIndicators: string[];
 }
 
-/** Feature B: 论点失效对组合的影响 */
+/** Feature B: 投资判断失效对组合的影响 */
 export interface ThesisFailureImpact {
   threadId: string;
   thesisTitle: string;
@@ -161,7 +144,7 @@ export interface ThesisFailureImpact {
   riskLevel: "low" | "medium" | "high" | "critical";
 }
 
-/** Feature C: 论点间冲突 */
+/** Feature C: 投资判断之间的不一致 */
 export interface ThesisConflict {
   thesisA: { id: string; title: string; conviction: ThesisConviction };
   thesisB: { id: string; title: string; conviction: ThesisConviction };
@@ -186,9 +169,9 @@ export interface DailyBriefing {
   thesisFailureImpacts?: ThesisFailureImpact[];
   thesisConflicts?: ThesisConflict[];
   autopilotCoverage?: AutopilotCoverageSummary;
-  /** Agent 策略顾问生成的目标权重计划（由 LLM 生成，执行层消费） */
+  /** 投资助理生成的目标权重计划（由 LLM 生成，执行层消费） */
   strategyOverlay?: AgentStrategyOverlay;
-  /** 子 agent 并行调查的摘要 */
+  /** 子 agent 并行复核的摘要 */
   subAgentSummaries?: Array<{
     threadId: string;
     threadTitle: string;
@@ -202,9 +185,9 @@ export interface DailyBriefing {
   estimatedCost: number;
 }
 
-// ── Agent 策略 Overlay ──
+// ── 投资助理策略 Overlay ──
 
-/** Agent LLM 输出的目标权重计划，执行层负责转成订单并做硬风控 */
+/** 投资助理 LLM 输出的目标权重计划，执行层负责转成订单并做硬风控 */
 export interface AgentStrategyOverlay {
   generatedAt: string;
   agentRunId: string;

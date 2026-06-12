@@ -34,12 +34,12 @@ export type MarketPriceResolved = {
   priceSource: string;
 };
 
-const DEFAULT_PROVIDER_ = "yfinance";
-const DEFAULT_TIMEOUT_MS_ = 2600;
-const DEFAULT_CONCURRENCY_ = 6;
-const DEFAULT_REFRESH_BUDGET_ = 10;
-const DEFAULT_FRESH_SEC_ = 15 * 60;
-const DEFAULT_SERVE_STALE_SEC_ = 48 * 60 * 60;
+const MARKET_CACHE_DEFAULT_PROVIDER = "yfinance";
+const MARKET_CACHE_DEFAULT_TIMEOUT_MS = 2600;
+const MARKET_CACHE_DEFAULT_CONCURRENCY = 6;
+const MARKET_CACHE_DEFAULT_REFRESH_BUDGET = 10;
+const MARKET_CACHE_DEFAULT_FRESH_SEC = 15 * 60;
+const MARKET_CACHE_DEFAULT_SERVE_STALE_SEC = 48 * 60 * 60;
 
 type FetchResult = {
   ok: boolean;
@@ -271,16 +271,16 @@ export async function getMarketPricesWithCache(input: {
   concurrency?: number;
 }): Promise<Record<string, MarketPriceResolved>> {
   const assets = Array.isArray(input.assets) ? input.assets : [];
-  const provider = normalizeText(input.provider, DEFAULT_PROVIDER_);
+  const provider = normalizeText(input.provider, MARKET_CACHE_DEFAULT_PROVIDER);
   const allowRefresh = input.allowRefresh !== false;
   const forceRefresh = input.forceRefresh === true;
-  const refreshBudget = Math.max(0, Math.min(200, Math.trunc(toFinite(input.refreshBudget, DEFAULT_REFRESH_BUDGET_))));
-  const timeoutMs = Math.max(600, Math.min(8000, Math.trunc(toFinite(input.timeoutMs, DEFAULT_TIMEOUT_MS_))));
+  const refreshBudget = Math.max(0, Math.min(200, Math.trunc(toFinite(input.refreshBudget, MARKET_CACHE_DEFAULT_REFRESH_BUDGET))));
+  const timeoutMs = Math.max(600, Math.min(8000, Math.trunc(toFinite(input.timeoutMs, MARKET_CACHE_DEFAULT_TIMEOUT_MS))));
   const source = normalizeText(input.source, "market_cache");
-  const freshSec = Math.max(60, Math.min(2 * 3600, Math.trunc(toFinite(input.freshSec, DEFAULT_FRESH_SEC_))));
-  const serveStaleSec = Math.max(freshSec, Math.min(7 * 24 * 3600, Math.trunc(toFinite(input.serveStaleSec, DEFAULT_SERVE_STALE_SEC_))));
+  const freshSec = Math.max(60, Math.min(2 * 3600, Math.trunc(toFinite(input.freshSec, MARKET_CACHE_DEFAULT_FRESH_SEC))));
+  const serveStaleSec = Math.max(freshSec, Math.min(7 * 24 * 3600, Math.trunc(toFinite(input.serveStaleSec, MARKET_CACHE_DEFAULT_SERVE_STALE_SEC))));
   const rawRetentionDays = Math.max(7, Math.min(365, Math.trunc(toFinite(input.rawRetentionDays, 90))));
-  const concurrency = Math.max(1, Math.min(12, Math.trunc(toFinite(input.concurrency, DEFAULT_CONCURRENCY_))));
+  const concurrency = Math.max(1, Math.min(12, Math.trunc(toFinite(input.concurrency, MARKET_CACHE_DEFAULT_CONCURRENCY))));
 
   const deduped = new Map<string, MarketPriceAssetInput>();
   for (const asset of assets) {
@@ -588,7 +588,7 @@ export async function refreshMarketPrices(input: {
   };
 }
 
-export async function getMarketCacheHealth(provider = DEFAULT_PROVIDER_) {
+export async function getMarketCacheHealth(provider = MARKET_CACHE_DEFAULT_PROVIDER) {
   return getDaaMarketCacheHealthStats(provider);
 }
 
@@ -680,7 +680,7 @@ export async function runUnifiedDataCleanup(): Promise<Record<string, number>> {
     results.news_portfolio_impacts = r.rowCount ?? 0;
   } catch { results.news_portfolio_impacts = 0; }
 
-  // 7. 已处理的候选发现：180 天；new/watching 保留，避免清掉仍需人工复核的研究线索。
+  // 7. 已处理的候选发现：180 天；new/watching 保留，避免清掉仍需人工复核的观察线索。
   try {
     const r = await pool.query(
       "DELETE FROM daa_discovery_candidates_v1 WHERE status IN ('dismissed', 'archived') AND updated_at < NOW() - INTERVAL '180 days'",

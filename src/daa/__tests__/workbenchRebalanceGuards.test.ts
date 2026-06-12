@@ -618,6 +618,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
     });
 
     expect(generated.created).toBe(true);
-    expect(generated.cycle?.proposals[0]?.reason).toContain("Agent 目标入场");
+    expect(generated.cycle?.proposals[0]?.reason).toContain("目标建议入场");
   }, 20000);
 });

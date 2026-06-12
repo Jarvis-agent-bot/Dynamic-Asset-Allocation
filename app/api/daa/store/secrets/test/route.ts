@@ -1,7 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
-import { resolveSecret, SECRET_KEY_DEFS_, type DaaSecretKey } from "@/src/daa/config/secretsManager";
+import { DAA_SECRET_KEY_DEFINITIONS, resolveSecret, type DaaSecretKey } from "@/src/daa/config/secretsManager";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 import { sendFeishuMessage } from "@/src/daa/notify/feishu";
 import { sendTelegramMessage } from "@/src/daa/notify/telegram";
@@ -10,7 +10,7 @@ import { appendNotificationDeliveryLog } from "@/src/daa/store/notificationDeliv
 export const runtime = "nodejs";
 
 function isValidSecretKey(key: unknown): key is DaaSecretKey {
-  return typeof key === "string" && SECRET_KEY_DEFS_.some((d) => d.key === key);
+  return typeof key === "string" && DAA_SECRET_KEY_DEFINITIONS.some((definition) => definition.key === key);
 }
 
 type TestResult = {

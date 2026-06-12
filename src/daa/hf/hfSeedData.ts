@@ -1,8 +1,8 @@
 import type { DaaActorHoldingSnapshot, DaaHumanActor } from "@/src/daa/hf/humanSignals";
 
-export const HF_DEFAULT_MARKET_SCOPE_ = ["US", "HK", "CN"] as const;
+export const HUMAN_FACTOR_DEFAULT_MARKET_SCOPES = ["US", "HK", "CN"] as const;
 
-export const HF_SEED_ACTORS_: DaaHumanActor[] = [
+export const HUMAN_FACTOR_SEED_ACTORS: DaaHumanActor[] = [
   {
     actorId: "us_growth_board",
     displayName: "US Growth Board",
@@ -101,7 +101,7 @@ export const HF_SEED_ACTORS_: DaaHumanActor[] = [
   },
 ];
 
-export const HF_SEED_HOLDINGS_: DaaActorHoldingSnapshot[] = [
+export const HUMAN_FACTOR_SEED_HOLDINGS: DaaActorHoldingSnapshot[] = [
   {
     snapshotId: "usg-2026q1-spy",
     actorId: "us_growth_board",

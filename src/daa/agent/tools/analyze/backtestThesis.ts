@@ -1,5 +1,5 @@
 /**
- * analyze/backtestThesis — 回测论点相关资产的历史表现
+ * analyze/backtestThesis — 回测投资判断相关资产的历史表现
  *
  * 基于 thesis 的 assetKeys，获取价格序列并计算归因。
  */
@@ -11,7 +11,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 registerTool(
   {
     name: "backtest_thesis",
-    description: "回测指定资产在过去 N 天的表现（收益率、波动率、最大回撤）。适合验证论点的历史有效性。",
+    description: "回测指定资产在过去 N 天的表现（收益率、波动率、最大回撤）。适合验证投资判断的历史有效性。",
     category: "analyze",
     parameters: {
       symbol: { type: "string", description: "资产代码", required: true },

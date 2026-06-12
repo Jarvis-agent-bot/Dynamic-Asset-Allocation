@@ -1,7 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
-import type { StrategyLabAiAnalysis, StrategyLabRunResult } from "@/src/daa/modules/strategyLab/strategyLabTypes";
+import type { StrategyLabModelAnalysis, StrategyLabRunResult } from "@/src/daa/modules/strategyLab/strategyLabTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -91,7 +91,7 @@ function compactResult(result: StrategyLabRunResult): CompactBacktestSummary {
   };
 }
 
-function localAnalysis(summary: CompactBacktestSummary): StrategyLabAiAnalysis {
+function localAnalysis(summary: CompactBacktestSummary): StrategyLabModelAnalysis {
   const bestSharpe = summary.strategies.slice().sort((a, b) => b.sharpe - a.sharpe)[0];
   const bestReturn = summary.strategies.slice().sort((a, b) => b.totalReturnPct - a.totalReturnPct)[0];
   const worstDrawdown = summary.strategies.slice().sort((a, b) => a.maxDrawdownPct - b.maxDrawdownPct)[0];
@@ -123,7 +123,7 @@ function normalizeStringList(value: unknown): string[] {
   return value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 6);
 }
 
-function parseAnalysisJson(text: string): StrategyLabAiAnalysis | null {
+function parseAnalysisJson(text: string): StrategyLabModelAnalysis | null {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
   if (!match) return null;
   const parsed = JSON.parse(match[1].trim()) as Record<string, unknown>;
@@ -134,7 +134,7 @@ function parseAnalysisJson(text: string): StrategyLabAiAnalysis | null {
   return { source: "llm", summary, risks, suggestions };
 }
 
-async function llmAnalysis(summary: CompactBacktestSummary): Promise<StrategyLabAiAnalysis | null> {
+async function llmAnalysis(summary: CompactBacktestSummary): Promise<StrategyLabModelAnalysis | null> {
   const config = await resolveLlmConfig("analysis");
   if (!config.enabled || !config.apiKey) return null;
 

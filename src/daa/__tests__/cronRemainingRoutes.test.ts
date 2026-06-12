@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 import {
-  buildAssetUniverseView,
   buildSystemConfigRow,
-  buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture,
 } from '@/src/daa/__tests__/testDataFactories';
 
 vi.mock('@/src/daa/cron/auth', () => ({
@@ -296,7 +294,7 @@ describe('cron-remaining-routes-v1', () => {
       message: '冷静期生效中，24 小时内不重复自动触发',
       cycle: {
         cycleId: 'cycle-old-1',
-        triggerReason: 'Agent 目标权重调仓',
+        triggerReason: '投资助理目标权重调仓',
         proposals: [{ assetKey: 'US::AAPL' }, { assetKey: 'US::BND' }],
         riskCheck: { overallStatus: 'warn' },
       },

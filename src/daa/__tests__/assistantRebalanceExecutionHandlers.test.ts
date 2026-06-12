@@ -60,7 +60,7 @@ function buildContext(executeMode: RebalanceExecuteMode = "selected") {
       bootstrap: buildWorkbenchBootstrap({ latestCycle }),
     } as DaaAgentToolContext["readModel"],
     recentMessages: [],
-    sessionMemory: null,
+    sessionState: null,
     learningDigest: "",
     systemDigest: "",
     brainContextDigest: "",

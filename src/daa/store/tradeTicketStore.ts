@@ -118,7 +118,7 @@ function normalizeTradePricingMode(value: unknown): "manual" | "market" {
   return mode === "market" ? "market" : "manual";
 }
 
-const TRADE_TICKET_SELECT_COLUMNS_ = [
+const TRADE_TICKET_ROW_SELECT_COLUMNS = [
   "ticket_id",
   "basket_id",
   "asset_key",
@@ -276,7 +276,7 @@ async function selectTradeTicketsByIdsInTx(
   const ownerAccountId = getDaaAccountScopeId();
   const placeholders = ids.map((_, idx) => `$${idx + 2}`).join(", ");
   const result = await query(
-    `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+    `SELECT ${TRADE_TICKET_ROW_SELECT_COLUMNS}
      FROM daa_trade_tickets
      WHERE owner_account_id = $1 AND ticket_id IN (${placeholders})
      ${opts.forUpdate ? "FOR UPDATE" : ""}
@@ -986,7 +986,7 @@ export async function listDaaTradeTickets(opts: {
 
     params.push(limit);
     const sql = [
-      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}`,
+      `SELECT ${TRADE_TICKET_ROW_SELECT_COLUMNS}`,
       "FROM daa_trade_tickets",
       where.length ? `WHERE ${where.join(" AND ")}` : "",
       `ORDER BY created_at DESC LIMIT $${params.length}`,
@@ -1003,7 +1003,7 @@ export async function getDaaTradeTicket(ticketIdRaw: string): Promise<DaaStoreTr
   if (!ticketId) return null;
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
+      `SELECT ${TRADE_TICKET_ROW_SELECT_COLUMNS} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
       [ownerAccountId, ticketId],
     );
     if (!result.rows.length) return null;
@@ -1011,7 +1011,7 @@ export async function getDaaTradeTicket(ticketIdRaw: string): Promise<DaaStoreTr
   });
 }
 
-const REBALANCE_CYCLE_SELECT_COLUMNS_ = [
+const REBALANCE_CYCLE_ROW_SELECT_COLUMNS = [
   "cycle_id",
   "status",
   "trigger_source",
@@ -1043,7 +1043,7 @@ export async function listDaaRebalanceCycles(limit = 100): Promise<DaaStoreRebal
   return withDaaPgClient(async ({ query }) => {
     const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 100))));
     const result = await query(
-      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE owner_account_id = $1 ORDER BY created_at DESC LIMIT $2`,
+      `SELECT ${REBALANCE_CYCLE_ROW_SELECT_COLUMNS} FROM daa_rebalance_cycles WHERE owner_account_id = $1 ORDER BY created_at DESC LIMIT $2`,
       [ownerAccountId, n],
     );
     return result.rows.map((row) => mapRebalanceCycleRow(row as Record<string, unknown>));
@@ -1057,7 +1057,7 @@ export async function getDaaRebalanceCycle(cycleIdRaw: string): Promise<DaaStore
   if (!cycleId) return null;
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE owner_account_id = $1 AND cycle_id = $2 LIMIT 1`,
+      `SELECT ${REBALANCE_CYCLE_ROW_SELECT_COLUMNS} FROM daa_rebalance_cycles WHERE owner_account_id = $1 AND cycle_id = $2 LIMIT 1`,
       [ownerAccountId, cycleId],
     );
     if (!result.rows.length) return null;
@@ -1120,7 +1120,7 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
          signal_ids_json = EXCLUDED.signal_ids_json,
          policy_snapshot_json = EXCLUDED.policy_snapshot_json,
          proposal_plan_id = EXCLUDED.proposal_plan_id
-       RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_}`,
+       RETURNING ${REBALANCE_CYCLE_ROW_SELECT_COLUMNS}`,
       [
         ownerAccountId,
         cycleId,
@@ -1156,7 +1156,7 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
     await query("BEGIN");
     try {
       const currentRes = await query(
-        `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE owner_account_id = $1 AND cycle_id = $2 LIMIT 1 FOR UPDATE`,
+        `SELECT ${REBALANCE_CYCLE_ROW_SELECT_COLUMNS} FROM daa_rebalance_cycles WHERE owner_account_id = $1 AND cycle_id = $2 LIMIT 1 FOR UPDATE`,
         [ownerAccountId, cycleId],
       );
       if (!currentRes.rows.length) throw new Error(`cycle not found: ${cycleId}`);
@@ -1237,7 +1237,7 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
            policy_snapshot_json = $17::jsonb,
            proposal_plan_id = $18
          WHERE owner_account_id = $19 AND cycle_id = $1
-         RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_}`,
+         RETURNING ${REBALANCE_CYCLE_ROW_SELECT_COLUMNS}`,
         [
           cycleId,
           nextStatus,
@@ -1274,7 +1274,7 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
   });
 }
 
-const CYCLE_REPORT_SELECT_COLUMNS_ = [
+const REBALANCE_CYCLE_REPORT_ROW_SELECT_COLUMNS = [
   "r.cycle_id",
   "r.before_snapshot_json",
   "r.after_snapshot_json",
@@ -1329,7 +1329,7 @@ export async function upsertDaaCycleReport(input: {
       ],
     );
     const hit = await query(
-      `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
+      `SELECT ${REBALANCE_CYCLE_REPORT_ROW_SELECT_COLUMNS}
        FROM daa_cycle_reports r
        JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
        WHERE r.owner_account_id = $1 AND c.owner_account_id = $1 AND r.cycle_id = $2
@@ -1348,7 +1348,7 @@ export async function getDaaCycleReport(cycleIdRaw: string): Promise<DaaStoreCyc
   if (!cycleId) return null;
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
+      `SELECT ${REBALANCE_CYCLE_REPORT_ROW_SELECT_COLUMNS}
        FROM daa_cycle_reports r
        JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
        WHERE r.owner_account_id = $1 AND c.owner_account_id = $1 AND r.cycle_id = $2
@@ -1366,7 +1366,7 @@ export async function listDaaCycleReports(limit = 50): Promise<DaaStoreCycleRepo
   return withDaaPgClient(async ({ query }) => {
     const n = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(limit, 50))));
     const result = await query(
-      `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
+      `SELECT ${REBALANCE_CYCLE_REPORT_ROW_SELECT_COLUMNS}
        FROM daa_cycle_reports r
        JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
        WHERE r.owner_account_id = $1 AND c.owner_account_id = $1
@@ -1445,7 +1445,7 @@ export async function applyDaaBrokerOrderSync(input: {
     try {
       const whereSql = ticketId ? "ticket_id = $2" : "broker_order_id = $2";
       const currentRes = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+        `SELECT ${TRADE_TICKET_ROW_SELECT_COLUMNS}
          FROM daa_trade_tickets
          WHERE owner_account_id = $1 AND ${whereSql}
          LIMIT 1
@@ -1806,7 +1806,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
       }
 
       const inserted = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
+        `SELECT ${TRADE_TICKET_ROW_SELECT_COLUMNS} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
         [ownerAccountId, ticketId],
       );
       await query("COMMIT");
@@ -1842,7 +1842,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
     try {
       const placeholders = ticketIds.map((_, idx) => `$${idx + 2}`).join(", ");
       const ticketRows = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id IN (${placeholders}) FOR UPDATE`,
+        `SELECT ${TRADE_TICKET_ROW_SELECT_COLUMNS} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id IN (${placeholders}) FOR UPDATE`,
         [ownerAccountId, ...ticketIds],
       );
       const ticketMap = new Map<string, DaaStoreTradeTicket>();
@@ -2133,7 +2133,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
       await refreshTradeTicketAggregatesInTx(query, ticketIds);
 
       const latestTicketRows = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
+        `SELECT ${TRADE_TICKET_ROW_SELECT_COLUMNS} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
         [ownerAccountId, ...ticketIds],
       );
       const latestPositionsRows = await query(

@@ -44,7 +44,7 @@ export function buildEmptyAutoTriggerSkipMessage(input: {
 
   const summary = input.agentSummary ? `（${input.agentSummary}）` : "";
   if (input.triggerSource === "agent_trigger") {
-    return `Agent 主动调仓未生成可执行提案，跳过创建周期${summary}。`;
+    return `投资助理主动调仓未生成可执行提案，跳过创建周期${summary}。`;
   }
   if (input.triggerSource === "scheduled_review") {
     return `定期组合复盘未生成可执行提案，跳过创建周期${summary}。`;
@@ -271,12 +271,12 @@ export function filterAutoTradeStability<T extends {
   return { proposals, blocked };
 }
 
-export function shouldSendAgentBriefingTelegram(config: DaaSystemConfig): boolean {
+export function shouldSendReviewBriefingTelegram(config: DaaSystemConfig): boolean {
   return config.notification.telegram.enabled === true
     && config.notification.telegram.dailyReport === true;
 }
 
-type AgentTargetWeightPlan = {
+type TargetWeightSuggestionPlan = {
   agentRunId: string | null;
   targetWeights: Record<string, number>;
   baselineTargetWeights: Record<string, number>;
@@ -293,13 +293,13 @@ type AgentTargetWeightPlan = {
   summary: string;
 };
 
-export function buildAgentTargetWeightPlan(input: {
+export function buildTargetWeightSuggestionPlan(input: {
   overlay: AgentStrategyOverlay | null;
   knownAssetKeys: string[];
   currentTargetWeights?: Record<string, number>;
   maxPositionPct: number;
   minConfidence?: number;
-}): AgentTargetWeightPlan | null {
+}): TargetWeightSuggestionPlan | null {
   const plan = input.overlay?.targetAllocationPlan;
   const intents = Array.isArray(plan?.intents) ? plan.intents : [];
   if (intents.length === 0) return null;
@@ -320,7 +320,7 @@ export function buildAgentTargetWeightPlan(input: {
   );
   const targetWeights: Record<string, number> = {};
   const baselineTargetWeights: Record<string, number> = {};
-  const intentReasons: AgentTargetWeightPlan["intentReasons"] = {};
+  const intentReasons: TargetWeightSuggestionPlan["intentReasons"] = {};
   const acceptedLabels: string[] = [];
   let skippedCount = 0;
 
@@ -353,7 +353,7 @@ export function buildAgentTargetWeightPlan(input: {
   }
 
   if (acceptedLabels.length === 0) return null;
-  const summary = String(plan?.reasoning || "Agent 目标权重计划").trim() || "Agent 目标权重计划";
+  const summary = String(plan?.reasoning || "目标权重计划").trim() || "目标权重计划";
   return {
     agentRunId: input.overlay?.agentRunId ?? null,
     targetWeights,

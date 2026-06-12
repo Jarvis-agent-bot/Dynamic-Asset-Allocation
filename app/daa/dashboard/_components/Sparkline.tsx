@@ -7,7 +7,7 @@ export function Sparkline(props: {
   color?: string;
   className?: string;
 }) {
-  const { data, width = 60, height = 20, color = "hsl(188 95% 60%)", className } = props;
+  const { data, width = 60, height = 20, color = "var(--primary)", className } = props;
 
   if (data.length < 2) return null;
 

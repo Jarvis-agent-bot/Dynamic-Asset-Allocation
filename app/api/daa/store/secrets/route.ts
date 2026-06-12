@@ -1,9 +1,9 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import {
+  DAA_SECRET_KEY_DEFINITIONS,
   deleteSecret,
   listSecretStatuses,
-  SECRET_KEY_DEFS_,
   writeSecret,
   type DaaSecretKey,
 } from "@/src/daa/config/secretsManager";
@@ -11,7 +11,7 @@ import {
 export const runtime = "nodejs";
 
 function isValidSecretKey(key: unknown): key is DaaSecretKey {
-  return typeof key === "string" && SECRET_KEY_DEFS_.some((d) => d.key === key);
+  return typeof key === "string" && DAA_SECRET_KEY_DEFINITIONS.some((definition) => definition.key === key);
 }
 
 /** GET — list all secrets (masked). */
@@ -36,8 +36,8 @@ export async function PUT(req: Request) {
       return fail("VALIDATION_FAILED", "invalid or missing secret key", { status: 400 });
     }
 
-    const def = SECRET_KEY_DEFS_.find((d) => d.key === body.key);
-    if (def && "readOnly" in def && def.readOnly) {
+    const definition = DAA_SECRET_KEY_DEFINITIONS.find((item) => item.key === body.key);
+    if (definition && "readOnly" in definition && definition.readOnly) {
       return fail("VALIDATION_FAILED", `secret ${body.key} is read-only (set via env var)`, { status: 400 });
     }
 

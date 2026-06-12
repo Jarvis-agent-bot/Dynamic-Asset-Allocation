@@ -11,8 +11,8 @@ import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadMod
 import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
-import { getChatSessionMemory, listChatMessages, saveChatSessionMemory } from "./chatRepo";
-import type { DaaChatIntentKind, DaaChatPendingAction, DaaChatSessionMemory } from "./chatTypes";
+import { getChatSessionState, listChatMessages, saveChatSessionState } from "./chatRepo";
+import type { DaaChatIntentKind, DaaChatPendingAction, DaaChatSessionState } from "./chatTypes";
 
 export const PENDING_ACTION_TTL_MS = 10 * 60 * 1000;
 
@@ -24,7 +24,7 @@ export type DaaAssistantRuntimeContext = {
   systemConfigVersion: number;
   readModel: Awaited<ReturnType<typeof buildWorkbenchReadModel>>;
   recentMessages: Awaited<ReturnType<typeof listChatMessages>>;
-  sessionMemory: DaaChatSessionMemory | null;
+  sessionState: DaaChatSessionState | null;
   learningDigest: string;
   systemDigest: string;
   brainContextDigest: string;
@@ -211,18 +211,18 @@ export function buildAssistantSystemDigest(input: {
     .join("；");
 
   const cognitiveSummary = input.cognitiveAgent?.enabled
-    ? `已启用（频率 ${input.cognitiveAgent.schedule}，最多调查 ${input.cognitiveAgent.maxInvestigationTargets} 个论点，输出目标权重计划）`
+    ? `已启用（频率 ${input.cognitiveAgent.schedule}，最多复核 ${input.cognitiveAgent.maxInvestigationTargets} 个投资判断，输出目标权重计划）`
     : "未启用";
 
   return [
     "执行边界：仅支持本地模拟，可生成建议、进入待确认并执行模拟调仓或模拟买卖；不支持真实券商下单。",
-    "通道权限：Web 与 Telegram 入站在登录或 allowlist 通过后，共用同一套运行上下文、工具和大脑授权矩阵。",
-    "可读上下文：组合快照、市场状态、最近周期、会话记忆、复盘学习摘要、活跃论点、Agent 日报与策略建议摘要。",
-    "权限边界：不返回敏感密钥明文；模拟交易/调仓需待确认；系统设置只允许显式大脑模式切换，不开放任意配置写入；不支持真实券商下单。",
-    `大脑模式：${describeBrainModeSummary(summarizedConfig)}`,
-    `大脑动作边界：${buildBrainBoundaryText(summarizedConfig)}`,
+    "通道权限：Web 与 Telegram 入站在登录或 allowlist 通过后，共用同一套运行上下文、工具和投资助理授权矩阵。",
+    "可读上下文：组合快照、市场状态、最近周期、会话摘要、复盘学习摘要、活跃投资判断、复核简报与策略建议摘要。",
+    "权限边界：不返回敏感密钥明文；模拟交易/调仓需待确认；系统设置只允许显式切换投资助理授权等级，不开放任意配置写入；不支持真实券商下单。",
+    `投资助理授权：${describeBrainModeSummary(summarizedConfig)}`,
+    `投资助理动作边界：${buildBrainBoundaryText(summarizedConfig)}`,
     `当前 LLM 路由：${llmSummary || "暂无"}`,
-    `认知 Agent：${cognitiveSummary}`,
+    `投资助理复核：${cognitiveSummary}`,
   ].join("\n");
 }
 
@@ -230,7 +230,7 @@ function formatThreadAge(thread: ResearchThread): string {
   const time = Date.parse(thread.lastInvestigatedAt || thread.updatedAt);
   if (!Number.isFinite(time)) return "时间未知";
   const days = Math.max(0, Math.floor((Date.now() - time) / 86400000));
-  return `上次有效调查 ${days} 天前`;
+  return `上次有效复核 ${days} 天前`;
 }
 
 export function buildAssistantBrainContextDigest(input: {
@@ -261,17 +261,17 @@ export function buildAssistantBrainContextDigest(input: {
     .map((item) => `- ${item.symbol || item.assetKey}: 目标 ${item.proposedTargetWeightPct.toFixed(1)}%，置信 ${item.confidence.toFixed(0)}%，${normalizeText(item.reasoning).slice(0, 100)}`);
 
   return [
-    `活跃论点（${input.activeTheses.length} 个）：`,
+    `活跃投资判断（${input.activeTheses.length} 个）：`,
     thesisLines.join("\n") || "暂无",
     "",
     latestRun
-      ? `最新 Agent 运行：${latestRun.status} / ${new Date(latestRun.createdAt).toLocaleString("zh-CN")} / tokens ${latestRun.totalTokens}`
-      : "最新 Agent 运行：暂无",
+      ? `最新投资复核：${latestRun.status} / ${new Date(latestRun.createdAt).toLocaleString("zh-CN")} / tokens ${latestRun.totalTokens}`
+      : "最新投资复核：暂无",
     "",
     "需要复核的变化：",
     changeLines.join("\n") || "暂无",
     "",
-    "论点复核：",
+    "投资判断复核：",
     reviewLines.join("\n") || "暂无",
     "",
     "改变判断的条件：",
@@ -291,10 +291,10 @@ export async function loadAssistantRuntimeContext(sessionId: string): Promise<Da
     apiKey: "",
     timeoutMs: 15000,
   };
-  const [readModel, recentMessages, sessionMemory, learningDigest, system, analysisRoute, decisionRoute, researchRoute, activeTheses, latestRun] = await Promise.all([
+  const [readModel, recentMessages, sessionState, learningDigest, system, analysisRoute, decisionRoute, researchRoute, activeTheses, latestRun] = await Promise.all([
     buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false }),
     listChatMessages(sessionId, 12),
-    getChatSessionMemory(sessionId),
+    getChatSessionState(sessionId),
     buildAgentLearningDigest(8),
     getDaaSystemConfig().catch(() => ({
       version: 1,
@@ -321,14 +321,14 @@ export async function loadAssistantRuntimeContext(sessionId: string): Promise<Da
     systemConfigVersion: system.version,
     readModel,
     recentMessages,
-    sessionMemory,
+    sessionState,
     learningDigest,
     systemDigest,
     brainContextDigest: buildAssistantBrainContextDigest({
       activeTheses,
       latestRun,
     }),
-    storedPendingAction: parsePendingAction(sessionMemory?.metaJson?.pendingAction),
+    storedPendingAction: parsePendingAction(sessionState?.metaJson?.pendingAction),
   };
 }
 
@@ -346,23 +346,23 @@ export function resolveCurrentPendingAction(input: {
 
 export async function saveAssistantSessionSnapshot(input: {
   sessionId: string;
-  sessionMemory: DaaChatSessionMemory | null;
+  sessionState: DaaChatSessionState | null;
   userText: string;
   assistantText: string;
   intentKind: DaaChatIntentKind;
   pendingAction: DaaChatPendingAction | null;
 }) {
-  await saveChatSessionMemory({
+  await saveChatSessionState({
     sessionId: input.sessionId,
     summaryText: buildSessionSummary({
-      previousSummary: input.sessionMemory?.summaryText || "",
+      previousSummary: input.sessionState?.summaryText || "",
       userText: input.userText,
       assistantText: input.assistantText,
       intentKind: input.intentKind,
       pendingAction: input.pendingAction,
     }),
     metaJson: {
-      ...(input.sessionMemory?.metaJson || {}),
+      ...(input.sessionState?.metaJson || {}),
       pendingAction: input.pendingAction,
     },
   });

@@ -11,7 +11,7 @@ import {
   Brush,
 } from "recharts";
 
-import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { WorkbenchEmptyState } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import { DaaSurfacePanel } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
 import type {
@@ -26,21 +26,21 @@ import {
 import { strategyLabel } from "./useStrategyLab";
 
 const CHART_COLORS = {
-  muted: "hsl(215 16% 57%)",
-  grid: "hsla(215,16%,57%,0.12)",
+  muted: "var(--muted)",
+  grid: "var(--border)",
 } as const;
 
 const STRATEGY_LINE_COLORS: Record<string, string> = {
-  equalWeight: "hsl(199 89% 60%)",
-  momentum: "hsl(43 96% 56%)",
-  riskParity: "hsl(160 60% 55%)",
-  minVariance: "hsl(280 65% 65%)",
-  baseline: "hsl(215 16% 57%)",
+  equalWeight: "var(--primary)",
+  momentum: "var(--amber)",
+  riskParity: "var(--success)",
+  minVariance: "var(--indigo)",
+  baseline: "var(--muted)",
 };
 
 const BENCHMARK_LINE_COLORS: Record<string, string> = {
-  SPY: "hsl(160 60% 55%)",
-  QQQ: "hsl(334 74% 62%)",
+  SPY: "var(--success)",
+  QQQ: "var(--danger)",
 };
 
 type LegendItem = {
@@ -110,7 +110,7 @@ export function StrategyLabEquityChart({
   }, [chartData.length]);
 
   return (
-    <DaaSurfacePanel accent="cyan" title="权益曲线" subtitle="回测期间的组合净值走势，含基准对比。底部滑块可拖动缩放查看局部区间。" className="min-w-0" bodyClassName="min-w-0">
+    <DaaSurfacePanel accent="primary" title="权益曲线" subtitle="组合净值与基准。" className="min-w-0" bodyClassName="min-w-0">
       {chartData.length >= 2 ? (
         <div className="space-y-3">
           <StaticLegend items={legendItems} />
@@ -136,7 +136,7 @@ export function StrategyLabEquityChart({
                 contentStyle={daaChartTooltipContentStyle}
                 itemStyle={daaChartTooltipItemStyle}
                 labelStyle={daaChartTooltipLabelStyle}
-                cursor={{ stroke: "hsla(199,89%,60%,0.28)", strokeDasharray: "4 4" }}
+                cursor={{ stroke: "var(--primary-border)", strokeDasharray: "4 4" }}
                 formatter={(value: number | undefined, name?: string) => [
                   formatStrategyLabCurrencyTooltipValue(value, baseCurrency),
                   name ?? "净值",
@@ -173,15 +173,15 @@ export function StrategyLabEquityChart({
                 dataKey="date"
                 height={24}
                 travellerWidth={8}
-                stroke="hsl(199 89% 60%)"
-                fill="rgba(15,23,42,0.04)"
+                stroke="var(--primary)"
+                fill="var(--surface)"
                 tickFormatter={(value: string) => String(value).slice(5, 10)}
               />
             </LineChart>
           </div>
         </div>
       ) : (
-        <DashboardEmptyState title="数据点不足" description="权益曲线至少需要两个数据点。" className="py-10" />
+        <WorkbenchEmptyState title="数据点不足" description="至少需要两个净值点才能绘制权益曲线。" className="py-4" />
       )}
     </DaaSurfacePanel>
   );

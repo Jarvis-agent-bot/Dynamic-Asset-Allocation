@@ -143,7 +143,7 @@ export async function buildAgentLearningDigest(limit = 6): Promise<string> {
     }).length;
     const missed = verdictEvents.filter(i => i.contextJson?.verdict === "missed_opportunity").length;
     const unexpected = verdictEvents.filter(i => i.contextJson?.verdict === "unexpected_move").length;
-    lines.push(`\n历史决策表现: 最近${verdictEvents.length}次后验中, ${correct}次正确, ${missed}次错失机会, ${unexpected}次意外波动.`);
+    lines.push(`\n历史决策表现: 最近${verdictEvents.length}次后验中, ${correct}次正确, ${missed}次错失机会, ${unexpected}次超预期波动.`);
   }
 
   return lines.join("\n");

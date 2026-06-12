@@ -4,19 +4,19 @@
 
 DAA Rebalance 是面向个人投资者的单组合动态资产配置与再平衡金融系统。
 
-### 架构模式：Cognitive Agent OS（AI-Native）
+### 架构模式：Investment Review Assistant OS（AI-Native）
 
-系统采用 **thesis-driven Cognitive Agent** 架构：
+系统采用 **investment-judgment-driven 投资助理复核链路**：
 
 ```
 observe → prioritize → investigate ⇄ reflect → review → surface → END
    ↑                                                         ↓
-cron/手动                                              TG 日报推送
+cron/手动                                              TG 复核简报推送
 ```
 
-核心理念：系统不问"该买什么"，而是维护一组持续演化的**投资论点（Thesis）**，每天问"我现在最可能错在哪里"。
+核心理念：系统不问"该买什么"，而是维护一组持续演化的**投资判断**，每天问"我现在最可能错在哪里"。
 
-当前为本地模拟执行模式，不对接真实券商。手动交易/手动调仓走确认交互；Autopilot 开启时可以按显式配置自动生成并执行本地模拟调仓。
+当前为本地模拟执行模式，不对接真实券商。手动交易/手动调仓走确认交互；自动复核授权开启时可以按显式配置自动生成并执行本地模拟调仓。
 
 ## Tech Stack
 
@@ -59,7 +59,7 @@ app/
 │   ├── trades/                 # 交易记录 — 周期、订单、复盘
 │   ├── strategy-lab/           # 策略实验室 — 回测
 │   ├── settings/               # 设置 — 策略、风控、数据源、通知
-│   └── _shared/                # 跨页面复用的业务 UI 组件（PortfolioStatus / AssetKlineChart / rebalance/ 等）
+│   └── _shared/                # 跨页面复用的业务 UI 组件（AssetKlineChart / InvestmentClockWidget / rebalance/ 等）
 
 src/
 ├── core/                       # Pure algorithm layer (no side effects, fully testable)
@@ -76,7 +76,7 @@ src/
 │   │   ├── marketContext/      # Market regime detection (risk_off/risk_on)
 │   │   ├── decision/           # Proposal decision context
 │   │   └── dividend/           # Dividend tracking
-│   ├── signals/                # Agent observe-tool 数据源（无规则融合）
+│   ├── signals/                # 复核 observe-tool 数据源（无规则融合）
 │   │   ├── technicalSignal.ts  # SMA, momentum, trend
 │   │   ├── valuationSignal.ts  # PE, dividend yield, relative value
 │   │   └── newsSignal.ts       # Sentiment analysis
@@ -125,9 +125,9 @@ src/
 `{MARKET}::{SYMBOL}` (双冒号) — e.g., `US::AAPL`, `HK::0700.HK`, `CRYPTO::BTC-USD`
 See `src/daa/assetKey.ts` for parsing/normalization utilities.
 
-### Cognitive Agent OS（AI-Native 架构，当前）
+### Investment Review Assistant OS（AI-Native 架构，当前）
 
-基于 LangGraph.js 的 thesis-driven 认知 Agent。所有参数通过 Settings → 认知 Agent 配置。
+基于 LangGraph.js 的 investment-judgment-driven 投资助理复核链路。所有参数通过 Settings → 投资助理自动复核配置。
 
 **工作流**（`src/daa/agent/cognitiveGraph.ts`）：
 ```
@@ -136,45 +136,45 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 | 节点 | 职责 | LLM 调用 |
 |------|------|---------|
-| `observe` | 读取持仓 + 市场指标 + 新闻 + **加载 DB 配置** + **记忆衰减** | 否 |
-| `prioritize` | 选择最需调查的 thesis（数量由 `maxInvestigationTargets` 配置） | 是（投委会主席） |
-| `investigate` | 并行收集证据（Promise.allSettled）+ 推理 + 更新 thesis | 是（研究分析师） |
-| `reflect` | conviction 变化时反思 + 生成记忆（含 thesis 关联） | 是（首席风控官） |
-| `review` | 到期 thesis 复盘 + 评分（含真实价格变动 ground truth） | 是（复盘审计师） |
-| `surface` | 生成 DailyBriefing + **风险建模** + **冲突检测** + TG 推送 | 是（日报编辑） |
+| `observe` | 读取持仓 + 市场指标 + 新闻 + **加载 DB 配置** + **经验记录衰减** | 否 |
+| `prioritize` | 选择最需复核的投资判断（数量由 `maxInvestigationTargets` 配置） | 是（投委会主席） |
+| `investigate` | 并行收集依据（Promise.allSettled）+ 推理 + 更新投资判断 | 是（研究分析师） |
+| `reflect` | conviction 变化时反思 + 生成经验记录（含 thesis 关联） | 是（首席风控官） |
+| `review` | 到期投资判断复盘 + 评分（含真实价格变动 ground truth） | 是（复盘审计师） |
+| `surface` | 生成每日复核简报 + **风险建模** + **判断不一致检测** + TG 推送 | 是（复核简报编辑） |
 
 **健壮性机制**：
 - LLM 调用带指数退避重试（最多 3 次，仅网络/429 错误）
 - 连续 LLM 失败触发熔断（阈值可配置，跳过剩余 LLM 调用）
 - 所有 LLM 输出经 `validateShape()` 结构校验
 - 每个 prompt 包含 few-shot JSON 示例
-- 新 thesis 创建前去重检查（assetKeys + 标题 pg_trgm 相似度 ≥ 0.40）
-- 单资产论点上限 `MAX_ACTIVE_THESES_PER_ASSET = 5`（防止热门标的积累几十篇并行论点）
+- 新投资判断创建前去重检查（assetKeys + 标题 pg_trgm 相似度 ≥ 0.40）
+- 单资产投资判断上限 `MAX_ACTIVE_THESES_PER_ASSET = 5`（防止热门标的积累几十条并行判断）
 - review 节点 LLM 同时输出 `shouldInvalidate` 和 `shouldArchive`：判断失效 → `status='invalidated'`；已兑现 → `status='archived'`；都不是 → 30 天后再复盘
-- Autopilot 自动执行统一经过 `AutomationAuthority`、单笔 NAV 上限、执行前风控和本地执行网关；LLM 只能输出本轮目标权重计划，不能直接改永久配置或绕过执行授权
+- 自动复核执行统一经过 `AutomationAuthority`、单笔 NAV 上限、执行前风控和本地执行网关；LLM 只能输出本轮目标权重计划，不能直接改永久配置或绕过执行授权
 
 **数据模型**（8 张表）：
-- `daa_research_threads` — 研究论点
-- `daa_evidence_items` — 证据链（pg_trgm 子串索引，供 `search_past_reasoning` 工具）
+- `daa_research_threads` — 投资判断（内部仍沿用 thesis 存储契约）
+- `daa_evidence_items` — 依据链（pg_trgm 子串索引，供 `search_past_reasoning` 工具）
 - `daa_agent_runs` — 运行记录（含完整 briefing JSONB）
-- `daa_agent_memory` — 长期记忆（pgvector 1024 维 + pg_trgm 子串索引，Hebbian 增强 + 指数衰减）
+- `daa_agent_memory` — 经验库记录（内部仍沿用 memory 存储契约；pgvector 1024 维 + pg_trgm 子串索引，Hebbian 增强 + 指数衰减）
 - `daa_thesis_reviews` — 决策复盘
 - `daa_agent_entity` — 实体主表（asset / thesis_id / regime / ticker / news_source / strategy_tag）
 - `daa_memory_entity_link` — 记忆 ↔ 实体（many-to-many，weight 越高越紧密）
-- `daa_thesis_entity_link` — 论点 ↔ 实体
+- `daa_thesis_entity_link` — 投资判断 ↔ 实体
 
 **五类输出**（DailyBriefing）：
-1. **今日意外** — 最不符合现有认知的市场变化（severity 1-10）
-2. **认知缺口** — 高权重但久未调查的持仓
-3. **改观条件** — 什么会让 Agent 改变当前判断
+1. **需要复核的变化** — 最需要检查原判断的市场变化（severity 1-10）
+2. **复核优先级** — 高权重但久未复核的持仓
+3. **改观条件** — 什么会让投资助理改变当前判断
 4. **风险暴露** — 各 thesis 失效对组合的影响（暴露% + 预估损失%）
-5. **论点冲突** — 方向矛盾的 thesis 对（assetKeys 交集 + conviction 矛盾）
+5. **判断不一致** — 方向矛盾的 thesis 对（assetKeys 交集 + conviction 矛盾）
 
-**记忆管理**：
+**经验库管理**：
 - **增强**: 每次被 `recallMemory` 召回时 strength +0.1（Hebbian）
 - **衰减**: 每个 cycle 开始时 `strength *= decayRate^days_since_last_access`（默认 0.97/天，约 23 天半衰期）
-- **归档**: `strength < 0.05` 的记忆不参与召回，但仍可在 Memory Browser 中查看
-- **关联**: 创建时 `relevanceTags` 包含 threadId，召回时优先匹配关联 thesis
+- **归档**: `strength < 0.05` 的经验记录不参与召回，但仍可在经验库中查看
+- **关联**: 创建时 `relevanceTags` 包含 threadId，召回时优先匹配关联投资判断
 
 **三路召回**（investigateNode ReAct 前一次性并行）：
 1. **pgvector 语义**：BGE-M3 1024d 余弦相似度，按 `similarity × strength` 排序
@@ -185,31 +185,30 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 - `asset`（US::NVDA）、`ticker`（NVDA）、`thesis_id`（UUID）、`regime`（risk_off/on/transitional）
 - `news_source`（reuters/bloomberg/wsj/ft/cnbc/xueqiu/alpaca/benzinga/finnhub/yahoo/sec_filing）、`strategy_tag`（thesis.tags）
 - 抽取内嵌于 `createMemory` / `createResearchThread`，所有调用方自动获得链接
-- Agent tool `query_entity_history(kind, value)` 回答"关于 NVDA 学到过什么"类查询
+- 投资助理工具 `query_entity_history(kind, value)` 回答"关于 NVDA 学到过什么"类查询
 
 **API**：
-- `POST /api/daa/agent/run` — 手动触发 Agent 循环
-- `POST /api/daa/agent/bootstrap` — 初始化 thesis（扫描持仓）
-- `GET /api/daa/agent/theses` — 获取活跃论点 + 最新 briefing
-- `GET /api/daa/agent/thesis/[id]` — 论点详情（证据链 + 复盘历史）
-- `GET /api/daa/agent/memories` — 分页列出记忆（支持类型过滤）
-- `DELETE /api/daa/agent/memories?id=xxx` — 删除单条记忆
+- `POST /api/daa/agent/run` — 手动触发投资助理复核循环
+- `POST /api/daa/agent/bootstrap` — 建立初始投资判断（扫描持仓）
+- `GET /api/daa/agent/theses` — 获取活跃投资判断 + 最新 briefing
+- `GET /api/daa/agent/thesis/[id]` — 投资判断详情（依据链 + 复盘历史）
+- `GET /api/daa/agent/memories` — 分页列出经验记录（支持类型过滤，API 路径保留兼容命名）
+- `DELETE /api/daa/agent/memories?id=xxx` — 删除单条经验记录
 - `POST /api/daa/cron/cognitive-agent` — 定时 cron（自门控：检查 schedule + scheduleTimesUtc）
 
 **UI**：
-- Today 页 → Agent Briefing 视图（5 个面板：意外/缺口/改观/冲突/风险）
-- Today 页 → Thesis 详情页（`/today/thesis/[id]`，证据时间线 + 复盘历史）
-- Today 页 → Memory Browser（`/today/memories`，分页列表 + 类型过滤 + 删除）
-- Agent Rail → 全站右侧认知面板（xl 屏幕，论点可点击进入详情）
-- Settings → 认知 Agent（调查数/复盘周期/运行频率/记忆衰减率/熔断阈值）
+- Today 页 → 今日复核工作台（需要复核/优先级/改观/不一致/风险）
+- Today 页 → 投资判断详情页（`/today/thesis/[id]`，依据时间线 + 复盘历史）
+- Today 页 → 经验库（`/today/experience-library`，分页列表 + 类型过滤 + 删除；`/today/memories` 保留重定向）
+- Settings → 投资助理自动复核（复核数量/复盘周期/运行频率/经验衰减率/熔断阈值）
 
 **配置**（`systemConfig.cognitiveAgent`）：
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `enabled` | true | 是否启用 Agent |
-| `maxInvestigationTargets` | 3 | 每次调查最大论点数 |
-| `reviewIntervalDays` | 14 | 新论点默认复盘间隔 |
-| `memoryRecallLimit` | 5 | 每次调查召回记忆数 |
+| `enabled` | true | 是否启用投资助理复核 |
+| `maxInvestigationTargets` | 3 | 每次复核最大投资判断数 |
+| `reviewIntervalDays` | 14 | 新投资判断默认复盘间隔 |
+| `memoryRecallLimit` | 5 | 每次复核召回经验记录数 |
 | `circuitBreakerThreshold` | 3 | 连续 LLM 失败触发熔断 |
 | `schedule` | "2x_daily" | 运行频率（2x_daily/daily/every_6h/manual_only） |
 | `scheduleTimesUtc` | ["13:00","21:00"] | 运行时间窗口 UTC（±30 分钟匹配） |
@@ -265,27 +264,27 @@ import { fetchPriceSeriesWithCache, fetchMultiplePriceSeriesWithCache } from "@/
 ### Rebalancing Strategies
 - Calendar-based (monthly / quarterly / semi-annual / annual)
 - Drift-based (threshold-triggered, configurable)
-- Agent-triggered (Agent LLM 输出目标权重计划；Autopilot 下定时循环、新闻刷新和实时重大事件可主动触发)
+- Assistant-triggered (投资助理 LLM 输出目标权重计划；自动复核授权下定时循环、新闻刷新和实时重大事件可主动触发)
 - Risk-aware order generation with pre-trade checks
 
-### Agent Target Allocation Plan（AI 驱动调仓）
+### 目标权重计划（AI 驱动调仓）
 
-Agent 每个 cycle 在 surfaceNode 末尾调用 LLM 策略顾问，输出本轮 `targetAllocationPlan`：
+投资助理每个 cycle 在 surfaceNode 末尾调用 LLM 目标权重建议，输出本轮 `targetAllocationPlan`：
 
 | 功能 | 描述 | 约束 |
 |------|------|------|
-| 目标权重计划 | Agent 给出最终目标权重，而不是修改系统配置 | 只作用于本轮 cycle |
+| 目标权重计划 | 投资助理给出最终目标权重，而不是修改系统配置 | 只作用于本轮 cycle |
 | 资产范围 | 只接受资产池里已知的 `assetKey` | 未知资产直接跳过 |
 | 置信度过滤 | 低置信度 intent 不进入执行层 | 默认阈值 70 |
 | 单仓截断 | 目标权重不能超过 `maxPositionPct` | 只截断，不自动放宽护栏 |
 | 自动执行 | 统一走本地执行网关 | `autoExecuteMaxSinglePct` + 执行前风控 |
 
 **安全约束**：
-- Agent 不能自动修改 `systemConfig`
+- 投资助理不能自动修改 `systemConfig`
 - 0 条可执行提案时跳过创建 cycle
-- Autopilot 只消费本轮 Agent run 产出的目标权重计划，避免误用历史建议主动执行
+- 自动复核只消费本轮复核运行产出的目标权重计划，避免误用历史建议主动执行
 - 所有自动执行路径共用 `executeAutoRebalanceCycle`
-- LLM 失败不影响正常 Agent cycle（熔断兼容）
+- LLM 失败不影响正常复核 cycle（熔断兼容）
 
 ### Ensemble Backtest Strategies
 `momentum` | `riskParity` | `minVariance` | `equalWeight` | `baseline`
@@ -328,19 +327,19 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_positions_v2`,
 | Asset key utilities | `src/daa/assetKey.ts` |
 | API rate limiting | `src/daa/api/rateLimit.ts` |
 | Market data constants | `src/market/constants.ts` |
-| **Cognitive Agent 工作流** | `src/daa/agent/cognitiveGraph.ts` |
-| Cognitive Agent 类型 | `src/daa/agent/cognitiveTypes.ts` |
-| Cognitive Agent 状态 | `src/daa/agent/cognitiveState.ts` |
-| Cognitive Agent Prompts | `src/daa/agent/cognitivePrompts.ts` |
-| Agent Rebalance 适配器 | `src/daa/agent/agentRebalanceAdapter.ts` |
-| Thesis Store | `src/daa/agent/store/thesisStore.ts` |
-| Memory Store (pgvector) | `src/daa/agent/store/memoryStore.ts` |
-| Agent Run Store | `src/daa/agent/store/agentRunStore.ts` |
-| Thesis Bootstrap | `src/daa/agent/bootstrap.ts` |
+| **投资助理复核工作流** | `src/daa/agent/cognitiveGraph.ts` |
+| 复核工作流类型 | `src/daa/agent/cognitiveTypes.ts` |
+| 复核工作流状态 | `src/daa/agent/cognitiveState.ts` |
+| 复核工作流 Prompts | `src/daa/agent/cognitivePrompts.ts` |
+| 复核调仓适配器 | `src/daa/agent/agentRebalanceAdapter.ts` |
+| 投资判断 Store（内部 thesis 契约） | `src/daa/agent/store/thesisStore.ts` |
+| 经验库 Store（内部 memory 契约，pgvector） | `src/daa/agent/store/memoryStore.ts` |
+| 复核运行 Store | `src/daa/agent/store/agentRunStore.ts` |
+| 投资判断 Bootstrap | `src/daa/agent/bootstrap.ts` |
 | Embedding (1024d) | `src/daa/agent/embedding.ts` |
-| Agent Tool 注册表（V2 动态自注册） | `src/daa/agent/tools/registry.ts` |
-| Agent Tool 定义（16 工具） | `src/daa/agent/tools/index.ts` |
-| Agent 学习记忆 | `src/daa/agent/agentLearningRepo.ts` |
+| 复核工具注册表（V2 动态自注册） | `src/daa/agent/tools/registry.ts` |
+| 复核工具定义（16 工具） | `src/daa/agent/tools/index.ts` |
+| 投资助理复盘经验 | `src/daa/agent/agentLearningRepo.ts` |
 | **Episodic 关键字搜索** (pg_trgm) | `searchMemoriesByKeyword` in `memoryStore.ts`、`searchEvidenceByKeyword` in `thesisStore.ts` |
 | **实体图抽取** | `src/daa/agent/entities/entityExtractor.ts` |
 | **实体图存储** | `src/daa/agent/entities/entityStore.ts` |
@@ -400,25 +399,25 @@ const execution = await runLoggedJob({
 | Dividend refresh | 1:30am UTC | Dividend data |
 | Cache cleanup | 8:20pm UTC | Stale data removal |
 | Health check | Every 30 min | 检查 price-refresh/indicators 是否正常，失败时 TG 告警 |
-| Cognitive Agent | Hourly (自门控) | 研究论点调查循环（按 Settings 配置的 schedule + scheduleTimesUtc 自门控） |
-| Entity backfill | Daily 3:40am UTC | 为存量记忆/论点补齐实体图（幂等，每次最多 200+200 条） |
+| 投资助理复核 | Hourly (自门控) | 投资判断复核循环（按 Settings 配置的 schedule + scheduleTimesUtc 自门控） |
+| Entity backfill | Daily 3:40am UTC | 为存量经验记录/投资判断补齐实体图（幂等，每次最多 200+200 条） |
 
-## Chat/Agent 架构
+## 对话/投资助理架构
 
 ### 对话入口
 - **Web**: `GET /api/daa/chat/sessions` + `POST /api/daa/chat/messages`
 - **Telegram**: `POST /api/daa/chat/telegram/webhook`（需要先在设置页注册 Webhook）
 
-### Agent 组件
+### 对话助手组件
 
 | 组件 | 文件 | 职责 |
 |------|------|------|
 | Orchestrator | `src/daa/chat/chatOrchestrator.ts` | 接收消息 → 加载上下文 → 规划意图 → 执行工具 → 返回结果 |
 | Intent Parser | `src/daa/chat/assistantIntentRules.ts` | 正则 + 关键词匹配 13 种意图 |
 | LLM Planner | `src/daa/chat/assistantIntentPlanning.ts` | 不确定意图时调 LLM 辅助规划 |
-| Tool Registry | `src/daa/chat/agentTools.ts` | 14 个工具（持仓/风险/市场/再平衡/交易/论点查询/日报查询/自由问答） |
-| Context Builder | `src/daa/chat/agentContext.ts` | 构建上下文摘要（持仓+指标+信号+周期） |
-| Session Memory | `src/daa/chat/chatRepo.ts` | 会话+消息+摘要+待确认动作 |
+| Tool Registry | `src/daa/chat/agentTools.ts` | 14 个对话工具（持仓/风险/市场/再平衡/交易/投资判断查询/复核简报查询/自由问答） |
+| Context Builder | `src/daa/chat/agentContext.ts` | 构建对话上下文摘要（持仓+指标+信号+周期） |
+| Session State | `src/daa/chat/chatRepo.ts` | 会话+消息+摘要+待确认动作 |
 | Channel Adapters | `src/daa/chat/channelAdapters.ts` | Web/Telegram 双通道适配 |
 
 ### 意图类型

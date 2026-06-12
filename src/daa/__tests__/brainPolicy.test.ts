@@ -23,7 +23,7 @@ describe("brain-policy", () => {
     expect(canBrainRunAction(config, "simulate_trade").allowed).toBe(false);
   });
 
-  it("operator 模式允许人工触发认知循环和本地模拟执行", () => {
+  it("operator 授权允许人工触发认知循环和本地模拟执行", () => {
     const config = normalizeSystemConfig({
       brain: {
         mode: "operator",
@@ -47,7 +47,7 @@ describe("brain-policy", () => {
     expect(buildBrainBoundaryText(config)).toContain("不能自动修改系统配置");
   });
 
-  it("默认大脑配置是自动驾驶，并启用本地自动调仓闭环", () => {
+  it("默认授权是自动复核，并启用本地自动调仓闭环", () => {
     const config = normalizeSystemConfig({});
     expect({
       brainMode: config.brain?.mode,
@@ -60,7 +60,7 @@ describe("brain-policy", () => {
         "autoExecuteEnabled": true,
         "autoGenerateEnabled": true,
         "brainMode": "autopilot",
-        "executionBoundary": "自动驾驶模式：允许运行认知循环、初始化论点与本地模拟执行；Agent 只能输出目标权重计划，不能自动修改系统配置。",
+        "executionBoundary": "自动复核授权：允许运行投资复核、建立初始投资判断与本地模拟执行；投资助理只能输出目标权重计划，不能自动修改系统配置。",
         "maxSingleOrderPctOfNav": 0.1,
       }
     `);

@@ -132,7 +132,7 @@ export async function hasRecentMajorEventNotification(input: {
 
 /**
  * 检查今天是否已成功发送过指定 eventType 的通知。
- * 用于每日报告等每天只发一次的通知去重。
+ * 用于每日复核等每天只发一次的通知去重。
  */
 export async function hasTodayNotification(eventType: string): Promise<boolean> {
   await ensureDaaStoreSchemaPg();

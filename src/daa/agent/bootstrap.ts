@@ -1,5 +1,5 @@
 /**
- * Thesis Bootstrap — 为持仓和观察列表补齐研究论点
+ * Investment Judgment Bootstrap — 为持仓和观察列表补齐投资判断
  */
 
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
@@ -41,12 +41,12 @@ function buildCoverageThread(asset: BootstrapAsset) {
   return {
     title: `${roleLabel}跟踪：${asset.symbol}`,
     thesisText: role === "holding"
-      ? `${asset.symbol} 是当前持仓资产，自动驾驶需要持续验证其趋势、估值、新闻和组合权重是否仍支持当前仓位。${priceText}${notesText}`
-      : `${asset.symbol} 来自观察列表，尚未形成高置信度方向；自动驾驶需要持续收集技术、估值、新闻和组合适配证据，再决定是否进入目标权重计划。${priceText}${notesText}`,
+      ? `${asset.symbol} 是当前持仓资产，自动复核需要持续验证其趋势、估值、新闻和组合权重是否仍支持当前仓位。${priceText}${notesText}`
+      : `${asset.symbol} 来自观察列表，尚未形成高置信度方向；自动复核需要持续收集技术、估值、新闻和组合适配依据，再决定是否进入目标权重计划。${priceText}${notesText}`,
     conviction: "uncertain" as const,
     invalidationConditions: role === "holding"
-      ? "若趋势转弱、基本面证据恶化、组合集中度过高或风险预算不足，则需要下调目标权重。"
-      : "若信号质量不足、估值不具吸引力、新闻证据转弱或组合没有新增风险预算，则继续观察而不建仓。",
+      ? "若趋势转弱、基本面依据恶化、组合集中度过高或风险预算不足，则需要下调目标权重。"
+      : "若信号质量不足、估值不具吸引力、新闻依据转弱或组合没有新增风险预算，则继续观察而不建仓。",
     tags: Array.from(new Set([roleLabel, ...(asset.tags ?? [])])).slice(0, 5),
   };
 }
@@ -95,8 +95,8 @@ export async function ensureAssetThesisCoverage(assets: BootstrapAsset[]): Promi
 }
 
 /**
- * 扫描持仓和观察列表资产，为每个生成初始 thesis。
- * 首次为空时走 LLM 初始化；已有论点时只补齐缺失资产的覆盖。
+ * 扫描持仓和观察列表资产，为每个生成初始投资判断。
+ * 首次为空时走 LLM 初始化；已有判断时只补齐缺失资产的覆盖。
  */
 export async function bootstrapTheses(assets: BootstrapAsset[]): Promise<{
   created: number;
@@ -107,12 +107,12 @@ export async function bootstrapTheses(assets: BootstrapAsset[]): Promise<{
     const coverage = await ensureAssetThesisCoverage(assets);
     return coverage.created > 0
       ? coverage
-      : { created: 0, errors: ["已存在 thesis，且持仓/观察列表覆盖已齐备"] };
+      : { created: 0, errors: ["已存在投资判断，且持仓/观察列表覆盖已齐备"] };
   }
 
   const config = await resolveLlmConfig("research");
   if (!config) {
-    return { created: 0, errors: ["LLM 未配置，无法 bootstrap"] };
+    return { created: 0, errors: ["LLM 未配置，无法建立初始投资判断"] };
   }
 
   let created = 0;
@@ -122,7 +122,7 @@ export async function bootstrapTheses(assets: BootstrapAsset[]): Promise<{
     try {
       const role = asset.role ?? (asset.holdingQty > 0 ? "holding" : "watchlist");
       const roleLabel = role === "holding" ? "当前持仓" : "观察列表候选";
-      const prompt = `你是一个投资研究分析师。为以下${roleLabel}资产生成一个初始研究论点。
+      const prompt = `你是一个投资研究分析师。为以下${roleLabel}资产生成一个初始投资判断。
 
 资产: ${sanitizeForPrompt(asset.assetKey, 30)}
 当前价格: $${asset.lastPrice.toFixed(2)}
@@ -133,7 +133,7 @@ export async function bootstrapTheses(assets: BootstrapAsset[]): Promise<{
 请输出严格 JSON：
 \`\`\`json
 {
-  "title": "研究线索标题（≤16字名词短语，如'NVDA AI 增长逻辑'，禁止写成疑问句）",
+  "title": "投资判断标题（≤16字名词短语，如'NVDA AI 增长逻辑'，禁止写成疑问句）",
   "thesis": "当前核心判断（1-2句话）",
   "conviction": "medium",
   "invalidationConditions": "什么条件会推翻这个判断",
@@ -179,7 +179,7 @@ export async function bootstrapTheses(assets: BootstrapAsset[]): Promise<{
   try {
     await thesisStore.createResearchThread({
       title: "宏观市场环境评估",
-      thesisText: "当前市场环境待评估，需要 Agent 首次运行后更新。",
+      thesisText: "当前市场环境待评估，需要投资助理首次复核后更新。",
       conviction: "uncertain",
       invalidationConditions: "市场 regime 发生显著变化",
       assetKeys: [],

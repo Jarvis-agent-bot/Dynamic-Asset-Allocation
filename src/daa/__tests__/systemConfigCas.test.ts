@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
-import { DEFAULT_SYSTEM_CONFIG_ } from "@/src/daa/config/systemConfig";
+import { DEFAULT_SYSTEM_CONFIG } from "@/src/daa/config/systemConfig";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import {
   appendDaaCashLedgerEntry,
@@ -143,21 +143,21 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
       `);
 
       const olderConfig = {
-        ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
+        ...structuredClone(DEFAULT_SYSTEM_CONFIG),
         policy: {
-          ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy),
+          ...structuredClone(DEFAULT_SYSTEM_CONFIG.policy),
           review: {
-            ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy.review),
+            ...structuredClone(DEFAULT_SYSTEM_CONFIG.policy.review),
             timezone: "Etc/UTC",
           },
         },
       };
       const latestConfig = {
-        ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
+        ...structuredClone(DEFAULT_SYSTEM_CONFIG),
         policy: {
-          ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy),
+          ...structuredClone(DEFAULT_SYSTEM_CONFIG.policy),
           review: {
-            ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy.review),
+            ...structuredClone(DEFAULT_SYSTEM_CONFIG.policy.review),
             timezone: "Asia/Tokyo",
           },
         },
@@ -186,7 +186,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
       await expect(
         query(
           "INSERT INTO daa_system_config_v2 (id, version, config_json, updated_at) VALUES ('default', $1, $2::jsonb, $3)",
-          [3, JSON.stringify(DEFAULT_SYSTEM_CONFIG_), "2026-01-03T00:00:00.000Z"],
+          [3, JSON.stringify(DEFAULT_SYSTEM_CONFIG), "2026-01-03T00:00:00.000Z"],
         ),
       ).rejects.toThrow();
     });

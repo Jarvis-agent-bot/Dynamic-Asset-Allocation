@@ -15,7 +15,11 @@ import {
   saveDaaHumanIngestState,
   upsertDaaHfSignalSnapshots,
 } from "@/src/daa/store/daaStorePg";
-import { HF_DEFAULT_MARKET_SCOPE_, HF_SEED_ACTORS_, HF_SEED_HOLDINGS_ } from "@/src/daa/hf/hfSeedData";
+import {
+  HUMAN_FACTOR_DEFAULT_MARKET_SCOPES,
+  HUMAN_FACTOR_SEED_ACTORS,
+  HUMAN_FACTOR_SEED_HOLDINGS,
+} from "@/src/daa/hf/hfSeedData";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type {
   DaaActorHoldingSnapshot,
@@ -26,7 +30,7 @@ import type {
   DaaHumanSignal,
 } from "@/src/daa/hf/humanSignals";
 
-const HF_RAW_RETENTION_DAYS_ = 90;
+const HUMAN_FACTOR_RAW_RETENTION_DAYS = 90;
 
 function clampPct(v: number, fallback = 0): number {
   if (!Number.isFinite(v)) return fallback;
@@ -47,7 +51,7 @@ function normalizeSymbol(v: string): string {
 }
 
 function normalizeMarketScope(scope?: string[]): string[] {
-  const input = Array.isArray(scope) ? scope : [...HF_DEFAULT_MARKET_SCOPE_];
+  const input = Array.isArray(scope) ? scope : [...HUMAN_FACTOR_DEFAULT_MARKET_SCOPES];
   const out = new Set<string>();
   for (const market of input) {
     const key = String(market || "").trim().toUpperCase();
@@ -55,7 +59,7 @@ function normalizeMarketScope(scope?: string[]): string[] {
     out.add(key);
   }
   if (out.size === 0) {
-    return [...HF_DEFAULT_MARKET_SCOPE_];
+    return [...HUMAN_FACTOR_DEFAULT_MARKET_SCOPES];
   }
   return [...out];
 }
@@ -677,8 +681,8 @@ function buildSignalBatchFromActorsAndHoldings(opts: {
 
 function buildSeedSignalBatch(opts: { marketScope?: string[]; symbols?: string[] }): DaaHumanSignalBatch {
   return buildSignalBatchFromActorsAndHoldings({
-    actors: HF_SEED_ACTORS_.map((x) => ({ ...x })),
-    holdings: HF_SEED_HOLDINGS_.map((x) => ({ ...x })),
+    actors: HUMAN_FACTOR_SEED_ACTORS.map((x) => ({ ...x })),
+    holdings: HUMAN_FACTOR_SEED_HOLDINGS.map((x) => ({ ...x })),
     marketScope: opts.marketScope,
     symbols: opts.symbols,
     mode: "official_first",
@@ -772,10 +776,10 @@ function buildBatchFromRuntimeState(opts: {
 }): DaaHumanSignalBatch {
   const baseActors = runtimeState.latestActors.length > 0
     ? runtimeState.latestActors.map((x) => ({ ...x }))
-    : HF_SEED_ACTORS_.map((x) => ({ ...x }));
+    : HUMAN_FACTOR_SEED_ACTORS.map((x) => ({ ...x }));
   const baseHoldings = runtimeState.latestHoldings.length > 0
     ? runtimeState.latestHoldings.map((x) => ({ ...x }))
-    : HF_SEED_HOLDINGS_.map((x) => ({ ...x }));
+    : HUMAN_FACTOR_SEED_HOLDINGS.map((x) => ({ ...x }));
 
   const filtered = filterActorsAndHoldingsByFundCodes(baseActors, baseHoldings, opts.fundCodes);
   const mode = runtimeState.latestBatch?.mode ?? "official_first";
@@ -872,8 +876,8 @@ export async function runHumanIngest(opts: {
 
   const usingFallback = !danjuan;
   const batch = danjuan?.batch ?? buildSeedSignalBatch({ marketScope: opts.marketScope, symbols: opts.symbols });
-  const actors = danjuan?.actors ?? HF_SEED_ACTORS_;
-  const holdings = danjuan?.holdings ?? HF_SEED_HOLDINGS_;
+  const actors = danjuan?.actors ?? HUMAN_FACTOR_SEED_ACTORS;
+  const holdings = danjuan?.holdings ?? HUMAN_FACTOR_SEED_HOLDINGS;
   const batchWithSource: DaaHumanSignalBatch = {
     ...batch,
     sourceStatus: usingFallback ? "fallback_seed" : "live",
@@ -919,7 +923,7 @@ export async function runHumanIngest(opts: {
             payloadJson: payload.raw.payloadJson,
             payloadText: payload.raw.payloadText || null,
             fetchedAt: ingestFetchedAt,
-            expireAt: new Date(Date.now() + HF_RAW_RETENTION_DAYS_ * 24 * 3600 * 1000).toISOString(),
+            expireAt: new Date(Date.now() + HUMAN_FACTOR_RAW_RETENTION_DAYS * 24 * 3600 * 1000).toISOString(),
           });
           rawRefByFundReport.set(`${payload.fundCode}::${payload.reportDate}`, raw.id);
         } catch (err) {

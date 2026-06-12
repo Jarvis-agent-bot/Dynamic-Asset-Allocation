@@ -13,6 +13,10 @@ interface StrategyLabHistoryDrawerProps {
   onClose: () => void;
 }
 
+function signedReturnClassName(value: number): string {
+  return value >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]";
+}
+
 export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHistoryDrawerProps) {
   const { history, historyLoading, loadHistory, reuseHistoryParams } = state;
 
@@ -29,11 +33,11 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} aria-hidden />
       <aside
         role="dialog"
         aria-label="回测历史"
-        className="fixed inset-y-0 right-0 z-50 flex w-[min(440px,100vw)] flex-col overflow-hidden border-l border-[var(--border)] bg-[linear-gradient(180deg,var(--elevated),var(--surface))] shadow-[0_30px_70px_rgba(0,0,0,0.55)]"
+        className="fixed inset-y-0 right-0 z-50 flex w-[min(440px,100vw)] flex-col overflow-hidden border-l border-[var(--border)] bg-[var(--surface)]"
       >
         <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
           <div className="min-w-0">
@@ -42,7 +46,7 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
           </div>
           <div className="flex items-center gap-1">
             <DaaSurfaceActionButton
-              tone="slate"
+              tone="neutral"
               className="h-8 px-2 text-xs"
               onClick={() => void loadHistory()}
               disabled={historyLoading}
@@ -63,11 +67,11 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {historyLoading && history.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
+            <div className="flex items-center rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--muted)]">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 加载中…
             </div>
           ) : history.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center px-4 text-center text-sm text-[var(--muted)]">
+            <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-3 py-2 text-sm text-[var(--muted)]">
               <div className="font-medium text-[var(--text)]">还没有回测记录</div>
               <div className="mt-1 text-xs leading-5 text-[var(--faint)]">运行一次回测后，结果会自动出现在这里。</div>
             </div>
@@ -77,7 +81,7 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
                 const totalReturn = item.metrics?.totalReturn ?? 0;
                 const sharpe = item.metrics?.sharpe ?? 0;
                 const drawdown = item.metrics?.maxDrawdown ?? 0;
-                const strategiesLabel = (item.params?.strategies ?? []).map((s) => strategyLabel(s)).join(" · ") || "—";
+                const strategiesLabel = (item.params?.strategies ?? []).map((strategyKey) => strategyLabel(strategyKey)).join(" · ") || "—";
                 return (
                   <div
                     key={item.runId}
@@ -86,7 +90,7 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs text-[var(--muted)]">{formatDateTime(item.createdAt)}</div>
                       <DaaSurfaceActionButton
-                        tone="slate"
+                        tone="neutral"
                         className="h-7 px-2 text-[11px]"
                         onClick={() => {
                           reuseHistoryParams(item);
@@ -104,7 +108,7 @@ export function StrategyLabHistoryDrawer({ state, open, onClose }: StrategyLabHi
                     <div className="mt-1.5 grid grid-cols-3 gap-2 text-[11px] font-[var(--font-mono)]">
                       <div>
                         <div className="text-[var(--faint)]">总收益</div>
-                        <div style={{ color: totalReturn >= 0 ? "var(--success)" : "var(--danger)" }}>
+                        <div className={signedReturnClassName(totalReturn)}>
                           {totalReturn >= 0 ? "+" : ""}{(totalReturn * 100).toFixed(2)}%
                         </div>
                       </div>

@@ -1,5 +1,5 @@
 /**
- * Agent Rebalance Adapter — conviction multiplier 和边界情况测试
+ * 复核调仓适配器 — conviction multiplier 和边界情况测试
  *
  * 注意：enhanceProposalsWithAgent 依赖 DB，这里只测试可导出的常量和映射逻辑。
  * 通过 import 验证模块可正常加载。
@@ -165,7 +165,7 @@ describe("Decision Context 映射", () => {
   });
 });
 
-describe("主调仓论点选择", () => {
+describe("主调仓投资判断选择", () => {
   const makeThread = (overrides: Partial<ResearchThread>): ResearchThread => ({
     id: "t",
     title: "test",
@@ -182,7 +182,7 @@ describe("主调仓论点选择", () => {
     ...overrides,
   });
 
-  it("同资产存在 uncertain 和 medium 时，优先用有方向的论点驱动调仓", () => {
+  it("同资产存在 uncertain 和 medium 时，优先用有方向的投资判断驱动调仓", () => {
     const thesis = selectPrimaryRebalanceThesis([
       makeThread({ id: "u", conviction: "uncertain", priorityScore: 0.99, updatedAt: "2026-01-03T00:00:00.000Z" }),
       makeThread({ id: "m", conviction: "medium", priorityScore: 0.4, updatedAt: "2026-01-02T00:00:00.000Z" }),

@@ -3,15 +3,15 @@ import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/route
 import {
   listMarketIndicatorHistorySeries,
 } from "@/src/daa/modules/marketContext/marketIndicatorService";
-import { MARKET_INDICATOR_KEYS_, MARKET_SCOPE_KEY_ORDER_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
+import { MARKET_INDICATOR_KEYS, MARKET_SCOPE_KEY_ORDER } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type { DaaMarketIndicatorKey, DaaMarketIndicatorScope } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VALID_KEYS = new Set<DaaMarketIndicatorKey>(MARKET_INDICATOR_KEYS_);
+const VALID_KEYS = new Set<DaaMarketIndicatorKey>(MARKET_INDICATOR_KEYS);
 
-const VALID_SCOPES = new Set<DaaMarketIndicatorScope>(MARKET_SCOPE_KEY_ORDER_);
+const VALID_SCOPES = new Set<DaaMarketIndicatorScope>(MARKET_SCOPE_KEY_ORDER);
 
 export async function GET(req: Request) {
   return withApiHandler(async () => {

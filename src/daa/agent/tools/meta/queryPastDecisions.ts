@@ -11,7 +11,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 registerTool(
   {
     name: "query_past_decisions",
-    description: "查询最近 N 次 Agent 运行的决策摘要（调查了哪些论点、使用了哪些工具、得出什么结论）。适合检视决策模式和发现盲区。",
+    description: "查询最近 N 次投资助理复核摘要（复核了哪些判断、使用了哪些工具、得出什么结论）。适合检视决策模式和发现盲区。",
     category: "meta",
     parameters: {
       limit: { type: "number", description: "返回最近 N 次运行（默认 5）" },

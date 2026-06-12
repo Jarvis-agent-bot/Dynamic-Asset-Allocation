@@ -1,7 +1,7 @@
 /**
  * meta/evaluateSelfAccuracy — 评估 Agent 自身历史准确率
  *
- * 按资产类别或时间段统计论点准确率，发现系统性偏差。
+ * 按资产类别或时间段统计投资判断准确率，发现系统性偏差。
  */
 
 import { registerTool } from "@/src/daa/agent/tools/registry";
@@ -11,7 +11,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 registerTool(
   {
     name: "evaluate_self_accuracy",
-    description: "统计 Agent 历史论点的准确率（按资产、按时间段、按 conviction 级别）。适合发现系统性判断偏差。",
+    description: "统计投资助理历史判断的准确率（按资产、按时间段、按 conviction 级别）。适合发现系统性判断偏差。",
     category: "meta",
     parameters: {
       lookbackDays: { type: "number", description: "回看天数（默认 90）" },
@@ -30,7 +30,7 @@ registerTool(
     try {
       const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
 
-      // 查询有复盘评分的论点
+      // 查询有复盘评分的投资判断
       const since = new Date(Date.now() - lookbackDays * 86400000).toISOString();
       const rows = await withDaaPgClient(async (client) => {
         const res = await client.query(

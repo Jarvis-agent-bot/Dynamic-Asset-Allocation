@@ -1,4 +1,4 @@
-import { EXCHANGE_CALENDAR_DATA_ } from "./exchangeCalendarData";
+import { EXCHANGE_CALENDAR_DATA } from "./exchangeCalendarData";
 
 type ExchangeCalendarMaintenanceInput = {
   requiredMarkets: string[];
@@ -33,7 +33,7 @@ export function validateExchangeCalendarMaintenance(
   const issues: string[] = [];
 
   for (const market of requiredMarkets) {
-    const data = EXCHANGE_CALENDAR_DATA_[market];
+    const data = EXCHANGE_CALENDAR_DATA[market];
     if (!data) {
       issues.push(`${market} 缺少交易所日历配置`);
       continue;

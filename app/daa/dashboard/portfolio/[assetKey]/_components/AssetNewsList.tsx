@@ -19,7 +19,7 @@ interface NewsItem {
   scorePct: number | null;
 }
 
-interface Response { items: NewsItem[]; hours: number; limit: number; }
+interface AssetNewsResponse { items: NewsItem[]; hours: number; limit: number; }
 
 function formatAgo(iso: string): string {
   const ms = Date.now() - Date.parse(iso);
@@ -33,14 +33,14 @@ function formatAgo(iso: string): string {
 }
 
 function providerBadge(provider: string): { label: string; color: string } {
-  const p = provider.toLowerCase();
-  if (p === "alpaca") return { label: "Alpaca", color: "text-emerald-700 bg-emerald-50" };
-  if (p === "yahoo_rss") return { label: "Yahoo", color: "text-sky-700 bg-sky-50" };
-  return { label: provider, color: "text-slate-600 bg-slate-100" };
+  const normalizedProvider = provider.toLowerCase();
+  if (normalizedProvider === "alpaca") return { label: "Alpaca", color: "text-[var(--success)] bg-[var(--success-bg)]" };
+  if (normalizedProvider === "yahoo_rss") return { label: "Yahoo", color: "text-[var(--primary)] bg-[var(--primary-bg)]" };
+  return { label: provider, color: "text-[var(--muted)] bg-[var(--elevated)]" };
 }
 
 export function AssetNewsList({ symbol }: { symbol: string }) {
-  const [data, setData] = useState<Response | null>(null);
+  const [newsFeed, setNewsFeed] = useState<AssetNewsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +48,13 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const res = await fetch(`/api/daa/news/recent?symbol=${encodeURIComponent(symbol)}&hours=168&limit=30`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(json.data);
+      const response = await fetch(`/api/daa/news/recent?symbol=${encodeURIComponent(symbol)}&hours=168&limit=30`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const jsonPayload = await response.json();
+      setNewsFeed(jsonPayload.data);
       setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "加载失败");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -63,7 +63,7 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
 
   useEffect(() => { void load(false); }, [load]);
 
-  const items = data?.items ?? [];
+  const items = newsFeed?.items ?? [];
   const summary = items[0]?.signalSummary ?? null;
 
   return (
@@ -71,14 +71,14 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Newspaper className="h-4 w-4 text-[var(--primary)]" />
-          <h3 className="text-sm font-semibold text-slate-900">市场资讯</h3>
-          <span className="text-[10px] text-slate-400">{items.length} 条</span>
+          <h3 className="text-sm font-semibold text-[var(--text)]">市场资讯</h3>
+          <span className="text-[10px] text-[var(--faint)]">{items.length} 条</span>
         </div>
         <button
           type="button"
           onClick={() => load(true)}
           disabled={refreshing}
-          className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-1 text-[10px] text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)] disabled:opacity-50"
           aria-label="刷新"
         >
           {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
@@ -87,63 +87,63 @@ export function AssetNewsList({ symbol }: { symbol: string }) {
 
       {/* 整体情感摘要 */}
       {summary && (
-        <div className="mb-3 rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+        <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[11px] leading-relaxed text-[var(--muted)]">
           {summary}
         </div>
       )}
 
       {loading && (
-        <div className="flex items-center gap-2 py-3 text-xs text-slate-500">
+        <div className="flex items-center gap-2 py-3 text-xs text-[var(--muted)]">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> 加载新闻…
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-700">
+        <div className="flex items-center gap-1.5 text-xs text-[var(--amber)]">
           <AlertCircle className="h-3.5 w-3.5" />
           {error}
         </div>
       )}
 
       {!loading && !error && items.length === 0 && (
-        <div className="py-4 text-center text-[11px] text-[var(--faint)]">
+        <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] px-2.5 py-2 text-[11px] text-[var(--faint)]">
           近 7 天无新闻
         </div>
       )}
 
       {!loading && items.length > 0 && (
-        <ul className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto">
-          {items.map((it, idx) => {
-            const badge = providerBadge(it.provider);
-            const isMajor = it.majorEvent?.impact === "high";
+        <ul className="max-h-[360px] divide-y divide-[var(--elevated)] overflow-y-auto">
+          {items.map((newsItem, index) => {
+            const badge = providerBadge(newsItem.provider);
+            const isMajor = newsItem.majorEvent?.impact === "high";
             return (
-              <li key={`${idx}-${it.publishedAt}`} className="py-2">
+              <li key={`${index}-${newsItem.publishedAt}`} className="py-2">
                 <div className="flex items-start gap-2">
                   {isMajor && (
                     <span
-                      className="mt-0.5 shrink-0 rounded bg-red-100 px-1 py-0.5 text-[9px] font-medium text-red-700"
-                      title={it.majorEvent?.description ?? ""}
+                      className="mt-0.5 shrink-0 rounded-[var(--radius-sm)] bg-[var(--danger-bg)] px-1 py-0.5 text-[9px] font-medium text-[var(--danger)]"
+                      title={newsItem.majorEvent?.description ?? ""}
                     >
                       重大
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
-                    {it.link ? (
+                    {newsItem.link ? (
                       <a
-                        href={it.link}
+                        href={newsItem.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="line-clamp-2 flex items-start gap-1 text-xs text-slate-800 hover:text-[var(--primary)]"
+                        className="line-clamp-2 flex items-start gap-1 text-xs text-[var(--text)] hover:text-[var(--primary)]"
                       >
-                        {it.title}
+                        {newsItem.title}
                         <ExternalLink className="mt-0.5 h-2.5 w-2.5 shrink-0 opacity-40" />
                       </a>
                     ) : (
-                      <span className="line-clamp-2 text-xs text-slate-800">{it.title}</span>
+                      <span className="line-clamp-2 text-xs text-[var(--text)]">{newsItem.title}</span>
                     )}
-                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400">
+                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--faint)]">
                       <span className={`rounded px-1 py-0.5 ${badge.color}`}>{badge.label}</span>
-                      <span>{formatAgo(it.publishedAt)}</span>
+                      <span>{formatAgo(newsItem.publishedAt)}</span>
                     </div>
                   </div>
                 </div>

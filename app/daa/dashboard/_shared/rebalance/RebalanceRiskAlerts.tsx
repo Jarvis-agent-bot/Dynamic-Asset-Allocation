@@ -21,15 +21,15 @@ export function RebalanceRiskAlerts(props: {
       subtitle={`按当前勾选结果计算；状态：${riskStatusLabel(props.currentRiskCheck.overallStatus)}（告警可执行，阻断不可执行）`}
       action={<DaaSurfaceStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>{riskStatusLabel(props.currentRiskCheck.overallStatus)}</DaaSurfaceStatusPill>}
     >
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]">
         {props.currentRiskCheck.items.filter((item) => item.status !== "pass").map((item) => (
           <div
             key={item.rule}
             className={cn(
-              "rounded-[16px] border px-4 py-3",
+              "px-4 py-3",
               item.status === "block"
-                ? "border-rose-400/24 bg-rose-500/10"
-                : "border-amber-400/24 bg-amber-500/10",
+                ? "bg-[var(--danger-bg)]"
+                : "bg-[var(--amber-bg)]",
             )}
           >
             <div className="flex flex-wrap items-center gap-2">

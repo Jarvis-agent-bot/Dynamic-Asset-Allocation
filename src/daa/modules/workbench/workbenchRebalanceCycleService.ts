@@ -100,7 +100,7 @@ function filterSmallCycleProposals(input: {
   );
 }
 
-function relabelAgentEntryProposals(input: {
+function relabelTargetSuggestionEntryProposals(input: {
   proposals: RebalanceProposal[];
   bootstrap: Awaited<ReturnType<typeof buildWorkbenchBootstrap>>;
 }): RebalanceProposal[] {
@@ -115,7 +115,7 @@ function relabelAgentEntryProposals(input: {
     if (!proposal.reason.startsWith("观察列表目标入场")) return proposal;
     return {
       ...proposal,
-      reason: proposal.reason.replace(/^观察列表目标入场/, "Agent 目标入场"),
+      reason: proposal.reason.replace(/^观察列表目标入场/, "目标建议入场"),
     };
   });
 }
@@ -213,7 +213,7 @@ async function persistExecutedTargetWeights(input: {
       targetWeightAudit: {
         source: "rebalance_execution",
         reason: reason === "agent_target"
-          ? "成交后同步 Agent 目标权重"
+          ? "成交后同步目标权重建议"
           : "成交后同步买入提案目标权重",
         actor: "rebalance_execution",
         cycleId: input.cycle.cycleId,
@@ -477,7 +477,7 @@ export async function generateWorkbenchRebalanceCycle(
     };
 
     try {
-      // Agent 模式：从最近的 Agent 运行获取摘要
+      // 投资助理授权：从最近一次后台复核获取摘要
       const { getLatestRun } = await import("@/src/daa/agent/store/agentRunStore");
       const latestRun = await getLatestRun();
       const { getActiveTheses } = await import("@/src/daa/agent/store/thesisStore");
@@ -492,8 +492,8 @@ export async function generateWorkbenchRebalanceCycle(
           confidencePct: t.conviction === "high" ? 85 : 55,
         })),
         llmSummary: latestRun?.briefing
-          ? `Agent: ${(latestRun.briefing as unknown as Record<string, unknown>)?.thesesUpdated ?? 0} 论点更新, ${theses.length} 活跃`
-          : `${theses.length} 个活跃研究论点`,
+          ? `投资助理：${(latestRun.briefing as unknown as Record<string, unknown>)?.thesesUpdated ?? 0} 条投资判断更新，${theses.length} 条活跃`
+          : `${theses.length} 条活跃投资判断`,
         cashIdleWarning: cashClassification.cashIdleWarning,
         cashIdlePct: cashClassification.investableIdlePct,
         generatedAt: new Date().toISOString(),
@@ -523,12 +523,12 @@ export async function generateWorkbenchRebalanceCycle(
     };
   }
 
-  // ── Step B-E: Cognitive Agent 驱动调仓 ──
-  // Agent thesis conviction → 提案量调整
+  // ── Step B-E: 后台复核驱动调仓 ──
+  // 投资判断复核 → 提案量调整
   const agentResult = hasAgentTargetPlan && triggerSource === "agent_trigger"
     ? {
       proposals: draft.proposals,
-      llmSummary: `Agent 目标权重计划已进入执行层，生成 ${draft.proposals.length} 个 BUY/SELL 提案。`,
+      llmSummary: `目标权重建议已进入执行层，生成 ${draft.proposals.length} 个 BUY/SELL 提案。`,
       marketRegime: marketContext?.regime ?? null,
       agentStatus: "ok" as const,
       tokensUsed: 0,
@@ -542,7 +542,7 @@ export async function generateWorkbenchRebalanceCycle(
 
   draft.proposals = agentResult.proposals;
   if (hasAgentTargetPlan && triggerSource === "agent_trigger") {
-    draft.proposals = relabelAgentEntryProposals({ proposals: draft.proposals, bootstrap });
+    draft.proposals = relabelTargetSuggestionEntryProposals({ proposals: draft.proposals, bootstrap });
   }
 
   const styleOverlay = await applyStrategyStyleOverlay({
@@ -609,7 +609,7 @@ export async function generateWorkbenchRebalanceCycle(
   mergedProposals = agentStabilityGuard.proposals;
   if (agentStabilityGuard.blocked.length > 0 && mergedProposals.length === 0) {
     return skipWithLatest(
-      `${isAgentTargetWeightCycle ? "Agent" : "自动"}交易稳定器已跳过本轮全部下单：${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；")}`,
+      `${isAgentTargetWeightCycle ? "投资助理" : "自动"}交易稳定器已跳过本轮全部下单：${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；")}`,
       { attachLatestCycle: true },
     );
   }
@@ -707,7 +707,7 @@ export async function generateWorkbenchRebalanceCycle(
     `Policy(${policyDecision.action}): score ${policyDecision.score.toFixed(1)} / threshold ${policyDecision.threshold.toFixed(1)} · ${policyDecision.noTradeBandState}`,
     policyDecision.blockers.length > 0 ? `策略阻断: ${policyDecision.blockers.join("；").slice(0, 240)}` : null,
     policyDecision.reasons.length > 0 ? `策略理由: ${policyDecision.reasons.join("；").slice(0, 240)}` : null,
-    `Agent(${agentResult.agentStatus}): ${agentResult.proposals.length} 个提案`,
+    `后台复核(${agentResult.agentStatus}): ${agentResult.proposals.length} 个提案`,
     styleOverlay.blocked.length > 0
       ? `策略风格过滤: ${styleOverlay.blocked.length} 条建议被暂缓（${styleOverlay.blocked.map((row) => row.symbol).join(", ").slice(0, 120)}）`
       : null,
@@ -715,12 +715,12 @@ export async function generateWorkbenchRebalanceCycle(
     macroShadowProposalCount > 0
       ? `宏观预算影子: ${macroShadowProposalCount} 条建议带预算系数，仅供审阅，不影响执行金额`
       : null,
-    agentResult.llmSummary ? `Agent摘要: ${agentResult.llmSummary.slice(0, 120)}` : null,
+    agentResult.llmSummary ? `复核摘要: ${agentResult.llmSummary.slice(0, 120)}` : null,
     reversalGuard.blocked.length > 0
       ? `反向交易冷却: ${reversalGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
       : null,
     agentStabilityGuard.blocked.length > 0
-      ? `${isAgentTargetWeightCycle ? "Agent" : "自动"}交易稳定器: ${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
+      ? `${isAgentTargetWeightCycle ? "目标建议" : "自动"}交易稳定器: ${agentStabilityGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
       : null,
     cashClassification.cashIdleWarning
       ? `现金提示: 闲置资金 ${(cashClassification.investableIdlePct * 100).toFixed(1)}%（已${cashClassification.cashIdleDays}天）`
