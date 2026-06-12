@@ -162,7 +162,7 @@ export async function previewManualTrade(input: PreviewManualTradeInput): Promis
   const yfinanceSymbol = toYfinanceSymbolByMarket(row.symbol, row.market);
   const priceFeedEnabled = systemRow.config.dataSources?.priceFeed?.enabled !== false;
   const marketCache = systemRow.config.dataSources?.priceFeed?.marketCache || {
-    freshMinutes: 15,
+    freshMinutes: 5,
     serveStaleHours: 48,
     rawRetentionDays: 90,
   };

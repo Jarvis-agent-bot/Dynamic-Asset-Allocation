@@ -14,6 +14,7 @@ import { getMarketIndicatorRefreshSymbols } from "@/src/daa/modules/marketContex
 import { WORKBENCH_FEATURED_ASSETS_CATALOG } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import {
   getDaaSystemConfig,
+  appendCurrentDaaEquitySnapshot,
   listDaaAssetUniverse,
 } from "@/src/daa/store/daaStorePg";
 import { batchUpdateDaaAssetUniverseLastPrices } from "@/src/daa/store/assetUniverseStore";
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const fallbackKey = buildUtcCronWindowIdempotencyKey("cron_price_refresh", 15);
+    const fallbackKey = buildUtcCronWindowIdempotencyKey("cron_price_refresh", 5);
     const runs = await runForEachActiveDaaAccountScope((scope) =>
       runPriceRefreshJob(req, buildAccountScopedRequestIdempotencyKey(scope, req, fallbackKey)),
     );
@@ -161,6 +162,20 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
           ? await batchUpdateDaaAssetUniverseLastPrices(batchItems)
           : [];
 
+        let equitySnapshot: { totalEquity: number; holdingsValue: number; ts: string } | null = null;
+        if (refreshedAssetKeys.length > 0) {
+          try {
+            const snapshot = await appendCurrentDaaEquitySnapshot({ source: "cron_price_refresh" });
+            equitySnapshot = {
+              totalEquity: snapshot.totalEquity,
+              holdingsValue: snapshot.holdingsValue,
+              ts: snapshot.ts,
+            };
+          } catch (err) {
+            logSwallowed("priceRefreshRoute.equitySnapshot", err);
+          }
+        }
+
         // Extract dividends from raw payloads stored during this refresh (last 10 days window)
         let dividendExtracted = 0;
         try {
@@ -245,6 +260,7 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
           staleSymbols: result.stale,
           missingSymbols: result.missing,
           refreshedAssets: refreshedAssetKeys.length,
+          equitySnapshot,
           assetKeys: refreshedAssetKeys,
           dividendExtracted,
           priceAlertsTriggered,

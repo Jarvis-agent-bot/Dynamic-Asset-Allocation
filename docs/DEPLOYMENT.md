@@ -198,7 +198,7 @@ docker compose up -d daa-web
 
 | Schedule (UTC) | Job | 用途 |
 |----------------|-----|------|
-| `*/15 * * * *` | `price-refresh` | 每 15 分钟刷新持仓 + watchlist 价格 |
+| `*/5 * * * *` | `price-refresh` | 每 5 分钟刷新持仓 + watchlist 价格 |
 | `5 0 * * *` | `fx-refresh` | 每日 00:05 刷新汇率 |
 | `*/30 * * * *` | `news-refresh` | 每 30 分钟批量刷新新闻（Alpaca REST + Yahoo RSS；WS 实时推送另走 daa-ws-news） |
 | `*/30 * * * *` | `market-indicators-refresh` | 每 30 分钟刷新 VIX / 比率类指标 |

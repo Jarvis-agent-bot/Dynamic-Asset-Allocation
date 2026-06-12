@@ -296,7 +296,7 @@ export const DEFAULT_SYSTEM_CONFIG: DaaSystemConfig = {
       enabled: true,
       symbols: ["SPY", "QQQ", "BND", "TSLA"],
       marketCache: {
-        freshMinutes: 15,
+        freshMinutes: 5,
         serveStaleHours: 48,
         rawRetentionDays: 90,
       },

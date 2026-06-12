@@ -164,7 +164,7 @@ export async function GET(req: Request) {
         const priceResults = await fetchMultiplePriceSeriesWithCache(
           BENCHMARK_DEFS.map((b) => b.symbol),
           startDate,
-          { market: "US", currency: "USD", minDbDays: 2, maxStaleDays: 3, timeoutMs: 8000 },
+          { market: "US", currency: "USD", minDbDays: 2, maxStaleDays: 1, timeoutMs: 8000 },
         );
         const bySymbol = new Map(priceResults.map((r) => [r.symbol.toUpperCase(), r]));
         const benches = BENCHMARK_DEFS.map((def) => ({

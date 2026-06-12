@@ -84,7 +84,7 @@ services:
         set -e
         apk add --no-cache curl
         {
-          printf '%s\n' '*/15 * * * * curl -sf -X POST -H "x-daa-cron-token: $$DAA_CRON_TOKEN" http://daa-web:3000/api/daa/cron/price-refresh'
+          printf '%s\n' '*/5 * * * * curl -sf -X POST -H "x-daa-cron-token: $$DAA_CRON_TOKEN" http://daa-web:3000/api/daa/cron/price-refresh'
           printf '%s\n' '5 0 * * * curl -sf -X POST -H "x-daa-cron-token: $$DAA_CRON_TOKEN" http://daa-web:3000/api/daa/cron/fx-refresh'
           printf '%s\n' '25 0 * * * curl -sf -X POST -H "x-daa-cron-token: $$DAA_CRON_TOKEN" http://daa-web:3000/api/daa/cron/fundamentals-refresh'
           printf '%s\n' '*/30 * * * * curl -sf -X POST -H "x-daa-cron-token: $$DAA_CRON_TOKEN" http://daa-web:3000/api/daa/cron/news-refresh'

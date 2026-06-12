@@ -64,6 +64,13 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
       currency: "USD",
     },
   ]),
+  appendCurrentDaaEquitySnapshot: vi.fn(async () => ({
+    ts: "2026-03-06T00:00:00.000Z",
+    totalEquity: 1000,
+    holdingsValue: 500,
+    cash: 500,
+    source: "cron_price_refresh",
+  })),
   updateDaaAssetUniverseLastPrice: vi.fn(async () => null),
 }));
 

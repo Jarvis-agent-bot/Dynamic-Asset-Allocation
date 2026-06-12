@@ -155,7 +155,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 | 层 | 表 | 策略 |
 |----|----|------|
-| 最新快照 | `daa_market_price_snapshots` | 15 分钟 fresh / 48 小时 stale |
+| 最新快照 | `daa_market_price_snapshots` | 5 分钟 fresh / 48 小时 stale |
 | 历史序列 | `daa_market_price_history_v1` | 永久（cron 定期刷新） |
 | 指标 | `daa_market_indicator_snapshot_v1` | 由市场状态缓存有效期决定 |
 | 原始响应 | `daa_external_payload_raw_v1` | 90 天 |

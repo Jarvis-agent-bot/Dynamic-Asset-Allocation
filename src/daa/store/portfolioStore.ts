@@ -15,6 +15,7 @@ import {
   upsertAssetMasterInTx, upsertWatchlistEntryInTx,
   upsertTargetAllocationInTx, deleteOrphanedAssetsInTx,
 } from "./assetMasterStore";
+import { ensureAccountStateRowInTx } from "./accountStore";
 import { recordTargetWeightAuditInTx } from "./targetWeightAuditStore";
 
 function normalizeCcyCode(value: unknown, fallback = "USD"): string {
@@ -64,6 +65,51 @@ export async function appendDaaEquitySnapshot(snapshot: Partial<DaaStoreEquitySn
       [ownerAccountId, ts],
     );
     return mapEquitySnapshotRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function appendCurrentDaaEquitySnapshot(input: {
+  ts?: string;
+  source?: string;
+} = {}): Promise<DaaStoreEquitySnapshot> {
+  await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
+  return withDaaPgClient(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      const account = await ensureAccountStateRowInTx(query);
+      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTx(query, {
+        baseCurrency: account.baseCurrency,
+        cash: account.cash,
+      });
+      const ts = toIsoString(input.ts, new Date().toISOString());
+      const source = normalizeText(input.source, "market_price_refresh");
+
+      await query(
+        "UPDATE daa_account_state_v2 SET total_equity = $1::numeric, updated_at = NOW() WHERE id = $2",
+        [valuation.totalEquity, ownerAccountId],
+      );
+      await query(
+        "INSERT INTO daa_equity_snapshots_v2 (owner_account_id, ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (owner_account_id, ts) DO UPDATE SET total_equity=EXCLUDED.total_equity, holdings_value=EXCLUDED.holdings_value, cash=EXCLUDED.cash, source=EXCLUDED.source",
+        [ownerAccountId, ts, valuation.totalEquity, valuation.holdingsValue, account.cash, source],
+      );
+
+      await query("COMMIT");
+      return {
+        ts,
+        totalEquity: valuation.totalEquity,
+        holdingsValue: valuation.holdingsValue,
+        cash: account.cash,
+        source,
+      };
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch (rollbackError) {
+        logSwallowed("portfolioStore.appendCurrentSnapshot.rollback", rollbackError);
+      }
+      throw error;
+    }
   });
 }
 

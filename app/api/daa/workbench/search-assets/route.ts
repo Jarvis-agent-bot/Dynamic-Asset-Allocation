@@ -197,7 +197,7 @@ export async function GET(req: Request) {
     const system = await getDaaSystemConfig();
     const priceFeedEnabled = system.config.dataSources?.priceFeed?.enabled !== false;
     const cacheConfig = system.config.dataSources?.priceFeed?.marketCache || {
-      freshMinutes: 15,
+      freshMinutes: 5,
       serveStaleHours: 48,
       rawRetentionDays: 90,
     };

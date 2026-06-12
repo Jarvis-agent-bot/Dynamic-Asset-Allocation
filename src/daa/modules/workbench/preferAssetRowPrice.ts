@@ -6,7 +6,7 @@ import type { AssetUniverseView } from "./workbenchTypes";
 
 function defaultMarketCacheConfig() {
   return {
-    freshMinutes: 15,
+    freshMinutes: 5,
     serveStaleHours: 48,
     rawRetentionDays: 90,
   };
