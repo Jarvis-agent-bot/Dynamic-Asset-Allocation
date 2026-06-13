@@ -86,7 +86,7 @@ vi.mock("@/src/daa/store/jobExecutionLogRepo", () => ({
 import { POST as priceRefreshPost } from "@/app/api/daa/cron/price-refresh/route";
 import { POST as cacheCleanupPost } from "@/app/api/daa/cron/cache-cleanup/route";
 import { refreshMarketPrices, runUnifiedDataCleanup } from "@/src/daa/modules/marketCache/marketCacheService";
-import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { appendCurrentDaaEquitySnapshot, getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 function buildMarketCacheConfig(input?: {
   priceFeedEnabled?: boolean;
@@ -118,6 +118,7 @@ function buildMarketCacheConfig(input?: {
 describe("cron-market-cache-routes-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildMarketCacheConfig());
   });
 
@@ -144,6 +145,21 @@ describe("cron-market-cache-routes-v1", () => {
     const input = vi.mocked(refreshMarketPrices).mock.calls[0]?.[0];
     expect(Array.isArray(input?.assets)).toBe(true);
     expect(input?.assets.some((row) => row.market === "US" && row.symbol === "GLD")).toBe(true);
+  });
+
+  it("price-refresh 按 UTC 小时桶记录权益快照", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-06T12:34:56.789Z"));
+
+    const response = await priceRefreshPost(new Request("http://localhost/api/daa/cron/price-refresh", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(vi.mocked(appendCurrentDaaEquitySnapshot)).toHaveBeenCalledWith({
+      ts: "2026-03-06T12:00:00.000Z",
+      source: "cron_price_refresh_hourly",
+    });
   });
 
   it("cache-cleanup 返回删除计数", async () => {

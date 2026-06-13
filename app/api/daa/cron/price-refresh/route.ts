@@ -57,6 +57,12 @@ function dedupeTargets(rows: MarketPriceAssetInput[]): MarketPriceAssetInput[] {
   return [...out.values()];
 }
 
+function toUtcHourStartIso(input = new Date()): string {
+  const d = new Date(input);
+  d.setUTCMinutes(0, 0, 0);
+  return d.toISOString();
+}
+
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const denied = await requireCronAuth(req);
@@ -162,18 +168,20 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
           ? await batchUpdateDaaAssetUniverseLastPrices(batchItems)
           : [];
 
-        let equitySnapshot: { totalEquity: number; holdingsValue: number; ts: string } | null = null;
-        if (refreshedAssetKeys.length > 0) {
-          try {
-            const snapshot = await appendCurrentDaaEquitySnapshot({ source: "cron_price_refresh" });
-            equitySnapshot = {
-              totalEquity: snapshot.totalEquity,
-              holdingsValue: snapshot.holdingsValue,
-              ts: snapshot.ts,
-            };
-          } catch (err) {
-            logSwallowed("priceRefreshRoute.equitySnapshot", err);
-          }
+        let equitySnapshot: { totalEquity: number; holdingsValue: number; ts: string; source: string } | null = null;
+        try {
+          const snapshot = await appendCurrentDaaEquitySnapshot({
+            ts: toUtcHourStartIso(),
+            source: "cron_price_refresh_hourly",
+          });
+          equitySnapshot = {
+            totalEquity: snapshot.totalEquity,
+            holdingsValue: snapshot.holdingsValue,
+            ts: snapshot.ts,
+            source: snapshot.source,
+          };
+        } catch (err) {
+          logSwallowed("priceRefreshRoute.equitySnapshot", err);
         }
 
         // Extract dividends from raw payloads stored during this refresh (last 10 days window)

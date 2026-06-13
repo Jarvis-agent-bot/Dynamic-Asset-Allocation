@@ -38,6 +38,22 @@ type EquityPoint = {
   equity: number;
 };
 
+type ServerChartData = {
+  mode: "equity" | "twr";
+  days: number;
+  series: Array<Record<string, unknown>>;
+  changePct: number | null;
+  lastEquity?: number;
+  benchmarks?: Array<{ key: string; label: string; changePct: number | null }>;
+};
+
+type SeriesCoverage = {
+  count: number;
+  startDate: string;
+  endDate: string;
+  maxGapDays: number;
+};
+
 const CHART_COLORS = {
   muted: "var(--muted)",
   grid: "var(--border)",
@@ -55,6 +71,33 @@ const BENCHMARK_LINE_COLORS: Record<string, string> = {
 function benchmarkLegendDotClass(benchmarkKey: string): string {
   if (benchmarkKey === "benchmarkQqq") return "bg-[var(--indigo)]";
   return "bg-[var(--success)]";
+}
+
+function daysBetween(leftDate: string, rightDate: string): number {
+  const left = Date.parse(`${leftDate}T00:00:00.000Z`);
+  const right = Date.parse(`${rightDate}T00:00:00.000Z`);
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return 0;
+  return Math.max(0, Math.round((right - left) / 86_400_000));
+}
+
+function summarizeCoverage(data: Array<Record<string, unknown>>): SeriesCoverage | null {
+  const dates = data
+    .map((point) => String(point.date || ""))
+    .filter(Boolean)
+    .sort();
+  if (dates.length === 0) return null;
+
+  let maxGapDays = 0;
+  for (let index = 1; index < dates.length; index += 1) {
+    maxGapDays = Math.max(maxGapDays, daysBetween(dates[index - 1], dates[index]));
+  }
+
+  return {
+    count: dates.length,
+    startDate: dates[0],
+    endDate: dates[dates.length - 1],
+    maxGapDays,
+  };
 }
 
 const TIME_RANGES = [
@@ -209,12 +252,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
   // mode 可在图内切换：equity=实际金额，twr=收益率（叠加标普500/纳斯达克100 对比）
   const [mode, setMode] = useState<"equity" | "twr">(props.mode ?? "equity");
   const [range, setRange] = useState<RangeKey>("ALL");
-  const [serverData, setServerData] = useState<{
-    series: Array<Record<string, unknown>>;
-    changePct: number | null;
-    lastEquity?: number;
-    benchmarks?: Array<{ key: string; label: string; changePct: number | null }>;
-  } | null>(null);
+  const [serverData, setServerData] = useState<ServerChartData | null>(null);
 
   const selectedDays = useMemo(
     () => TIME_RANGES.find((timeRange) => timeRange.key === range)?.days ?? 0,
@@ -224,52 +262,57 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
   // 从后端获取预计算的曲线数据
   React.useEffect(() => {
     const params = new URLSearchParams({ mode, days: String(selectedDays) });
+    const controller = new AbortController();
+    setServerData(null);
     fetch(`/api/daa/read/performance-chart?${params}`)
       .then((response) => (response.ok ? response.json() : null))
       .then((jsonPayload) => {
         const chartPayload = jsonPayload?.data ?? jsonPayload;
-        if (chartPayload?.series) setServerData(chartPayload);
+        if (!chartPayload?.series || controller.signal.aborted) return;
+        setServerData({
+          mode,
+          days: selectedDays,
+          series: chartPayload.series,
+          changePct: chartPayload.changePct ?? null,
+          lastEquity: chartPayload.lastEquity,
+          benchmarks: chartPayload.benchmarks ?? [],
+        });
       })
       .catch(() => {});
+
+    return () => controller.abort();
   }, [mode, selectedDays]);
+
+  const currentServerData = serverData?.mode === mode && serverData.days === selectedDays ? serverData : null;
 
   // 优先用后端数据；后端未就绪时 fallback 到本地计算
   const data = useMemo(() => {
-    if (serverData?.series?.length) return serverData.series;
+    if (currentServerData?.series) return currentServerData.series;
     if (mode === "equity") return buildEquityCurve(snapshots, selectedDays);
     return normalizeSnapshots(snapshots, selectedDays, undefined, props.cashFlowEvents);
-  }, [serverData, mode, snapshots, selectedDays, props.cashFlowEvents]);
+  }, [currentServerData, mode, snapshots, selectedDays, props.cashFlowEvents]);
 
   // 收益率模式下后端返回的对比基准（标普500 / 纳斯达克100）
   const benchmarks = useMemo(
-    () => (mode === "twr" ? serverData?.benchmarks ?? [] : []),
-    [mode, serverData],
+    () => (mode === "twr" ? currentServerData?.benchmarks ?? [] : []),
+    [mode, currentServerData],
   );
-  const returnPct = useMemo(() => serverData?.changePct ?? null, [serverData]);
+  const returnPct = useMemo(() => currentServerData?.changePct ?? null, [currentServerData]);
+  const coverage = useMemo(() => summarizeCoverage(data), [data]);
 
   const equityChange = useMemo(() => {
     if (mode !== "equity") return null;
-    if (serverData?.lastEquity != null && serverData.changePct != null) {
-      return { last: serverData.lastEquity, change: 0, pct: serverData.changePct };
+    if (currentServerData?.lastEquity != null && currentServerData.changePct != null) {
+      return { last: currentServerData.lastEquity, change: 0, pct: currentServerData.changePct };
     }
     return null;
-  }, [mode, serverData]);
-
-  if (snapshots.length < 2) {
-    return (
-      <WorkbenchEmptyState
-        title="暂无权益曲线"
-        description="完成首次入金或交易后，这里会显示组合权益路径。"
-        className={`border-0 bg-transparent px-0 py-4 ${className ?? ""}`}
-      />
-    );
-  }
+  }, [mode, currentServerData]);
 
   return (
     <div className={`min-w-0 ${className ?? ""}`}>
       {/* 时间范围选择器 + 收益率 */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* 金额 / 收益率 模式切换 — 收益率模式下叠加标普500/纳斯达克100 对比 */}
           <div className="flex gap-1 rounded-md bg-[var(--surface)] p-0.5">
             {([
@@ -338,7 +381,26 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
         </div>
       </div>
 
+      {coverage ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted)]">
+          <span>记录 {coverage.count} 条</span>
+          <span>{coverage.startDate} 至 {coverage.endDate}</span>
+          {coverage.maxGapDays > 3 ? (
+            <span className="rounded-[var(--radius-sm)] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-2 py-0.5 text-[var(--amber)]">
+              最大断档 {coverage.maxGapDays} 天
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* 图表 */}
+      {data.length < 2 ? (
+        <WorkbenchEmptyState
+          title={snapshots.length < 2 ? "暂无权益曲线" : "当前区间记录不足"}
+          description={snapshots.length < 2 ? "完成首次入金或交易后，这里会显示组合权益路径。" : "这个时间范围内少于 2 条有效权益快照，请切换更长区间或检查定时价格刷新。"}
+          className="border-0 bg-transparent px-0 py-4"
+        />
+      ) : (
       <div className="h-[240px] min-h-[240px] w-full min-w-0">
         <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={240}>
           <LineChart
@@ -406,6 +468,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
           </LineChart>
         </ResponsiveContainer>
       </div>
+      )}
     </div>
   );
 });

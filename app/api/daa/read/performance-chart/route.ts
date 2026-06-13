@@ -1,7 +1,7 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadModelService";
 import { fetchMultiplePriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { getDaaCurrentLedgerMeta, listDaaCashLedgerEntries, listDaaEquitySnapshots } from "@/src/daa/store/daaStorePg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -18,6 +18,17 @@ const BENCHMARK_DEFS: ReadonlyArray<{ symbol: string; key: string; label: string
   { symbol: "SPY", key: "benchmarkSpy", label: "标普500" },
   { symbol: "QQQ", key: "benchmarkQqq", label: "纳斯达克100" },
 ];
+
+function resolveSnapshotLimit(days: number): number {
+  if (days <= 0) return 2000;
+  return Math.min(2000, Math.max(240, days * 3));
+}
+
+function isAfterLedgerStart(ts: string | null | undefined, ledgerStartTs: string | null): boolean {
+  if (!ledgerStartTs) return true;
+  if (!ts) return false;
+  return Date.parse(ts) >= Date.parse(ledgerStartTs);
+}
 
 /**
  * 把基准收盘价序列归一化（起点=100）后就地叠加到 TWR series 上。
@@ -89,9 +100,14 @@ export async function GET(req: Request) {
     const mode = url.searchParams.get("mode") === "twr" ? "twr" : "equity";
     const days = Math.max(0, Number(url.searchParams.get("days")) || 0);
 
-    const readModel = await buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false });
-    const snapshots = readModel.snapshots || [];
-    const cashLedger = readModel.cashLedger || [];
+    const [rawSnapshots, rawCashLedger, ledgerMeta] = await Promise.all([
+      listDaaEquitySnapshots(resolveSnapshotLimit(days)),
+      listDaaCashLedgerEntries(1000),
+      getDaaCurrentLedgerMeta(),
+    ]);
+    const ledgerStartTs = ledgerMeta.ledgerStartTs;
+    const snapshots = rawSnapshots.filter((snapshot) => isAfterLedgerStart(snapshot.ts, ledgerStartTs));
+    const cashLedger = rawCashLedger.filter((entry) => isAfterLedgerStart(entry.ts, ledgerStartTs));
 
     // 过滤现金流事件
     const cashFlowEvents: CashFlowEvent[] = cashLedger
