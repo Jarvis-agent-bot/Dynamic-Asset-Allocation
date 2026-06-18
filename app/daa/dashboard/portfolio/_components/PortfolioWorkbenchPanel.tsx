@@ -35,7 +35,7 @@ export function PortfolioWorkbenchPanel(props: {
   onNavigateTab?: (tab: PortfolioWorkbenchTab) => void;
 }) {
   const { model } = props;
-  const hasTargetWeights = model.tableProps.rows.some((row) => row.watchEnabled && row.targetWeightHint > 0);
+  const hasTargetWeights = model.tableProps.rows.some((row) => row.watchEnabled && row.targetWeightPct > 0);
   const visibleHoldingCount = countVisibleHoldings(model.tableProps.rows);
 
   return (

@@ -167,4 +167,45 @@ describe("useAssetActions", () => {
     );
     expect(r2.current.tableProps.disabled).toBe(true);
   });
+
+  it("tableProps.counts 不把微小残留仓位计入持仓", () => {
+    const { result } = renderHook(() => useAssetActions(makeInput({
+      assetRows: [
+        makeRow({
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          watchEnabled: false,
+          holdingQty: 10,
+          valuationBase: 1000,
+          actualWeightPct: 10,
+          targetWeightHint: 0,
+        }),
+        makeRow({
+          assetKey: "HK::9988.HK",
+          symbol: "9988.HK",
+          watchEnabled: false,
+          holdingQty: 0.00000066,
+          valuationBase: 0.00001,
+          actualWeightPct: 0.0000001,
+          targetWeightHint: 0,
+        }),
+        makeRow({
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          watchEnabled: true,
+          holdingQty: 0,
+          valuationBase: 0,
+          actualWeightPct: 0,
+          targetWeightHint: 0,
+        }),
+      ],
+    })));
+
+    expect(result.current.tableProps.counts).toEqual({
+      all: 2,
+      holdings: 1,
+      watchlist: 1,
+      basket: 0,
+    });
+  });
 });

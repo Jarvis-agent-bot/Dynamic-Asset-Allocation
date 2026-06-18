@@ -4,9 +4,10 @@
  * 由 cron_fundamentals_refresh 负责定期刷新。
  */
 import { withApiHandler } from "@/src/daa/api/routeHelpers";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { buildViewerReadRouteResponse } from "@/src/daa/modules/read/readRouteHelpers";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
-import { listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { YFINANCE_FUNDAMENTALS_CACHE_RESOURCE } from "@/src/market/yfinanceFundamentalsCache";
 
@@ -41,8 +42,8 @@ function readNumber(payload: unknown, key: string): number | null {
 export async function GET(req: Request) {
   return withApiHandler(() => buildViewerReadRouteResponse(req, {
     load: async () => {
-      const universe = await listDaaAssetUniverse();
-      const portfolio = universe.filter((r) => r.holdingQty > 0);
+      const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+      const portfolio = bootstrap.assetUniverse.filter(isVisibleHolding);
       if (portfolio.length === 0) {
         return { items: [] as FundamentalRow[], asOf: null as string | null };
       }

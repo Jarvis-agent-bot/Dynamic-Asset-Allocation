@@ -190,6 +190,13 @@ describe("useAssetWorkbenchModel", () => {
             holdingQty: 2,
             valuationBase: 150,
           },
+          {
+            assetKey: "HK::9988.HK",
+            symbol: "9988.HK",
+            holdingQty: 0.00000066,
+            valuationBase: 0.00001,
+            actualWeightPct: 0.0000001,
+          },
         ],
       },
       cycles: [],

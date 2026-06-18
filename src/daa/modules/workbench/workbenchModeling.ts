@@ -6,6 +6,7 @@ import type {
   DaaMarketContext,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { collectRiskTriggerAssets, resolvePositionDrawdownPct } from "@/src/daa/modules/portfolio-state/positionPnl";
 import {
   getDaaCycleReport,
@@ -784,7 +785,8 @@ function buildCycleDraftFromBootstrap(input: {
     // 跟踪 BUY 提案累计预计占用现金（含滑点/手续费）
     let buyCashReserved = 0;
     for (const row of input.bootstrap.assetUniverse) {
-        if (!(row.watchEnabled || row.holdingQty > 0))
+        const hasVisibleHolding = isVisibleHolding(row);
+        if (!(row.watchEnabled || hasVisibleHolding))
             continue;
         const actualPct = toFinite(row.actualWeightPct, 0) / 100;
         const targetPct = toFinite(row.targetWeightPct, 0) / 100;
@@ -810,7 +812,7 @@ function buildCycleDraftFromBootstrap(input: {
         if (!(suggestedNotional > 0))
             continue;
         const side: "BUY" | "SELL" = driftPct > 0 ? "SELL" : "BUY";
-        const isUnheldTargetEntry = row.holdingQty <= 0 && side === "BUY";
+        const isUnheldTargetEntry = !hasVisibleHolding && side === "BUY";
         if (isUnheldTargetEntry && input.allowUnheldBuyTargets !== true)
             continue;
 
@@ -856,7 +858,7 @@ function buildCycleDraftFromBootstrap(input: {
         if (side === "BUY") {
             buyCashReserved += suggestedNotional * buyCashMultiplier;
         }
-        const targetSource = row.holdingQty > 0
+        const targetSource = hasVisibleHolding
             ? "持仓目标权重回归"
             : "观察列表目标入场";
         proposals.push({
@@ -917,7 +919,7 @@ function buildRiskCycleDraft(input: {
     }).map((hit) => [hit.assetKey, hit]));
     const driftSnapshot: RebalanceCycle["driftSnapshot"] = [];
     for (const row of input.bootstrap.assetUniverse) {
-        if (!(row.watchEnabled || row.holdingQty > 0))
+        if (!(row.watchEnabled || isVisibleHolding(row)))
             continue;
         driftSnapshot.push({
             assetKey: row.assetKey,
@@ -997,7 +999,7 @@ function buildRiskCycleDraft(input: {
 
 function calcPortfolioHhiPct(rows: WorkbenchBootstrap["assetUniverse"]): number {
     const weights = rows
-        .filter((row) => row.holdingQty > 0 && (row.actualWeightPct || 0) > 0)
+        .filter((row) => isVisibleHolding(row) && (row.actualWeightPct || 0) > 0)
         .map((row) => Math.max(0, row.actualWeightPct || 0));
     if (!weights.length)
         return 0;
@@ -1005,17 +1007,21 @@ function calcPortfolioHhiPct(rows: WorkbenchBootstrap["assetUniverse"]): number 
 }
 
 function calcMaxWeightPct(rows: WorkbenchBootstrap["assetUniverse"]): number {
-    return rows.reduce((max, row) => Math.max(max, Math.max(0, toFinite(row.actualWeightPct, 0))), 0);
+    return rows
+        .filter(isVisibleHolding)
+        .reduce((max, row) => Math.max(max, Math.max(0, toFinite(row.actualWeightPct, 0))), 0);
 }
 
 function calcMaxDriftPct(rows: WorkbenchBootstrap["assetUniverse"]): number {
-    return rows.reduce((max, row) => Math.max(max, Math.abs(toFinite(row.gapPct, 0))), 0);
+    return rows
+        .filter((row) => isVisibleHolding(row) || row.watchEnabled || row.targetWeightPct > 0)
+        .reduce((max, row) => Math.max(max, Math.abs(toFinite(row.gapPct, 0))), 0);
 }
 
 function calcMaxDrawdownPct(rows: WorkbenchBootstrap["assetUniverse"]): number {
     let worst = 0;
     for (const row of rows) {
-        if (!(row.holdingQty > 0))
+        if (!isVisibleHolding(row))
             continue;
         worst = Math.max(worst, resolvePositionDrawdownPct(row) ?? 0);
     }
@@ -1024,7 +1030,7 @@ function calcMaxDrawdownPct(rows: WorkbenchBootstrap["assetUniverse"]): number {
 
 function toCycleReportSnapshot(bootstrap: WorkbenchBootstrap) {
     const holdingsValue = bootstrap.assetUniverse
-        .filter((row) => row.holdingQty > 0)
+        .filter(isVisibleHolding)
         .reduce((sum, row) => sum + Math.max(0, toFinite(row.valuationBase, 0)), 0);
     return {
         totalEquity: Math.max(0, toFinite(bootstrap.account.totalEquity, 0)),

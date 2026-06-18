@@ -21,6 +21,7 @@ import { useState } from "react";
 import { SkeletonChart } from "@/app/daa/dashboard/_components/SkeletonPatterns";
 import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DaaSurfaceActionButton, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { PortfolioCashEntryPopover } from "./PortfolioCashEntryPopover";
@@ -191,19 +192,19 @@ export function PortfolioHomeOverview(props: {
 }) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const basketCount = props.rows.filter((row) => row.watchEnabled && row.targetWeightHint > 0).length;
+  const allocationRelevantRows = props.rows.filter((row) => isVisibleHolding(row) || row.targetWeightPct > 0);
+  const basketCount = props.rows.filter((row) => row.targetWeightPct > 0).length;
   const investedRatio = props.totalEquity > 0 ? (props.holdingsValue / props.totalEquity) * 100 : 0;
   const cashRatio = props.totalEquity > 0 ? (props.availableCashValue / props.totalEquity) * 100 : 0;
   const latestCycleStatus = cycleStatusLabel(props.latestCycle);
-  const allocationRows = props.rows
-    .filter((row) => row.holdingQty > 0 || row.actualWeightPct > 0 || row.targetWeightHint > 0)
+  const allocationRows = allocationRelevantRows
     .sort(
       (leftRow, rightRow) =>
         (rightRow.actualWeightPct || rightRow.targetWeightPct) -
         (leftRow.actualWeightPct || leftRow.targetWeightPct),
     );
   const maxAllocationPct = Math.max(1, ...allocationRows.map((row) => row.actualWeightPct || row.targetWeightPct));
-  const maxDriftRow = props.rows
+  const maxDriftRow = allocationRelevantRows
     .filter((row) => row.gapPct != null)
     .sort((leftRow, rightRow) => Math.abs(rightRow.gapPct ?? 0) - Math.abs(leftRow.gapPct ?? 0))[0];
   const maxDriftPct = Math.abs(maxDriftRow?.gapPct ?? 0);

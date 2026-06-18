@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import type { PortfolioWorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchReadModel";
 import type { CalibrationDraft, OrderDraft } from "@/app/daa/dashboard/_hooks/asset-workbench/assetWorkbenchTypes";
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import {
   addWatchlistAsset,
   buildCalibrationDraft,
@@ -264,10 +265,10 @@ export function useAssetActions(input: {
     rows: input.assetRows,
     baseCurrency: input.bootstrap?.baseCurrency ?? "USD",
     counts: {
-      all: input.assetRows.filter((row) => row.watchEnabled || row.holdingQty > 0).length,
-      holdings: input.assetRows.filter((row) => row.holdingQty > 0).length,
+      all: input.assetRows.filter((row) => row.watchEnabled || isVisibleHolding(row)).length,
+      holdings: input.assetRows.filter(isVisibleHolding).length,
       watchlist: input.assetRows.filter((row) => row.watchEnabled).length,
-      basket: input.assetRows.filter((row) => row.watchEnabled && row.targetWeightHint > 0).length,
+      basket: input.assetRows.filter((row) => row.watchEnabled && row.targetWeightPct > 0).length,
     },
     onAddToExecution: handleAddManualOrder,
     onUpdateTargetWeight: handleUpdateTargetWeight,

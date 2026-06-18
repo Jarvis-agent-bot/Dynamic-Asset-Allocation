@@ -1,6 +1,7 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { summarizeProposalExecutionCosts } from "@/src/daa/modules/workbench/executionCost";
@@ -52,8 +53,7 @@ export async function POST(req: Request) {
     );
 
     const baseCurrency = bootstrap.baseCurrency;
-    type AssetRow = { assetKey: string; symbol: string; holdingQty: number; valuationBase: number | null; fxMissing: boolean };
-    const holdings = (bootstrap.assetUniverse as AssetRow[]).filter((h) => h.holdingQty > 0);
+    const holdings = bootstrap.assetUniverse.filter(isVisibleHolding);
     const cash = bootstrap.account.cash;
 
     // 当前配置

@@ -31,6 +31,7 @@ type AssetRow = {
   name?: string | null;
   displayNameZh?: string | null;
   targetWeightHint: number;
+  targetWeightPct: number;
   watchEnabled: boolean;
 };
 
@@ -62,20 +63,19 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
   const [templateOpen, setTemplateOpen] = useState(false);
 
   const basketRows = useMemo(
-    () => props.rows.filter((assetRow) => assetRow.watchEnabled && assetRow.targetWeightHint > 0),
+    () => props.rows.filter((assetRow) => assetRow.watchEnabled && assetRow.targetWeightPct > 0),
     [props.rows],
   );
 
-  // targetWeightHint 是 0~1 小数形式，需要 ×100 转为百分比
   const totalWeight = useMemo(
-    () => basketRows.reduce((sum, assetRow) => sum + assetRow.targetWeightHint * 100, 0),
+    () => basketRows.reduce((sum, assetRow) => sum + assetRow.targetWeightPct, 0),
     [basketRows],
   );
 
   const pieData = useMemo(() => {
     const items = basketRows.map((assetRow) => ({
       name: assetRow.displayNameZh || assetRow.name || assetRow.symbol,
-      value: assetRow.targetWeightHint * 100,
+      value: assetRow.targetWeightPct,
     }));
     const remaining = 100 - totalWeight;
     if (remaining > 0.5) {
@@ -86,7 +86,7 @@ export function TargetWeightSummary(props: TargetWeightSummaryProps) {
 
   if (basketRows.length === 0) return null;
 
-  // targetWeightHint 汇总后用颜色提示配置完整度与越界风险。
+  // 有效目标权重汇总后用颜色提示配置完整度与越界风险。
   const progressTone =
     totalWeight > 100.5
       ? "danger"

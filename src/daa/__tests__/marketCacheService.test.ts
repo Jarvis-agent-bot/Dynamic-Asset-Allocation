@@ -54,6 +54,8 @@ import {
   refreshMarketPrices,
 } from "@/src/daa/modules/marketCache/marketCacheService";
 
+const TEST_NOW = new Date("2026-06-08T12:00:00.000Z");
+
 function buildSnapshotFixture(
   overrides?: Partial<DaaStoreMarketPriceSnapshot>,
 ): DaaStoreMarketPriceSnapshot {
@@ -111,6 +113,8 @@ function buildChartPayload(price: number, ts = "2026-03-06T00:00:00.000Z"): stri
 
 describe("market-cache-service-v1", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(TEST_NOW);
     vi.clearAllMocks();
     vi.mocked(listDaaMarketPriceSnapshots).mockResolvedValue([]);
     vi.mocked(listLatestDaaMarketPriceHistoryRows).mockResolvedValue([]);
@@ -118,6 +122,7 @@ describe("market-cache-service-v1", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("快照状态为 stale 时即使较新也返回 stale", async () => {

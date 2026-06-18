@@ -1,4 +1,5 @@
 import type { DaaPolicyConfig } from "@/src/daa/modules/policy-engine/policyTypes";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import type { PortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateTypes";
 
 import type { DriftSignal } from "./signalTypes";
@@ -11,7 +12,7 @@ export function collectDriftSignals(input: {
   const innerPct = Math.max(0, input.policy.drift.innerBandPct * 100);
 
   return input.portfolioState.positions
-    .filter((row) => row.holdingQty > 0 && row.driftPct != null)
+    .filter((row) => isVisibleHolding(row) && row.driftPct != null)
     .map((row) => {
       const absDriftPct = Math.abs(row.driftPct || 0);
       const actualWeightPct = Number.isFinite(row.actualWeightPct) ? row.actualWeightPct : 0;

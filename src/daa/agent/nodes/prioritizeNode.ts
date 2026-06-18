@@ -115,25 +115,25 @@ function buildRotationTargets(state: CognitiveState, stalenessDays: number, focu
       let reason = "";
       if (humanRequestedInvestigation) {
         priority = 1250 + maxHoldingWeight * 100 + days;
-        reason = `人手动要求投资助理复核：该投资判断已被放入优先队列，距离上次有效复核 ${days} 天`;
+        reason = `人手动要求投资助理复核：该投资判断已被放入优先队列，相关判断上次复核 ${days} 天前`;
       } else if (focusEvent) {
         priority = 1100 + days;
-        reason = `事件触发复核：相关资产出现在本轮新闻/外部事件中，距离上次有效复核 ${days} 天`;
+        reason = `事件触发复核：相关资产出现在本轮新闻/外部事件中，相关判断上次复核 ${days} 天前`;
       } else if (uncertainHolding) {
         priority = 1000 + days;
-        reason = `轮询复核：持仓判断仍为观察态，权重 ${(maxHoldingWeight * 100).toFixed(1)}%，已 ${days} 天未有效复核`;
+        reason = `轮询复核：持仓相关判断仍为观察态，权重 ${(maxHoldingWeight * 100).toFixed(1)}%，已 ${days} 天未复核`;
       } else if (staleHighWeightHolding) {
         priority = 950 + days;
-        reason = `轮询复核：高权重持仓判断已 ${days} 天未有效复核，权重 ${(maxHoldingWeight * 100).toFixed(1)}%`;
+        reason = `轮询复核：高权重持仓相关判断已 ${days} 天未复核，权重 ${(maxHoldingWeight * 100).toFixed(1)}%`;
       } else if (reviewDue) {
         priority = 900 + days;
-        reason = `轮询复核：投资判断已到 reviewAt，距离上次有效复核 ${days} 天`;
+        reason = `轮询复核：投资判断已到 reviewAt，相关判断上次复核 ${days} 天前`;
       } else if (staleDirectional) {
         priority = 850 + days;
-        reason = `轮询复核：${t.conviction} conviction 判断已 ${days} 天未有效复核`;
+        reason = `轮询复核：${t.conviction} conviction 相关判断已 ${days} 天未复核`;
       } else if (watchlistNeedsReview) {
         priority = 800 + days;
-        reason = `轮询复核：观察列表相关判断需要刷新，距离上次有效复核 ${days} 天`;
+        reason = `轮询复核：观察列表相关判断需要刷新，相关判断上次复核 ${days} 天前`;
       }
 
       if (priority <= 0) return null;

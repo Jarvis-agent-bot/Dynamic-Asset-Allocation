@@ -49,6 +49,8 @@ describe("simulate_rebalance tool", () => {
           holdingQty: 2,
           lastPrice: 110,
           holdingPrice: 100,
+          valuationBase: 220,
+          actualWeightPct: 22,
           targetWeightHint: 0.6,
           targetWeightPct: 25,
         }),

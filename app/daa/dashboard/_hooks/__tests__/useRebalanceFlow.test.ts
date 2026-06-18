@@ -37,6 +37,7 @@ function makeAssetRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView
     watchEnabled: true,
     holdingQty: 100,
     targetWeightHint: 0.05,
+    targetWeightPct: 5,
     ...overrides,
   } as AssetUniverseView;
 }
@@ -163,7 +164,7 @@ describe("useRebalanceFlow", () => {
   it("rebalanceChecklist reports unmet conditions", () => {
     const { result } = renderHook(() =>
       useRebalanceFlow(makeInput({
-        assetRows: [makeAssetRow({ watchEnabled: false, holdingQty: 0, targetWeightHint: 0 })],
+        assetRows: [makeAssetRow({ watchEnabled: false, holdingQty: 0, targetWeightHint: 0, targetWeightPct: 0 })],
         currentCycle: null,
         riskCheck: null,
       })),
@@ -179,7 +180,7 @@ describe("useRebalanceFlow", () => {
     });
     const { result } = renderHook(() =>
       useRebalanceFlow(makeInput({
-        assetRows: [makeAssetRow({ watchEnabled: true, holdingQty: 100, targetWeightHint: 0.1 })],
+        assetRows: [makeAssetRow({ watchEnabled: true, holdingQty: 100, targetWeightHint: 0.1, targetWeightPct: 10 })],
         currentCycle: cycle,
         riskCheck: makeRiskCheck({ overallStatus: "pass" }),
       })),

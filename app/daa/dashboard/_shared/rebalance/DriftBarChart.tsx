@@ -8,6 +8,7 @@ type DriftRow = {
   symbol: string;
   gapPct: number | null;
   targetWeightHint: number;
+  targetWeightPct: number;
   watchEnabled: boolean;
 };
 
@@ -32,7 +33,7 @@ export function DriftBarChart(props: DriftBarChartProps) {
 
   const chartData = useMemo(() => {
     return props.rows
-      .filter((row) => row.watchEnabled && row.targetWeightHint > 0 && row.gapPct != null)
+      .filter((row) => row.watchEnabled && row.targetWeightPct > 0 && row.gapPct != null)
       .map((row) => ({
         symbol: row.symbol,
         drift: Number((row.gapPct ?? 0).toFixed(2)),

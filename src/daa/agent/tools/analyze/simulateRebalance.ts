@@ -29,10 +29,11 @@ registerTool(
 
     try {
       const { rebalanceCore } = await import("@/src/core/rebalanceCore");
+      const { isVisibleHolding } = await import("@/src/daa/modules/portfolio/holdingVisibility");
       const { buildWorkbenchBootstrap } = await import("@/src/daa/modules/workbench/workbenchReadService");
 
       const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
-      const assetRows = bootstrap.assetUniverse.filter((row) => row.holdingQty > 0 || row.targetWeightPct > 0);
+      const assetRows = bootstrap.assetUniverse.filter((row) => isVisibleHolding(row) || row.targetWeightPct > 0);
       const assetsWithTarget = assetRows.filter((row) => row.targetWeightPct > 0);
       if (!assetRows.length) {
         return { toolName: "simulate_rebalance", category: "analyze", success: false, data: null, outputFields: {}, error: "无可模拟的持仓或目标配置", latencyMs: Date.now() - t0 };
@@ -44,7 +45,7 @@ registerTool(
       // 构建 rebalanceCore 请求
       const holdings = Object.fromEntries(
         assetRows
-          .filter((row) => row.holdingQty > 0)
+          .filter(isVisibleHolding)
           .map((row) => [row.symbol, row.holdingQty]),
       );
       const prices = Object.fromEntries(

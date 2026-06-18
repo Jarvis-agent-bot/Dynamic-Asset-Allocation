@@ -230,7 +230,7 @@ function formatThreadAge(thread: ResearchThread): string {
   const time = Date.parse(thread.lastInvestigatedAt || thread.updatedAt);
   if (!Number.isFinite(time)) return "时间未知";
   const days = Math.max(0, Math.floor((Date.now() - time) / 86400000));
-  return `上次有效复核 ${days} 天前`;
+  return `相关判断上次复核 ${days} 天前`;
 }
 
 export function buildAssistantBrainContextDigest(input: {

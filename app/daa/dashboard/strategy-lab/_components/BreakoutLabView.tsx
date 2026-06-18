@@ -9,6 +9,7 @@ import {
   DaaSurfaceEmptyState,
   daaSurfaceFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import { WorkbenchErrorNotice } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import { useBreakoutLab, type BreakoutConfigState } from "./useBreakoutLab";
 import type { StrategyLabDateDefaults } from "./strategyLabDateDefaults";
@@ -205,7 +206,7 @@ export function BreakoutLabView({
                       />
                       <span className="font-[var(--font-mono)] text-xs text-[var(--text)]">{asset.symbol}</span>
                       <span className="text-[11px] text-[var(--faint)]">{asset.assetClass}</span>
-                      {asset.holdingQty > 0 ? (
+                      {isVisibleHolding(asset) ? (
                         <span className="ml-auto rounded-[var(--radius-sm)] border border-[var(--success-border)] bg-[var(--success-bg)] px-2 py-0.5 text-[9px] font-semibold text-[var(--success)]">持仓</span>
                       ) : null}
                     </label>

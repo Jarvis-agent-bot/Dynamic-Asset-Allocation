@@ -14,6 +14,7 @@ import {
   buildFxLookupToBase,
   summarizeMarkToMarketPortfolio,
 } from "@/src/daa/modules/portfolio/portfolioValuation";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { ensureAssetThesisCoverage, type BootstrapAsset } from "@/src/daa/agent/bootstrap";
 import {
   listDaaDiscoveryCandidates,
@@ -97,7 +98,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
         accountTotalEquity: accountState.totalEquity,
       });
       const valuationByAssetKey = new Map(valuation.rows.map((row) => [row.assetKey, row]));
-      const holdingRows = viewRows.filter(r => r.holdingQty > 0);
+      const holdingRows = viewRows.filter(isVisibleHolding);
       const totalEquity = valuation.totalEquity;
       portfolio.holdings = holdingRows.map(r => ({
         assetKey: r.assetKey,
@@ -113,7 +114,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       portfolio.totalEquity = totalEquity;
       portfolio.cashPct = totalEquity > 0 ? valuation.cash / totalEquity : 0;
       watchlist.candidates = viewRows
-        .filter(r => r.watchEnabled && r.holdingQty <= 0)
+        .filter(r => r.watchEnabled && !isVisibleHolding(r))
         .map(r => ({
           assetKey: r.assetKey,
           symbol: r.symbol,

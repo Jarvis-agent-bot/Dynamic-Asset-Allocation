@@ -8,6 +8,7 @@ import {
 } from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
@@ -133,7 +134,7 @@ async function runMonthlyReportJob(req: Request, idempotencyKey: string | null):
           return ts >= lastMonthStart && ts < currentMonthStart;
         });
 
-        const holdings = bootstrap.assetUniverse.filter((a) => a.holdingQty > 0);
+        const holdings = bootstrap.assetUniverse.filter(isVisibleHolding);
         const topHoldings = [...holdings]
           .sort((a, b) => b.actualWeightPct - a.actualWeightPct)
           .slice(0, 5)

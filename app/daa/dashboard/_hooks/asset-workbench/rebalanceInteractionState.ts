@@ -74,7 +74,7 @@ export function deriveRebalanceInteractionState(input: {
     .reduce((sum, row) => sum + row.suggestedNotional, 0) ?? 0;
   const buyProposalCount = currentCycle?.proposals.filter((row) => row.side === "BUY").length ?? 0;
   const sellProposalCount = currentCycle?.proposals.filter((row) => row.side === "SELL").length ?? 0;
-  const basketAssetCount = input.assetRows.filter((row) => row.watchEnabled && row.targetWeightHint > 0).length;
+  const basketAssetCount = input.assetRows.filter((row) => row.watchEnabled && row.targetWeightPct > 0).length;
   const hasCycleProposal = Boolean(currentCycle && currentCycle.proposals.length > 0);
   const riskReadyForExecution = Boolean(currentRiskCheck && currentRiskCheck.overallStatus !== "block");
   const isCurrentCycleTerminal = Boolean(currentCycle && isTerminalCycleStatus(currentCycle.status));

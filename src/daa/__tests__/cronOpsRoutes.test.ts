@@ -421,11 +421,14 @@ describe("cron-ops-routes-v1", () => {
         query: "tsla, msft, TSLA",
       },
     }));
-    vi.mocked(listDaaAssetUniverse).mockResolvedValue([
-      buildAssetUniverseRow({ assetKey: "US::MSFT", symbol: "MSFT", holdingQty: 0, watchEnabled: true }),
-      buildAssetUniverseRow({ assetKey: "US::BABA", symbol: "BABA", holdingQty: 16, watchEnabled: false }),
-      buildAssetUniverseRow({ assetKey: "HK::0700.HK", symbol: "0700.HK", market: "HK", holdingQty: 0, watchEnabled: false }),
-    ]);
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce(buildWorkbenchBootstrapFixture({
+      assetUniverse: [
+        buildAssetUniverseView({ assetKey: "US::MSFT", symbol: "MSFT", holdingQty: 0, watchEnabled: true }),
+        buildAssetUniverseView({ assetKey: "US::BABA", symbol: "BABA", holdingQty: 16, valuationBase: 1600, actualWeightPct: 4, watchEnabled: false }),
+        buildAssetUniverseView({ assetKey: "US::DUST", symbol: "DUST", holdingQty: 0.00000066, valuationBase: 0.00001, actualWeightPct: 0.0000001, watchEnabled: false }),
+        buildAssetUniverseView({ assetKey: "HK::0700.HK", symbol: "0700.HK", market: "HK", holdingQty: 0, watchEnabled: false }),
+      ],
+    }));
     vi.mocked(parseSymbolsFromNewsQuery).mockReturnValue(["tsla", "MSFT", ""]);
     vi.mocked(buildNewsSignals).mockResolvedValue([
       buildNewsSignalFixture({ symbol: "TSLA", itemIds: ["n1", "n2"] }),

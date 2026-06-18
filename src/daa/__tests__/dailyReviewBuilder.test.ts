@@ -122,4 +122,34 @@ describe("buildDailyReviewText", () => {
     expect(text).toContain("N/A");
     expect(text).not.toContain("+0.0%");
   });
+
+  it("不把低于最小市值的残留仓位写入每日复核", async () => {
+    const [aapl] = makeBootstrap().assetUniverse;
+    const text = await buildDailyReviewText(makeBootstrap({
+      assetUniverse: [
+        aapl,
+        {
+          ...aapl,
+          assetKey: "HK::9988.HK",
+          symbol: "9988.HK",
+          market: "HK",
+          currency: "HKD",
+          holdingQty: 0.0000006619760029025201,
+          holdingPrice: 127.6,
+          lastPrice: 104.9,
+          valuationBase: 0.00001,
+          fxRateToBase: 0.128,
+          actualWeightPct: 0.0000001,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: null,
+          watchEnabled: false,
+        },
+      ],
+    }));
+
+    expect(text).toContain("1个标的");
+    expect(text).toContain("AAPL");
+    expect(text).not.toContain("9988.HK");
+  });
 });

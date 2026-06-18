@@ -10,7 +10,9 @@ import {
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSignal";
 import { majorEventTypeLabelZh } from "@/src/daa/signals/newsLlmAnalyzer";
-import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -44,9 +46,9 @@ function guessMarketFromSymbol(symbol: string): string {
 }
 
 async function resolveSymbolsWithMarket(): Promise<SymbolWithMarket[]> {
-  const [system, assets] = await Promise.all([
+  const [system, bootstrap] = await Promise.all([
     getDaaSystemConfig(),
-    listDaaAssetUniverse(),
+    buildWorkbenchBootstrap({ syncPrices: false }),
   ]);
 
   const seen = new Map<string, SymbolWithMarket>();
@@ -61,8 +63,8 @@ async function resolveSymbolsWithMarket(): Promise<SymbolWithMarket[]> {
     const key = normalizeUpper(symbol);
     if (key && !seen.has(key)) seen.set(key, { symbol: key, market: guessMarketFromSymbol(key) });
   }
-  for (const row of assets) {
-    if (!(row.holdingQty > 0) && row.watchEnabled === false) continue;
+  for (const row of bootstrap.assetUniverse) {
+    if (!isVisibleHolding(row) && row.watchEnabled === false) continue;
     const key = normalizeUpper(row.symbol);
     const market = normalizeUpper(row.market) || regionToMarket(row.region || "US");
     if (key && !seen.has(key)) seen.set(key, { symbol: key, market });

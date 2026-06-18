@@ -9,7 +9,9 @@
 
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 
 export const runtime = "nodejs";
@@ -35,9 +37,9 @@ export async function GET(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const [system, assets] = await Promise.all([
+    const [system, bootstrap] = await Promise.all([
       getDaaSystemConfig(),
-      listDaaAssetUniverse(),
+      buildWorkbenchBootstrap({ syncPrices: false }),
     ]);
 
     const seen = new Set<string>();
@@ -56,10 +58,10 @@ export async function GET(req: Request) {
     }
 
     // 持仓 + watchlist（以交易 market 为准；region 只是资产暴露地区，不能决定 Alpaca 订阅）
-    for (const row of assets) {
+    for (const row of bootstrap.assetUniverse) {
       const market = String(row.market || "US").toUpperCase();
       if (market !== "US") continue;
-      const held = row.holdingQty > 0;
+      const held = isVisibleHolding(row);
       const watched = row.watchEnabled !== false;
       if (!held && !watched) continue;
       const key = normalizeUpper(row.symbol);

@@ -4,6 +4,7 @@ import {
   resolveFxRateToBase,
   summarizeMarkToMarketPortfolio,
 } from "@/src/daa/modules/portfolio/portfolioValuation";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { resolvePositionPnlPct } from "@/src/daa/modules/portfolio-state/positionPnl";
 import type { DaaStoreAssetUniverseRow, DaaStoreFxRate } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
@@ -130,8 +131,8 @@ export function buildAssetUniverseViewRows(input: {
       hfSignal: null,
     } satisfies AssetUniverseView;
   }).sort((a, b) => {
-    const aHas = a.holdingQty > 0 ? 1 : 0;
-    const bHas = b.holdingQty > 0 ? 1 : 0;
+    const aHas = isVisibleHolding(a) ? 1 : 0;
+    const bHas = isVisibleHolding(b) ? 1 : 0;
     if (aHas !== bHas) return bHas - aHas;
     return a.symbol.localeCompare(b.symbol) || a.market.localeCompare(b.market);
   });

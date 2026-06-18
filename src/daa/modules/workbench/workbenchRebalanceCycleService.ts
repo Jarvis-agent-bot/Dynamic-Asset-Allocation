@@ -22,6 +22,7 @@ import {
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { resolveMarketExecutionGuard } from "@/src/daa/marketSession/marketSessionExecutionGuard";
 import { buildInvestmentIntents } from "@/src/daa/modules/intents/intentBuilder";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { buildPortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateService";
 import { buildProposalPlan } from "@/src/daa/modules/proposal-planner/proposalPlanner";
 import { evaluatePortfolioPolicy } from "@/src/daa/modules/policy-engine/policyEngine";
@@ -106,7 +107,7 @@ function relabelTargetSuggestionEntryProposals(input: {
 }): RebalanceProposal[] {
   const holdingKeys = new Set(
     input.bootstrap.assetUniverse
-      .filter((row) => row.holdingQty > 0)
+      .filter(isVisibleHolding)
       .map((row) => row.assetKey.toUpperCase()),
   );
   return input.proposals.map((proposal) => {

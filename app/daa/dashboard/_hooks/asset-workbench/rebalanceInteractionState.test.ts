@@ -16,6 +16,7 @@ function makeAssetRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView
     watchEnabled: true,
     holdingQty: 10,
     targetWeightHint: 0.1,
+    targetWeightPct: 10,
     ...overrides,
   } as AssetUniverseView;
 }
@@ -90,8 +91,8 @@ describe("deriveRebalanceInteractionState", () => {
   it("keeps proposal selection and checklist derivations in the same state object", () => {
     const state = deriveRebalanceInteractionState({
       assetRows: [
-        makeAssetRow({ assetKey: "US::AAPL", watchEnabled: true, holdingQty: 10, targetWeightHint: 0.1 }),
-        makeAssetRow({ assetKey: "US::MSFT", watchEnabled: true, holdingQty: 0, targetWeightHint: 0 }),
+        makeAssetRow({ assetKey: "US::AAPL", watchEnabled: true, holdingQty: 10, targetWeightHint: 0.1, targetWeightPct: 10 }),
+        makeAssetRow({ assetKey: "US::MSFT", watchEnabled: true, holdingQty: 0, targetWeightHint: 0, targetWeightPct: 0 }),
       ],
       currentCycle: makeCycle({
         proposals: [

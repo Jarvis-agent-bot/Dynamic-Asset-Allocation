@@ -8,6 +8,7 @@ import {
   type DaaSurfaceTone,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import { cn } from "@/lib/utils";
 import type { DaaStoreEquitySnapshot } from "@/src/daa/store/storeTypes";
 import type {
@@ -248,9 +249,10 @@ export function PortfolioRiskPanel({
   latestCycle: RebalanceCycle | null;
 }) {
   const holdings = bootstrap.assetUniverse;
+  const visibleHoldings = useMemo(() => holdings.filter(isVisibleHolding), [holdings]);
 
-  const hhi = useMemo(() => computeHHI(holdings), [holdings]);
-  const maxPos = useMemo(() => maxSinglePosition(holdings), [holdings]);
+  const hhi = useMemo(() => computeHHI(visibleHoldings), [visibleHoldings]);
+  const maxPos = useMemo(() => maxSinglePosition(visibleHoldings), [visibleHoldings]);
   const drawdown = useMemo(() => computeMaxDrawdown(snapshots), [snapshots]);
   const driftThresholdPctPoints = (bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100;
   const drift = useMemo(() => driftViolations(latestCycle, holdings, driftThresholdPctPoints), [latestCycle, holdings, driftThresholdPctPoints]);
@@ -262,7 +264,7 @@ export function PortfolioRiskPanel({
   const holdingsWithTarget = useMemo(
     () =>
       holdings
-        .filter((holding) => holding.holdingQty > 0 || holding.targetWeightPct > 0)
+        .filter((holding) => isVisibleHolding(holding) || holding.targetWeightPct > 0)
         .sort((leftHolding, rightHolding) => rightHolding.targetWeightPct - leftHolding.targetWeightPct),
     [holdings],
   );

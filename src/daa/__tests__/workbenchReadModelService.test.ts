@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture } from "@/src/daa/__tests__/testDataFactories";
+import {
+  buildAssetUniverseView,
+  buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture,
+} from "@/src/daa/__tests__/testDataFactories";
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   getDaaCurrentLedgerMeta: vi.fn(),
   listDaaCashLedgerEntries: vi.fn(),
@@ -266,5 +269,63 @@ describe("workbench-read-model-service-v1", () => {
     await buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false });
 
     expect(vi.mocked(buildWorkbenchBootstrapBundle)).toHaveBeenCalledTimes(1);
+  });
+
+  it("allocation summary 不把微小残留仓位计入可见持仓数", async () => {
+    vi.mocked(buildWorkbenchBootstrapBundle).mockResolvedValue({
+      bootstrap: buildWorkbenchBootstrapFixture({
+        account: {
+          cash: 1000,
+          investableCash: 900,
+          frozenCash: 100,
+          totalEquity: 3000,
+          valuation: {
+            holdingsValue: 1000,
+            derivedTotalEquity: 2000,
+            totalEquity: 3000,
+            equitySource: "account_state_override",
+            fxMissingAssetKeys: ["HK::0700.HK"],
+          },
+        },
+        assetUniverse: [
+          buildAssetUniverseView({
+            assetKey: "US::AAPL",
+            symbol: "AAPL",
+            holdingQty: 10,
+            valuationBase: 1000,
+            actualWeightPct: 50,
+            watchEnabled: false,
+          }),
+          buildAssetUniverseView({
+            assetKey: "HK::9988.HK",
+            symbol: "9988.HK",
+            holdingQty: 0.00000066,
+            valuationBase: 0.00001,
+            actualWeightPct: 0.0000001,
+            watchEnabled: false,
+          }),
+          buildAssetUniverseView({
+            assetKey: "HK::0700.HK",
+            symbol: "0700.HK",
+            holdingQty: 100,
+            valuationBase: null,
+            fxRateToBase: null,
+            actualWeightPct: 0,
+            watchEnabled: false,
+          }),
+        ],
+      }),
+      cycles: [],
+    });
+    vi.mocked(listDaaEquitySnapshots).mockResolvedValue([]);
+    vi.mocked(listDaaCashLedgerEntries).mockResolvedValue([]);
+    vi.mocked(getDaaCurrentLedgerMeta).mockResolvedValue(buildLedgerMetaFixture());
+    vi.mocked(buildNotificationStatusSummary).mockResolvedValue(buildNotificationSummaryFixture());
+
+    const result = await buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false });
+
+    expect(result.allocationSummary.holdingCount).toBe(2);
+    expect(result.allocationSummary.topHoldings.map((row) => row.assetKey)).toEqual(["US::AAPL"]);
+    expect(result.allocationSummary.fxMissingAssetKeys).toEqual(["HK::0700.HK"]);
   });
 });

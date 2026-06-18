@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
 
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import { getSystemConfig } from "@/src/daa/modules/store/workbenchStoreApiClient";
 import { applyWorkbenchTargetWeights } from "@/src/daa/modules/workbench/targetAllocationApply";
@@ -136,7 +137,7 @@ export function useStrategyLab(
         if (!cancelled) {
           setAssets(model.bootstrap.assetUniverse);
           const defaultSelection = model.bootstrap.assetUniverse
-            .filter((a) => a.holdingQty > 0 || a.watchEnabled)
+            .filter((a) => isVisibleHolding(a) || a.watchEnabled)
             .map((a) => a.assetKey);
           setConfig((prev) => ({
             ...prev,

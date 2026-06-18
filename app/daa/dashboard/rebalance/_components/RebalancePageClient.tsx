@@ -237,7 +237,7 @@ export default function RebalancePageClient() {
   const driftCount = useMemo(() => {
     const driftThresholdPct = (assetWorkbenchModel.bootstrap?.policy?.drift?.outerBandPct ?? 0.05) * 100;
     return assetWorkbenchModel.tableProps.rows.filter(
-      (assetRow) => assetRow.watchEnabled && assetRow.targetWeightHint > 0 && assetRow.gapPct != null && Math.abs(assetRow.gapPct) > driftThresholdPct,
+      (assetRow) => assetRow.watchEnabled && assetRow.targetWeightPct > 0 && assetRow.gapPct != null && Math.abs(assetRow.gapPct) > driftThresholdPct,
     ).length;
   }, [assetWorkbenchModel.tableProps.rows, assetWorkbenchModel.bootstrap?.policy?.drift?.outerBandPct]);
 

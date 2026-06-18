@@ -18,7 +18,9 @@ import { analyzeNewsWithLlm, majorEventTypeLabelZh, type LlmNewsAnalysis } from 
 import { sourceCredibility } from "@/src/daa/signals/newsProviders";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
-import { listDaaAssetUniverse, upsertDaaNewsEventSnapshots, upsertDaaNewsItemSnapshots } from "@/src/daa/store/daaStorePg";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { upsertDaaNewsEventSnapshots, upsertDaaNewsItemSnapshots } from "@/src/daa/store/daaStorePg";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -268,10 +270,10 @@ export async function POST(req: Request) {
     // 判断是否命中持仓/watchlist
     let held: Set<string>;
     try {
-      const assets = await listDaaAssetUniverse();
+      const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
       held = new Set(
-        assets
-          .filter((row) => row.holdingQty > 0 || row.watchEnabled !== false)
+        bootstrap.assetUniverse
+          .filter((row) => isVisibleHolding(row) || row.watchEnabled !== false)
           .map((row) => row.symbol.toUpperCase()),
       );
     } catch (e) {

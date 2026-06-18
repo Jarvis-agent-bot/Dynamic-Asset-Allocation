@@ -8,9 +8,10 @@ import { resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
 import { evaluateBrainActionAuthority, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
-import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildTargetWeightSuggestionPlan } from "@/src/daa/automation/automationGuards";
 import {
@@ -20,7 +21,6 @@ import {
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
 import {
   getDaaSystemConfig,
-  listDaaAssetUniverse,
 } from "@/src/daa/store/daaStorePg";
 import type { DaaStoreSystemConfigRow } from "@/src/daa/store/storeTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -192,24 +192,25 @@ export function validateAutopilotPrerequisites(config: DaaSystemConfig): {
   };
 }
 
-function buildFocusAssets(rows: Awaited<ReturnType<typeof listDaaAssetUniverse>>): BootstrapAsset[] {
+function buildFocusAssets(rows: AssetUniverseView[]): BootstrapAsset[] {
   return rows
-    .filter((row) => row.holdingQty > 0 || row.watchEnabled)
-    .map((row) => ({
+    .map((row) => ({ row, isHeld: isVisibleHolding(row) }))
+    .filter(({ row, isHeld }) => isHeld || row.watchEnabled)
+    .map(({ row, isHeld }) => ({
       assetKey: row.assetKey,
       symbol: row.symbol,
-      holdingQty: row.holdingQty,
+      holdingQty: isHeld ? row.holdingQty : 0,
       lastPrice: row.lastPrice > 0 ? row.lastPrice : row.holdingPrice,
-      role: row.holdingQty > 0 ? "holding" : "watchlist",
+      role: isHeld ? "holding" : "watchlist",
       notes: row.notes,
-      tags: row.holdingQty > 0 ? row.holdingTags : row.watchTags,
+      tags: isHeld ? row.holdingTags : row.watchTags,
     }));
 }
 
 async function ensureThesisCoverage(): Promise<AutopilotLoopResult["bootstrapped"]> {
   const count = await thesisStore.countThreads().catch(() => 0);
-  const rows = await listDaaAssetUniverse().catch(() => []);
-  const focusAssets = buildFocusAssets(rows);
+  const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false }).catch(() => null);
+  const focusAssets = bootstrap ? buildFocusAssets(bootstrap.assetUniverse) : [];
   if (focusAssets.length === 0) return { attempted: false, created: 0, errors: ["当前没有持仓或观察列表，跳过自动建立初始投资判断。"] };
 
   const result = count === 0

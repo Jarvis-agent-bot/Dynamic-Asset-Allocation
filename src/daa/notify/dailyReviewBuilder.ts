@@ -1,6 +1,7 @@
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { resolvePositionPnlPct } from "@/src/daa/modules/portfolio-state/positionPnl";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -21,7 +22,7 @@ export async function buildDailyReviewText(bootstrap: WorkbenchBootstrap): Promi
   // ─── Portfolio overview ───
   const equity = bootstrap.account.totalEquity;
   const cash = bootstrap.account.cash;
-  const holdings = bootstrap.assetUniverse.filter((a) => a.holdingQty > 0);
+  const holdings = bootstrap.assetUniverse.filter(isVisibleHolding);
   const holdingsValue = holdings.reduce((s, a) => s + (a.valuationBase ?? 0), 0);
 
   lines.push("💰 <b>组合概览</b>");
@@ -109,7 +110,7 @@ export async function buildDailyReviewText(bootstrap: WorkbenchBootstrap): Promi
 
   // ─── Drift monitor ───
   const withGap = bootstrap.assetUniverse
-    .filter((a) => a.gapPct != null && a.holdingQty > 0)
+    .filter((a) => a.gapPct != null && isVisibleHolding(a))
     .sort((a, b) => Math.abs(b.gapPct!) - Math.abs(a.gapPct!));
 
   if (withGap.length > 0) {
@@ -141,7 +142,7 @@ export async function buildDailyReviewText(bootstrap: WorkbenchBootstrap): Promi
 
   // ─── Top movers ───
   const priced = bootstrap.assetUniverse.filter(
-    (a) => a.holdingQty > 0 && a.lastPrice > 0 && a.holdingPrice > 0,
+    (a) => isVisibleHolding(a) && a.lastPrice > 0 && a.holdingPrice > 0,
   );
   if (priced.length > 0) {
     const withChange = priced.map((a) => ({

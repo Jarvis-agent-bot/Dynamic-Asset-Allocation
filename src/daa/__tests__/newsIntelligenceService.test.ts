@@ -4,7 +4,7 @@ import {
   buildNewsIntelligenceArtifacts,
   type NewsIntelligenceEventInput,
 } from "@/src/daa/modules/news-intelligence/newsIntelligenceService";
-import { buildAssetUniverseRow } from "@/src/daa/__tests__/testDataFactories";
+import { buildAssetUniverseView } from "@/src/daa/__tests__/testDataFactories";
 
 function makeEvent(overrides: Partial<NewsIntelligenceEventInput> = {}): NewsIntelligenceEventInput {
   return {
@@ -38,11 +38,13 @@ describe("newsIntelligenceService", () => {
     const artifacts = buildNewsIntelligenceArtifacts({
       events: [makeEvent()],
       assetUniverse: [
-        buildAssetUniverseRow({
+        buildAssetUniverseView({
           assetKey: "US::NVDA",
           symbol: "NVDA",
           displayNameZh: "英伟达",
           holdingQty: 2,
+          valuationBase: 200,
+          actualWeightPct: 20,
           watchEnabled: true,
         }),
       ],
@@ -68,14 +70,16 @@ describe("newsIntelligenceService", () => {
     const artifacts = buildNewsIntelligenceArtifacts({
       events: [makeEvent()],
       assetUniverse: [
-        buildAssetUniverseRow({
+        buildAssetUniverseView({
           assetKey: "US::NVDA",
           symbol: "NVDA",
           displayNameZh: "英伟达",
           holdingQty: 1,
+          valuationBase: 100,
+          actualWeightPct: 10,
           watchEnabled: true,
         }),
-        buildAssetUniverseRow({
+        buildAssetUniverseView({
           assetKey: "US::MU",
           symbol: "MU",
           displayNameZh: "美光科技",
@@ -107,5 +111,54 @@ describe("newsIntelligenceService", () => {
     expect(artifacts.discoveryCandidates.length).toBeGreaterThan(0);
     expect(artifacts.discoveryCandidates.every((candidate) => candidate.reasonZh.includes("不会自动加入观察列表或交易"))).toBe(true);
     expect(artifacts.portfolioImpacts.every((impact) => impact.recommendedAction !== "record")).toBe(true);
+  });
+
+  it("低于最小市值的残留仓位不被新闻智能层标成 holding", () => {
+    const artifacts = buildNewsIntelligenceArtifacts({
+      events: [makeEvent()],
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: "US::NVDA",
+          symbol: "NVDA",
+          displayNameZh: "英伟达",
+          holdingQty: 0.00000066,
+          valuationBase: 0.00001,
+          actualWeightPct: 0.0000001,
+          watchEnabled: false,
+          targetWeightHint: 0,
+        }),
+      ],
+    });
+
+    const nvdaImpact = artifacts.portfolioImpacts.find((impact) => impact.assetKey === "US::NVDA");
+    expect(nvdaImpact).toMatchObject({
+      impactScope: "related_candidate",
+      impactLevel: "review",
+    });
+  });
+
+  it("旧 targetWeightHint 残留但有效目标为 0 时不标成 target", () => {
+    const artifacts = buildNewsIntelligenceArtifacts({
+      events: [makeEvent()],
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: "US::NVDA",
+          symbol: "NVDA",
+          displayNameZh: "英伟达",
+          holdingQty: 0,
+          valuationBase: 0,
+          actualWeightPct: 0,
+          watchEnabled: false,
+          targetWeightHint: 0.2,
+          targetWeightPct: 0,
+        }),
+      ],
+    });
+
+    const nvdaImpact = artifacts.portfolioImpacts.find((impact) => impact.assetKey === "US::NVDA");
+    expect(nvdaImpact).toMatchObject({
+      impactScope: "related_candidate",
+      impactLevel: "review",
+    });
   });
 });

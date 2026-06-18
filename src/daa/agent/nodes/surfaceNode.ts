@@ -30,7 +30,7 @@ import { recordAgentDecisionAudits } from "@/src/daa/agent/store/agentDecisionAu
  *
  * - 触发条件（二选一）：
    *   (1) thesis conviction=uncertain 且关联持仓或观察列表（必须尽快给出明确判断）
-   *   (2) 持仓权重 > 5% 或观察列表 thesis 距上次有效复核超过 7 天
+   *   (2) 持仓权重 > 5% 或观察列表 thesis 距上次复核超过 7 天
  * - 同 assetKey 多 thesis 去重，取最陈旧的一条
  * - triggerReason / focusHint 字段直接用 thesis 数据拼接，不再让 LLM 改写
  */
@@ -59,12 +59,12 @@ function computeDueForReview(
               ? `投资判断刚进入观察态，等待下一轮依据确认（权重 ${(weight * 100).toFixed(1)}%）`
               : "观察列表判断刚进入观察态，等待下一轮依据确认")
             : (weight > 0
-              ? `投资判断仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，上次有效复核 ${days} 天前）`
-              : `观察列表判断仍处观察态，尚未形成高置信度方向（上次有效复核 ${days} 天前）`)
+              ? `投资判断仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，相关判断上次复核 ${days} 天前）`
+              : `观察列表判断仍处观察态，相关判断上次复核 ${days} 天前，尚未形成高置信度方向`)
         )
         : (weight > 0
-          ? `高权重持仓需要复核：权重 ${(weight * 100).toFixed(1)}%，上次有效复核 ${days} 天前`
-          : `观察列表判断需要复核：上次有效复核 ${days} 天前`);
+          ? `高权重持仓需要复核：权重 ${(weight * 100).toFixed(1)}%，相关判断上次复核 ${days} 天前`
+          : `观察列表判断需要复核：相关判断上次复核 ${days} 天前`);
       const focusHint = t.invalidationConditions
         ? `核对失效条件：${t.invalidationConditions.slice(0, 80)}`
         : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视判断：${t.title}`);

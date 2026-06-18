@@ -5,6 +5,7 @@ import {
   DaaSurfaceStatusPill,
   daaSurfaceFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import {
   BASE_CURRENCY_OPTIONS,
   FREQUENCY_OPTIONS,
@@ -100,7 +101,7 @@ export function StrategyLabConfigPanels({ state }: StrategyLabConfigPanelsProps)
                     />
                     <span className="font-[var(--font-mono)] text-xs text-[var(--text)]">{asset.symbol}</span>
                     <span className="text-[11px] text-[var(--faint)]">{asset.assetClass}</span>
-                    {asset.holdingQty > 0 ? (
+                    {isVisibleHolding(asset) ? (
                       <DaaSurfaceStatusPill tone="success" className="ml-auto text-[9px]">持仓</DaaSurfaceStatusPill>
                     ) : null}
                   </label>

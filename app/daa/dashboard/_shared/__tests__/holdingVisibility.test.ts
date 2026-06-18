@@ -28,7 +28,7 @@ describe("holdingVisibility", () => {
   });
 
   it("估值未知时保留仓位，避免误隐藏真实持仓", () => {
-    expect(isVisibleHolding(makeRow({ valuationBase: null, fxRateToBase: null, actualWeightPct: undefined }))).toBe(true);
+    expect(isVisibleHolding(makeRow({ valuationBase: null, fxRateToBase: null, actualWeightPct: 0 }))).toBe(true);
   });
 
   it("按统一规则过滤并计数有效持仓", () => {

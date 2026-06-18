@@ -7,6 +7,7 @@ import { useExecutionFlow } from "@/app/daa/dashboard/_hooks/asset-workbench/use
 import { useRebalanceFlow } from "@/app/daa/dashboard/_hooks/asset-workbench/useRebalanceFlow";
 import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useWorkbenchReadModel } from "@/app/daa/dashboard/_hooks/useWorkbenchReadModel";
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/asset-workbench/assetWorkbenchTypes";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { AssetDetailDraft } from "@/app/daa/dashboard/_shared/AssetDetailDialog";
@@ -116,7 +117,7 @@ export function useAssetWorkbenchModel(input: {
   });
 
   const holdingsValue = allocationSummary?.holdingValue ?? bootstrap?.account.valuation?.holdingsValue ?? assetRows
-    .filter((row) => row.holdingQty > 0)
+    .filter(isVisibleHolding)
     .reduce((sum, row) => sum + (row.valuationBase ?? 0), 0);
   const totalCashValue = allocationSummary?.cashValue ?? bootstrap?.account.cash ?? 0;
   const frozenCashValue = allocationSummary?.frozenCash ?? bootstrap?.account.frozenCash ?? 0;

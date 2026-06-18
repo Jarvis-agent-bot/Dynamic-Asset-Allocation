@@ -1,4 +1,5 @@
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 
 import type { PortfolioDataHealth, PortfolioPriceStatus, PortfolioState } from "./portfolioStateTypes";
 
@@ -84,7 +85,7 @@ export function buildPortfolioState(bootstrap: PortfolioStateSource): PortfolioS
       fxMissing: row.fxMissing === true,
     };
   });
-  const holdingRows = positions.filter((row) => row.holdingQty > 0 && (row.valuationBase || 0) > 0);
+  const holdingRows = positions.filter(isVisibleHolding);
   const investedValueBase = holdingRows.reduce((sum, row) => sum + (row.valuationBase || 0), 0);
   const maxWeightPct = holdingRows.reduce((max, row) => Math.max(max, row.actualWeightPct || 0), 0);
   const maxAbsDriftPct = positions.reduce((max, row) => Math.max(max, Math.abs(row.driftPct || 0)), 0);

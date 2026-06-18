@@ -11,7 +11,9 @@
 
 import { withApiHandler, ok, mapDeniedResponse } from "@/src/daa/api/routeHelpers";
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { ensureDaaMarketCacheSchemaPg, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { ensureDaaMarketCacheSchemaPg } from "@/src/daa/store/daaStorePg";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 
 export const runtime = "nodejs";
@@ -48,10 +50,10 @@ export async function GET(req: Request) {
     if (singleSymbol) {
       watchedSymbols = [singleSymbol];
     } else {
-      const assets = await listDaaAssetUniverse();
+      const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
       watchedSymbols = [...new Set(
-        assets
-          .filter((a) => a.holdingQty > 0 || a.watchEnabled !== false)
+        bootstrap.assetUniverse
+          .filter((a) => isVisibleHolding(a) || a.watchEnabled !== false)
           .map((a) => a.symbol.trim().toUpperCase())
           .filter(Boolean),
       )];

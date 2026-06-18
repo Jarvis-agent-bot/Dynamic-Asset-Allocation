@@ -1,3 +1,4 @@
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export type StrategyLabInitialData = {
@@ -15,7 +16,7 @@ export function buildStrategyLabInitialData(input: {
   return {
     assets: input.assets,
     selectedAssets: input.assets
-      .filter((asset) => asset.holdingQty > 0 || asset.watchEnabled)
+      .filter((asset) => isVisibleHolding(asset) || asset.watchEnabled)
       .map((asset) => asset.assetKey),
     baseCurrency: input.baseCurrency || "USD",
     minOrderNotional: Math.max(0, Number(input.minOrderNotional) || 0),

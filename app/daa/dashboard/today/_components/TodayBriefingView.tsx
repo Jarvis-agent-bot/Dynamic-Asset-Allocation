@@ -570,8 +570,8 @@ function buildReviewQueue(buckets: BriefingBuckets): ReviewQueue {
       why: need.uncertaintyReason,
       nextStep: need.suggestedInvestigation || "排队补做一次轻量复核。",
       basisText: weightPct > 0
-        ? `持仓 ${weightPct.toFixed(1)}% · 上次有效复核 ${need.daysSinceLastInvestigation} 天前`
-        : `观察名单 · 上次有效复核 ${need.daysSinceLastInvestigation} 天前`,
+        ? `持仓 ${weightPct.toFixed(1)}% · 相关判断上次复核 ${need.daysSinceLastInvestigation} 天前`
+        : `观察名单 · 相关判断上次复核 ${need.daysSinceLastInvestigation} 天前`,
       score: weightPct * 4 + Math.min(need.daysSinceLastInvestigation, 90),
     };
   });
@@ -1090,8 +1090,8 @@ function ReviewLogicDisclosure() {
         <span className="ml-2 hidden text-[var(--faint)] group-open:inline">收起</span>
       </summary>
       <div className="mt-1">
-        它不是你有没有打开页面，而是最近有没有对该持仓相关判断完成有效复核。
-        重要持仓超过 7 天没有新依据，或判断仍不明确，就会进入后台复核计划；下次拿到有效依据后会自动重置。
+        它不是你有没有打开页面，而是最近有没有对该持仓相关判断完成一次后台复核。
+        重要持仓超过 7 天没有新依据，或判断仍不明确，就会进入后台复核计划；下次完成复核后会自动重置。
       </div>
     </details>
   );
@@ -1234,8 +1234,8 @@ function MarketEventCard({ event }: { event: MarketEventReview }) {
 
 function InvestigationNeedCard({ need }: { need: InvestigationNeed }) {
   const weightLabel = need.portfolioWeight > 0
-    ? `持仓 ${(need.portfolioWeight * 100).toFixed(1)}% · 上次有效复核 ${need.daysSinceLastInvestigation} 天前`
-    : `观察资产 · 上次有效复核 ${need.daysSinceLastInvestigation} 天前`;
+    ? `持仓 ${(need.portfolioWeight * 100).toFixed(1)}% · 相关判断上次复核 ${need.daysSinceLastInvestigation} 天前`
+    : `观察资产 · 相关判断上次复核 ${need.daysSinceLastInvestigation} 天前`;
   return (
     <CardShell
       action={investigationNeedAction(need)}

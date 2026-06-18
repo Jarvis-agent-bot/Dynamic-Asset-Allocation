@@ -8,6 +8,7 @@ import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import {
   buildWorkbenchBootstrapBundle,
 } from "@/src/daa/modules/workbench/workbenchReadService";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { nextReviewDueDate } from "@/src/daa/modules/workbench/reviewSchedule";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -255,17 +256,18 @@ function buildAllocationSummary(input: {
   const investableCash = input.bootstrap.account.investableCash ?? 0;
   const frozenCash = input.bootstrap.account.frozenCash ?? 0;
   const valuation = input.bootstrap.account.valuation;
-  const holdingRows = assetUniverse
-    .filter((row) => row.holdingQty > 0 && (row.valuationBase || 0) > 0)
+  const visibleHoldingRows = assetUniverse.filter(isVisibleHolding);
+  const valuedHoldingRows = visibleHoldingRows
+    .filter((row) => (row.valuationBase || 0) > 0 || row.actualWeightPct > 0)
     .sort((a, b) => (b.valuationBase || 0) - (a.valuationBase || 0));
   const holdingValue = valuation?.holdingsValue
-    ?? holdingRows.reduce((sum, row) => sum + (row.valuationBase || 0), 0);
+    ?? valuedHoldingRows.reduce((sum, row) => sum + (row.valuationBase || 0), 0);
   const totalEquity = valuation?.totalEquity
     ?? input.bootstrap.account.totalEquity
     ?? (holdingValue + cashValue);
 
   return {
-    holdingCount: assetUniverse.filter((row) => row.holdingQty > 0).length,
+    holdingCount: visibleHoldingRows.length,
     watchlistCount: assetUniverse.filter((row) => row.watchEnabled).length,
     holdingValue,
     cashValue,
@@ -275,7 +277,7 @@ function buildAllocationSummary(input: {
     equitySource: valuation?.equitySource ?? "derived_mark_to_market",
     derivedTotalEquity: valuation?.derivedTotalEquity ?? (holdingValue + cashValue),
     fxMissingAssetKeys: valuation?.fxMissingAssetKeys ?? assetUniverse.filter((row) => row.fxMissing).map((row) => row.assetKey),
-    topHoldings: holdingRows.slice(0, 5).map((row) => ({
+    topHoldings: valuedHoldingRows.slice(0, 5).map((row) => ({
       assetKey: row.assetKey,
       symbol: row.symbol,
       value: row.valuationBase || 0,

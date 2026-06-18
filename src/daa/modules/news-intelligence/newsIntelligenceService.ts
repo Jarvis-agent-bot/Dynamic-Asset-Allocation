@@ -1,12 +1,12 @@
 import { buildDaaAssetKey } from "@/src/daa/assetKey";
-import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import {
   upsertDaaDiscoveryCandidates,
   upsertDaaNewsEventGraphs,
   upsertDaaNewsPortfolioImpacts,
 } from "@/src/daa/store/marketCacheStore";
 import type {
-  DaaStoreAssetUniverseRow,
   DaaStoreDiscoveryCandidate,
   DaaStoreDiscoveryCandidateConfidence,
   DaaStoreNewsEventGraph,
@@ -45,6 +45,22 @@ export type NewsIntelligenceArtifacts = {
   eventGraphs: DaaStoreNewsEventGraph[];
   portfolioImpacts: DaaStoreNewsPortfolioImpact[];
   discoveryCandidates: DaaStoreDiscoveryCandidate[];
+};
+
+type NewsIntelligenceAssetRow = {
+  assetKey: string;
+  symbol: string;
+  market: string;
+  name: string | null;
+  displayNameZh: string | null;
+  holdingQty: number;
+  watchEnabled: boolean;
+  targetWeightHint: number;
+  targetWeightPct: number;
+  valuationBase?: number | null;
+  lastPrice?: number | null;
+  fxRateToBase?: number | null;
+  actualWeightPct?: number | null;
 };
 
 type ThemeRule = {
@@ -131,12 +147,12 @@ function toRelatedAsset(
   };
 }
 
-function buildUniverseLookups(assetUniverse: DaaStoreAssetUniverseRow[]): {
-  byAssetKey: Map<string, DaaStoreAssetUniverseRow>;
-  bySymbol: Map<string, DaaStoreAssetUniverseRow>;
+function buildUniverseLookups(assetUniverse: NewsIntelligenceAssetRow[]): {
+  byAssetKey: Map<string, NewsIntelligenceAssetRow>;
+  bySymbol: Map<string, NewsIntelligenceAssetRow>;
 } {
-  const byAssetKey = new Map<string, DaaStoreAssetUniverseRow>();
-  const bySymbol = new Map<string, DaaStoreAssetUniverseRow>();
+  const byAssetKey = new Map<string, NewsIntelligenceAssetRow>();
+  const bySymbol = new Map<string, NewsIntelligenceAssetRow>();
   for (const row of assetUniverse) {
     byAssetKey.set(row.assetKey.toUpperCase(), row);
     bySymbol.set(row.symbol.toUpperCase(), row);
@@ -189,7 +205,7 @@ function inferRelatedAssets(input: {
   event: NewsIntelligenceEventInput;
   themeKey: string;
   themeLabelZh: string;
-  assetUniverse: DaaStoreAssetUniverseRow[];
+  assetUniverse: NewsIntelligenceAssetRow[];
 }): DaaStoreNewsRelatedAsset[] {
   const sourceSymbol = normalizeSymbol(input.event.symbol);
   const out = new Map<string, DaaStoreNewsRelatedAsset>();
@@ -238,10 +254,10 @@ function inferRelatedAssets(input: {
     .slice(0, 10);
 }
 
-function resolveImpactScope(row: DaaStoreAssetUniverseRow | null): DaaStoreNewsImpactScope {
+function resolveImpactScope(row: NewsIntelligenceAssetRow | null): DaaStoreNewsImpactScope {
   if (!row) return "related_candidate";
-  if (row.holdingQty > 0) return "holding";
-  if (row.targetWeightHint > 0) return "target";
+  if (isVisibleHolding(row)) return "holding";
+  if (row.targetWeightPct > 0) return "target";
   if (row.watchEnabled) return "watchlist";
   return "related_candidate";
 }
@@ -278,7 +294,7 @@ function confidenceFromScore(scorePct: number): DaaStoreDiscoveryCandidateConfid
 function buildPortfolioImpacts(input: {
   event: NewsIntelligenceEventInput;
   graph: DaaStoreNewsEventGraph;
-  assetUniverse: DaaStoreAssetUniverseRow[];
+  assetUniverse: NewsIntelligenceAssetRow[];
 }): DaaStoreNewsPortfolioImpact[] {
   const lookups = buildUniverseLookups(input.assetUniverse);
   const generatedAt = input.event.analyzedAt || new Date().toISOString();
@@ -364,7 +380,7 @@ function buildDiscoveryCandidates(input: {
 
 export function buildNewsIntelligenceArtifacts(input: {
   events: NewsIntelligenceEventInput[];
-  assetUniverse: DaaStoreAssetUniverseRow[];
+  assetUniverse: NewsIntelligenceAssetRow[];
 }): NewsIntelligenceArtifacts {
   const eventGraphs: DaaStoreNewsEventGraph[] = [];
   const portfolioImpacts: DaaStoreNewsPortfolioImpact[] = [];
@@ -416,8 +432,8 @@ export async function refreshNewsIntelligenceForEvents(events: NewsIntelligenceE
     return { eventGraphs: [], portfolioImpacts: [], discoveryCandidates: [] };
   }
 
-  const assetUniverse = await listDaaAssetUniverse();
-  const artifacts = buildNewsIntelligenceArtifacts({ events, assetUniverse });
+  const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+  const artifacts = buildNewsIntelligenceArtifacts({ events, assetUniverse: bootstrap.assetUniverse });
   await Promise.all([
     upsertDaaNewsEventGraphs(artifacts.eventGraphs),
     upsertDaaNewsPortfolioImpacts(artifacts.portfolioImpacts),

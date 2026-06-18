@@ -9,6 +9,7 @@ import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
+import { isVisibleHolding } from "@/app/daa/dashboard/_shared/holdingVisibility";
 import { useFundamentalsState, type AssetFundamentals } from "@/app/daa/dashboard/_hooks/useFundamentals";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import { useTechnicalSignals } from "@/app/daa/dashboard/_hooks/useTechnicalSignals";
@@ -123,6 +124,7 @@ function WatchlistRow(props: {
     error: props.fundamentalsError,
   });
   const technicalSignal = props.technicalSignal;
+  const hasVisibleHolding = isVisibleHolding(row);
 
   return (
     <div
@@ -166,7 +168,7 @@ function WatchlistRow(props: {
             </>
           ) : null}
         </div>
-        {row.holdingQty > 0 ? (
+        {hasVisibleHolding ? (
           <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--success)]">
             <Eye className="h-3 w-3" />
             已持仓

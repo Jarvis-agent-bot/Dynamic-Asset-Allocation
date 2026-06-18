@@ -8,24 +8,26 @@ export const maxDuration = 300;
 import { withApiHandler, ok, mapDeniedResponse } from "@/src/daa/api/routeHelpers";
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { bootstrapTheses } from "@/src/daa/agent/bootstrap";
-import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const rows = await listDaaAssetUniverse();
-    const assets = rows
-      .filter(r => r.holdingQty > 0 || r.watchEnabled)
-      .map(r => ({
-        assetKey: r.assetKey,
-        symbol: r.symbol,
-        holdingQty: r.holdingQty,
-        lastPrice: r.lastPrice > 0 ? r.lastPrice : r.holdingPrice,
-        role: r.holdingQty > 0 ? "holding" as const : "watchlist" as const,
-        notes: r.notes,
-        tags: r.holdingQty > 0 ? r.holdingTags : r.watchTags,
+    const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+    const assets = bootstrap.assetUniverse
+      .map((row) => ({ row, isHeld: isVisibleHolding(row) }))
+      .filter(({ row, isHeld }) => isHeld || row.watchEnabled)
+      .map(({ row, isHeld }) => ({
+        assetKey: row.assetKey,
+        symbol: row.symbol,
+        holdingQty: isHeld ? row.holdingQty : 0,
+        lastPrice: row.lastPrice > 0 ? row.lastPrice : row.holdingPrice,
+        role: isHeld ? "holding" as const : "watchlist" as const,
+        notes: row.notes,
+        tags: isHeld ? row.holdingTags : row.watchTags,
       }));
 
     const result = await bootstrapTheses(assets);

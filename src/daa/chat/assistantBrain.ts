@@ -8,6 +8,7 @@ import { getActiveTheses } from "@/src/daa/agent/store/thesisStore";
 import { getRegisteredToolCount, getToolsByCategory } from "@/src/daa/agent/tools/registry";
 import { buildBrainBoundaryText, buildBrainConfigForMode, describeBrainModeSummary, getBrainModeLabel, resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
 import type { DaaBrainMode } from "@/src/daa/config/systemConfig";
+import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { getDaaSystemConfig, patchDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 import type { DaaAssistantRuntimeContext } from "./agentContext";
@@ -51,15 +52,16 @@ export async function buildAssistantBrainStatusText(runtimeContext: DaaAssistant
 
 export async function runAssistantBootstrap(runtimeContext: DaaAssistantRuntimeContext): Promise<string> {
   const focusAssets = runtimeContext.readModel.bootstrap.assetUniverse
-    .filter((item) => Number(item.holdingQty) > 0 || item.watchEnabled)
-    .map((item) => ({
+    .map((item) => ({ item, isHeld: isVisibleHolding(item) }))
+    .filter(({ item, isHeld }) => isHeld || item.watchEnabled)
+    .map(({ item, isHeld }) => ({
       assetKey: item.assetKey,
       symbol: item.symbol,
-      holdingQty: Number(item.holdingQty) || 0,
+      holdingQty: isHeld ? Number(item.holdingQty) || 0 : 0,
       lastPrice: Number(item.lastPrice) || Number(item.holdingPrice) || 0,
-      role: Number(item.holdingQty) > 0 ? "holding" as const : "watchlist" as const,
+      role: isHeld ? "holding" as const : "watchlist" as const,
       notes: item.notes,
-      tags: Number(item.holdingQty) > 0 ? item.holdingTags : item.watchTags,
+      tags: isHeld ? item.holdingTags : item.watchTags,
     }));
 
   if (focusAssets.length === 0) {
