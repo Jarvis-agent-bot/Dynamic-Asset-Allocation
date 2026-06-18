@@ -1,8 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { estimateProposalExecutionCost, summarizeProposalExecutionCosts } from "@/src/daa/modules/workbench/executionCost";
+import {
+  calcHoldingCostPerUnitBase,
+  estimateProposalExecutionCost,
+  summarizeProposalExecutionCosts,
+} from "@/src/daa/modules/workbench/executionCost";
 
 describe("workbench execution cost model", () => {
+  it("持仓单位成本优先使用基准货币成本", () => {
+    expect(calcHoldingCostPerUnitBase({
+      holdingQty: 10,
+      costBasis: 1_200,
+      costBasisInBase: 900,
+      holdingPrice: 120,
+      fxRateToBase: 0.8,
+    })).toBe(90);
+  });
+
+  it("缺少基准货币成本时用本币成本和汇率兜底", () => {
+    expect(calcHoldingCostPerUnitBase({
+      holdingQty: 10,
+      costBasis: 1_200,
+      costBasisInBase: null,
+      holdingPrice: 120,
+      fxRateToBase: 0.8,
+    })).toBe(96);
+  });
+
   it("BUY 会把滑点和手续费都计入现金流出", () => {
     const estimate = estimateProposalExecutionCost({
       proposal: {

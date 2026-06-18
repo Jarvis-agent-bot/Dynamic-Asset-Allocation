@@ -74,10 +74,11 @@ export async function scanTaxLossHarvestingCandidates(input: {
   const config: TlhConfig = { ...DEFAULT_TLH_CONFIG, ...input.config };
   const bootstrap = input.bootstrap;
 
-  // Find positions with unrealized losses
+  // 税损收割使用基准货币成本与估值，避免本币价格和汇率混算。
   const holdingRows = bootstrap.assetUniverse.filter((row) => {
     if (!(row.holdingQty > 0)) return false;
-    if (!(row.costBasis != null && row.costBasis > 0)) return false;
+    if (!(row.costBasisInBase != null && row.costBasisInBase > 0)) return false;
+    if (!(row.valuationBase != null && row.valuationBase > 0)) return false;
     const currentPrice = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
     if (!(currentPrice > 0)) return false;
     return true;
@@ -93,15 +94,15 @@ export async function scanTaxLossHarvestingCandidates(input: {
 
   for (const row of holdingRows) {
     const currentPrice = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-    const costBasis = row.costBasis ?? (row.holdingQty * row.holdingPrice);
-    const currentValue = row.holdingQty * currentPrice;
+    const costBasis = Math.max(0, row.costBasisInBase ?? 0);
+    const currentValue = Math.max(0, row.valuationBase ?? 0);
     const unrealizedLoss = currentValue - costBasis; // negative = loss
 
     if (unrealizedLoss >= 0) continue; // Skip gains
 
     const unrealizedLossPct = Math.abs(unrealizedLoss) / Math.max(1, costBasis);
     const fxRate = (row.fxRateToBase && row.fxRateToBase > 0) ? row.fxRateToBase : 1;
-    const lossInBase = Math.abs(unrealizedLoss) * fxRate;
+    const lossInBase = Math.abs(unrealizedLoss);
 
     // Check minimum thresholds
     if (unrealizedLossPct < config.minLossPct) continue;

@@ -6,6 +6,7 @@ import type {
   DaaMarketContext,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { collectRiskTriggerAssets, resolvePositionDrawdownPct } from "@/src/daa/modules/portfolio-state/positionPnl";
 import {
   getDaaCycleReport,
   getDaaHumanIngestState,
@@ -14,7 +15,6 @@ import {
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
 import { computeCorrelationMatrix } from "./correlationService";
-import { calcHoldingCostPerUnit } from "./executionCost";
 import { normalizeOrderSizing } from "./orderSizing";
 import type {
   PreTradeRiskCheck,
@@ -204,6 +204,26 @@ function buildMaxPositionRiskItem(input: {
     };
 }
 
+function buildStopLossRiskItem(input: {
+    assetUniverse: WorkbenchBootstrap["assetUniverse"];
+    stopLossPct: number;
+}): PreTradeRiskCheckItem {
+    const worstDrawdown = input.assetUniverse.reduce((worst, row) => {
+        const drawdownPct = resolvePositionDrawdownPct(row);
+        return Math.max(worst, drawdownPct ?? 0);
+    }, 0);
+    const breached = input.stopLossPct > 0 && worstDrawdown >= input.stopLossPct;
+    return {
+        rule: "stop_loss_breach",
+        status: breached ? "warn" : "pass",
+        current: worstDrawdown,
+        limit: input.stopLossPct,
+        message: breached
+            ? `存在持仓浮亏 ${worstDrawdown.toFixed(2)}%，达到止损线 ${input.stopLossPct.toFixed(2)}%`
+            : `持仓止损检查通过（最大浮亏 ${worstDrawdown.toFixed(2)}%）`,
+    };
+}
+
 function buildPreTradeRiskCheck(input: {
     assetUniverse: WorkbenchBootstrap["assetUniverse"];
     proposals: RebalanceProposal[];
@@ -301,25 +321,10 @@ function buildPreTradeRiskCheck(input: {
             ? `交易后组合集中度(HHI) ${hhi.toFixed(2)} 超过警戒 ${maxConcentrationPct.toFixed(2)}`
             : `交易后组合集中度(HHI) ${hhi.toFixed(2)}`,
     });
-    const worstDrawdown = input.assetUniverse.reduce((worst, row) => {
-        const costPerUnit = calcHoldingCostPerUnit(row);
-        if (!(row.holdingQty > 0) || !(costPerUnit > 0))
-            return worst;
-        const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-        if (!(price > 0))
-            return worst;
-        const drawdownPct = ((costPerUnit - price) / costPerUnit) * 100;
-        return Math.max(worst, drawdownPct);
-    }, 0);
-    items.push({
-        rule: "stop_loss_breach",
-        status: worstDrawdown > stopLossPct ? "warn" : "pass",
-        current: worstDrawdown,
-        limit: stopLossPct,
-        message: worstDrawdown > stopLossPct
-            ? `存在持仓浮亏 ${worstDrawdown.toFixed(2)}%，超过止损线 ${stopLossPct.toFixed(2)}%`
-            : `持仓止损检查通过（最大浮亏 ${worstDrawdown.toFixed(2)}%）`,
-    });
+    items.push(buildStopLossRiskItem({
+        assetUniverse: input.assetUniverse,
+        stopLossPct,
+    }));
     // 现金充足性检查：BUY 提案总金额 vs 可用现金
     const totalBuyNotional = input.proposals
         .filter((p) => p.side === "BUY" && p.selected)
@@ -469,25 +474,10 @@ function buildManualPreTradeRiskCheck(input: {
             ? `交易后组合集中度(HHI) ${hhi.toFixed(2)} 超过警戒 ${maxConcentrationPct.toFixed(2)}`
             : `交易后组合集中度(HHI) ${hhi.toFixed(2)}`,
     });
-    const worstDrawdown = input.assetUniverse.reduce((worst, row) => {
-        const costPerUnit = calcHoldingCostPerUnit(row);
-        if (!(row.holdingQty > 0) || !(costPerUnit > 0))
-            return worst;
-        const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-        if (!(price > 0))
-            return worst;
-        const drawdownPct = ((costPerUnit - price) / costPerUnit) * 100;
-        return Math.max(worst, drawdownPct);
-    }, 0);
-    items.push({
-        rule: "stop_loss_breach",
-        status: worstDrawdown > stopLossPct ? "warn" : "pass",
-        current: worstDrawdown,
-        limit: stopLossPct,
-        message: worstDrawdown > stopLossPct
-            ? `存在持仓浮亏 ${worstDrawdown.toFixed(2)}%，超过止损线 ${stopLossPct.toFixed(2)}%`
-            : `持仓止损检查通过（最大浮亏 ${worstDrawdown.toFixed(2)}%）`,
-    });
+    items.push(buildStopLossRiskItem({
+        assetUniverse: input.assetUniverse,
+        stopLossPct,
+    }));
     const hasBlock = items.some((item) => item.status === "block");
     const hasWarn = items.some((item) => item.status === "warn");
     return {
@@ -914,14 +904,17 @@ function buildRiskCycleDraft(input: {
         pnlPct: number;
     }>;
 } | null {
-    const stopLossPct = Math.max(0, input.perAssetStopLossPct) * 100;
-    const takeProfitPct = Math.max(0, input.perAssetTakeProfitPct) * 100;
     const proposals: RebalanceProposal[] = [];
     const riskHits: Array<{
         symbol: string;
         kind: "stop_loss" | "take_profit";
         pnlPct: number;
     }> = [];
+    const triggerByAssetKey = new Map(collectRiskTriggerAssets({
+        rows: input.bootstrap.assetUniverse,
+        perAssetStopLossPct: input.perAssetStopLossPct,
+        perAssetTakeProfitPct: input.perAssetTakeProfitPct,
+    }).map((hit) => [hit.assetKey, hit]));
     const driftSnapshot: RebalanceCycle["driftSnapshot"] = [];
     for (const row of input.bootstrap.assetUniverse) {
         if (!(row.watchEnabled || row.holdingQty > 0))
@@ -933,19 +926,16 @@ function buildRiskCycleDraft(input: {
             targetPct: (row.targetWeightPct || 0) / 100,
             driftPct: ((row.actualWeightPct || 0) - (row.targetWeightPct || 0)) / 100,
         });
+        const hit = triggerByAssetKey.get(row.assetKey);
+        if (!hit)
+            continue;
         if (!(row.holdingQty > 0) || !(row.valuationBase && row.valuationBase > 0))
             continue;
         const px = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
         if (!(px > 0))
             continue;
-        const costPerUnit = calcHoldingCostPerUnit(row);
-        if (!(costPerUnit > 0))
-            continue;
-        const pnlPct = ((px - costPerUnit) / costPerUnit) * 100;
-        const isStopLoss = stopLossPct > 0 && pnlPct <= -stopLossPct;
-        const isTakeProfit = takeProfitPct > 0 && pnlPct >= takeProfitPct;
-        if (!isStopLoss && !isTakeProfit)
-            continue;
+        const isStopLoss = hit.triggerType === "stop_loss";
+        const pnlPct = hit.pnlPct;
         const sellRatio = isStopLoss ? 1 : 0.5;
         const suggestedNotional = Math.max(0, (row.valuationBase || 0) * sellRatio);
         if (!(suggestedNotional > 0))
@@ -987,7 +977,7 @@ function buildRiskCycleDraft(input: {
         });
         riskHits.push({
             symbol: row.symbol,
-            kind: isStopLoss ? "stop_loss" : "take_profit",
+            kind: hit.triggerType,
             pnlPct,
         });
     }
@@ -1027,12 +1017,7 @@ function calcMaxDrawdownPct(rows: WorkbenchBootstrap["assetUniverse"]): number {
     for (const row of rows) {
         if (!(row.holdingQty > 0))
             continue;
-        const px = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-        const costPerUnit = calcHoldingCostPerUnit(row);
-        if (!(px > 0) || !(costPerUnit > 0))
-            continue;
-        const drawdown = ((costPerUnit - px) / costPerUnit) * 100;
-        worst = Math.max(worst, drawdown);
+        worst = Math.max(worst, resolvePositionDrawdownPct(row) ?? 0);
     }
     return Math.max(0, worst);
 }

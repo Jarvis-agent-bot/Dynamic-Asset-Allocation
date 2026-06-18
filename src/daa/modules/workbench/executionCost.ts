@@ -10,6 +10,16 @@ export function calcHoldingCostPerUnit(row: Pick<WorkbenchBootstrap["assetUniver
   return 0;
 }
 
+export function calcHoldingCostPerUnitBase(
+  row: Pick<WorkbenchBootstrap["assetUniverse"][number], "holdingQty" | "costBasis" | "costBasisInBase" | "holdingPrice" | "fxRateToBase">,
+): number {
+  if (row.holdingQty > 0 && row.costBasisInBase != null && row.costBasisInBase > 0) {
+    return row.costBasisInBase / row.holdingQty;
+  }
+  const fx = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : 1;
+  return calcHoldingCostPerUnit(row) * fx;
+}
+
 export function estimateProposalExecutionCost(input: {
   proposal: Pick<RebalanceProposal, "assetKey" | "symbol" | "side" | "suggestedNotional">;
   feeRateBps?: number;

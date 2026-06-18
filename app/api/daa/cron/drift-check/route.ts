@@ -14,6 +14,7 @@ import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
+import { collectRiskTriggerAssets } from "@/src/daa/modules/portfolio-state/positionPnl";
 import { buildPortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateService";
 import { collectPortfolioSignals } from "@/src/daa/modules/signals/signalCollector";
 import type { DriftSignal } from "@/src/daa/modules/signals/signalTypes";
@@ -235,43 +236,11 @@ async function runDriftCheck() {
 
     // ── Phase D: 止损/止盈自动检测 ──
     const riskConfig = system.config.strategy?.risk;
-    const stopLossPct = riskConfig?.perAssetStopLossPct ?? 0;
-    const takeProfitPct = riskConfig?.perAssetTakeProfitPct ?? 0;
-    const riskTriggeredAssets: Array<{
-      assetKey: string;
-      symbol: string;
-      pnlPct: number;
-      triggerType: "stop_loss" | "take_profit";
-    }> = [];
-
-    if (stopLossPct > 0 || takeProfitPct > 0) {
-      for (const asset of bootstrap.assetUniverse) {
-        if (asset.holdingQty <= 0) continue;
-        // 优先使用基准货币的 PnL（含 FX 转换），避免跨货币误判
-        const unrealizedPnlPct = asset.unrealizedPnlPct
-          ?? (asset.costBasisInBase && asset.costBasisInBase > 0 && asset.valuationBase
-            ? ((asset.valuationBase - asset.costBasisInBase) / asset.costBasisInBase) * 100
-            : null);
-        if (unrealizedPnlPct == null) continue;
-
-        if (stopLossPct > 0 && unrealizedPnlPct < -(stopLossPct * 100)) {
-          riskTriggeredAssets.push({
-            assetKey: asset.assetKey,
-            symbol: asset.symbol,
-            pnlPct: unrealizedPnlPct,
-            triggerType: "stop_loss",
-          });
-        }
-        if (takeProfitPct > 0 && unrealizedPnlPct > takeProfitPct * 100) {
-          riskTriggeredAssets.push({
-            assetKey: asset.assetKey,
-            symbol: asset.symbol,
-            pnlPct: unrealizedPnlPct,
-            triggerType: "take_profit",
-          });
-        }
-      }
-    }
+    const riskTriggeredAssets = collectRiskTriggerAssets({
+      rows: bootstrap.assetUniverse,
+      perAssetStopLossPct: riskConfig?.perAssetStopLossPct ?? 0,
+      perAssetTakeProfitPct: riskConfig?.perAssetTakeProfitPct ?? 0,
+    });
 
     // 止损/止盈通知
     let riskTriggerNotified = false;
@@ -299,7 +268,7 @@ async function runDriftCheck() {
           riskTriggerSkippedReason = "risk_triggered already delivered today";
         } else {
           const sends: Promise<boolean>[] = [];
-          if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
+          if (notif.telegram.enabled && notif.telegram.onRiskTriggered) {
             sends.push(
               sendTelegramByEnv(riskMsg, {
                 eventType: "risk_triggered",
@@ -313,7 +282,7 @@ async function runDriftCheck() {
               }),
             );
           }
-          if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
+          if (notif.feishu.enabled && notif.feishu.onRiskTriggered) {
             sends.push(
               sendFeishuByEnv(riskMsg, {
                 eventType: "risk_triggered",

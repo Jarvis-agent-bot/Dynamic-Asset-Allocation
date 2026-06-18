@@ -84,4 +84,42 @@ describe("system-config-normalization", () => {
     expect(normalized.strategy.breakout.balancedBoostMultiplier).toBe(2);
     expect(normalized.strategy.breakout.balancedWeakMultiplier).toBe(0.1);
   });
+
+  it("风控触发通知缺少新字段时兼容旧偏移开关", () => {
+    const normalized = normalizeSystemConfig({
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: true,
+        },
+        feishu: {
+          enabled: true,
+          onDriftTrigger: false,
+        },
+      },
+    });
+
+    expect(normalized.notification.telegram.onRiskTriggered).toBe(true);
+    expect(normalized.notification.feishu.onRiskTriggered).toBe(false);
+  });
+
+  it("风控触发通知显式配置优先于旧偏移开关", () => {
+    const normalized = normalizeSystemConfig({
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: true,
+          onRiskTriggered: false,
+        },
+        feishu: {
+          enabled: true,
+          onDriftTrigger: false,
+          onRiskTriggered: true,
+        },
+      },
+    });
+
+    expect(normalized.notification.telegram.onRiskTriggered).toBe(false);
+    expect(normalized.notification.feishu.onRiskTriggered).toBe(true);
+  });
 });

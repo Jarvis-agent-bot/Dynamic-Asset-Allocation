@@ -62,7 +62,7 @@ import {
   toIsoByMs,
 } from "./reviewSchedule";
 import { assertCycleExecutable, assertCycleMutable } from "./cycleGuards";
-import { calcHoldingCostPerUnit } from "./executionCost";
+import { calcHoldingCostPerUnitBase } from "./executionCost";
 import type { RebalanceProposal, RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import {
   attachMacroBudgetShadowSizing,
@@ -1260,18 +1260,22 @@ export async function executeWorkbenchRebalanceCycle(input: {
       if (row.status !== "executed" || row.side !== "SELL") continue;
       const before = beforeBySymbol.get(row.symbol.toUpperCase());
       if (!before) continue;
-      const costPerUnit = calcHoldingCostPerUnit(before);
       const fx = before.fxRateToBase && before.fxRateToBase > 0 ? before.fxRateToBase : 1;
-      const pnl = (row.price - costPerUnit) * row.qty * fx;
+      const costPerUnitBase = calcHoldingCostPerUnitBase(before);
+      const pnl = ((row.price * fx) - costPerUnitBase) * row.qty;
       realizedBySymbol.set(row.symbol, (realizedBySymbol.get(row.symbol) || 0) + pnl);
     }
     let unrealizedPnl = 0;
     for (const row of afterBootstrap.assetUniverse) {
       if (!(row.holdingQty > 0)) continue;
+      if (row.costBasisInBase != null && row.costBasisInBase > 0 && row.valuationBase != null) {
+        unrealizedPnl += row.valuationBase - row.costBasisInBase;
+        continue;
+      }
       const px = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-      const costPerUnit = calcHoldingCostPerUnit(row);
       const fx = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : 1;
-      unrealizedPnl += (px - costPerUnit) * row.holdingQty * fx;
+      const costPerUnitBase = calcHoldingCostPerUnitBase(row);
+      unrealizedPnl += ((px * fx) - costPerUnitBase) * row.holdingQty;
     }
     const topContributors = [...realizedBySymbol.entries()]
       .map(([symbol, pnl]) => ({ symbol, pnl, side: "SELL" as const }))

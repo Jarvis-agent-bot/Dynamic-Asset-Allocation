@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPreTradeRiskCheck } from "@/src/daa/modules/workbench/workbenchModeling";
+import { buildManualPreTradeRiskCheck, buildPreTradeRiskCheck } from "@/src/daa/modules/workbench/workbenchModeling";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
@@ -105,5 +105,115 @@ describe("buildPreTradeRiskCheck max_position", () => {
     expect(maxPosition?.status).toBe("block");
     expect(maxPosition?.current).toBeCloseTo(11.93, 6);
     expect(maxPosition?.message).toContain("超过上限 10.00%");
+  });
+
+  it("执行前止损检查使用基准货币 PnL，而不是本币价格涨跌", () => {
+    const asset = makeAsset({
+      assetKey: "HK::0700",
+      symbol: "0700",
+      market: "HK",
+      currency: "HKD",
+      holdingPrice: 100,
+      lastPrice: 110,
+      costBasis: null,
+      costBasisInBase: 1000,
+      valuationBase: 700,
+      unrealizedPnlPct: -30,
+      fxRateToBase: 0.7,
+    });
+
+    const riskCheck = buildPreTradeRiskCheck({
+      assetUniverse: [asset],
+      proposals: [makeProposal({
+        assetKey: "HK::0700",
+        symbol: "0700",
+        currency: "HKD",
+        fxRateToBase: 0.7,
+      })],
+      totalEquity: 10000,
+      availableCash: 1000,
+      constraints: {
+        maxPositionPct: 0.5,
+        maxOrderPctOfNav: 0.5,
+      },
+      risk: {
+        perAssetStopLossPct: 0.2,
+        maxConcentrationPct: 0.9,
+      },
+    });
+
+    const stopLoss = riskCheck.items.find((item) => item.rule === "stop_loss_breach");
+    expect(stopLoss).toMatchObject({
+      status: "warn",
+      current: 30,
+      limit: 20,
+    });
+  });
+
+  it("手动预览止损检查也使用基准货币 PnL", () => {
+    const asset = makeAsset({
+      assetKey: "HK::0700",
+      symbol: "0700",
+      market: "HK",
+      currency: "HKD",
+      holdingPrice: 100,
+      lastPrice: 110,
+      costBasis: null,
+      costBasisInBase: 1000,
+      valuationBase: 700,
+      unrealizedPnlPct: -30,
+      fxRateToBase: 0.7,
+    });
+
+    const riskCheck = buildManualPreTradeRiskCheck({
+      assetUniverse: [asset],
+      proposal: makeProposal({
+        assetKey: "HK::0700",
+        symbol: "0700",
+        currency: "HKD",
+        fxRateToBase: 0.7,
+      }),
+      totalEquity: 10000,
+      constraints: {
+        maxPositionPct: 0.5,
+        maxOrderPctOfNav: 0.5,
+      },
+      risk: {
+        perAssetStopLossPct: 0.2,
+        maxConcentrationPct: 0.9,
+      },
+    });
+
+    const stopLoss = riskCheck.items.find((item) => item.rule === "stop_loss_breach");
+    expect(stopLoss).toMatchObject({
+      status: "warn",
+      current: 30,
+      limit: 20,
+    });
+  });
+
+  it("执行前止损检查等于阈值时状态和文案一致触发", () => {
+    const riskCheck = buildPreTradeRiskCheck({
+      assetUniverse: [makeAsset({
+        unrealizedPnlPct: -20,
+        valuationBase: 800,
+        costBasisInBase: 1000,
+      })],
+      proposals: [makeProposal()],
+      totalEquity: 10000,
+      availableCash: 1000,
+      constraints: {
+        maxPositionPct: 0.5,
+        maxOrderPctOfNav: 0.5,
+      },
+      risk: {
+        perAssetStopLossPct: 0.2,
+        maxConcentrationPct: 0.9,
+      },
+    });
+
+    const stopLoss = riskCheck.items.find((item) => item.rule === "stop_loss_breach");
+    expect(stopLoss?.status).toBe("warn");
+    expect(stopLoss?.message).toContain("达到止损线 20.00%");
   });
 });

@@ -105,4 +105,21 @@ describe("buildDailyReviewText", () => {
     // every_3_days 频率显示"自动复盘"而非"下次日期"
     expect(text).toContain("提醒");
   });
+
+  it("持仓 PnL 缺少成本基准时显示 N/A，而不是 0% 盈亏", async () => {
+    const text = await buildDailyReviewText(makeBootstrap({
+      assetUniverse: [
+        {
+          ...makeBootstrap().assetUniverse[0],
+          costBasisInBase: null,
+          unrealizedPnlPct: null,
+          valuationBase: 1836,
+        },
+      ],
+    }));
+
+    expect(text).toContain("AAPL");
+    expect(text).toContain("N/A");
+    expect(text).not.toContain("+0.0%");
+  });
 });

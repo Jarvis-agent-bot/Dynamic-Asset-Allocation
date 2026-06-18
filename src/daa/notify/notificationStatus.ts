@@ -102,6 +102,7 @@ export async function buildNotificationStatusSummary(): Promise<NotificationStat
         ],
         deliveryEvents: [
           system.config.notification.telegram.onDriftTrigger ? "偏移触发" : "",
+          system.config.notification.telegram.onRiskTriggered ? "风控触发" : "",
           system.config.notification.telegram.onSuggestionGenerated ? "建议生成" : "",
           system.config.notification.telegram.onTradeExecuted ? "交易执行" : "",
           system.config.notification.telegram.dailyReport ? "每日复核" : "",
@@ -116,6 +117,7 @@ export async function buildNotificationStatusSummary(): Promise<NotificationStat
         ],
         deliveryEvents: [
           system.config.notification.feishu.onDriftTrigger ? "偏移触发" : "",
+          system.config.notification.feishu.onRiskTriggered ? "风控触发" : "",
           system.config.notification.feishu.onSuggestionGenerated ? "建议生成" : "",
           system.config.notification.feishu.onTradeExecuted ? "交易执行" : "",
           system.config.notification.feishu.dailyReport ? "每日复核" : "",

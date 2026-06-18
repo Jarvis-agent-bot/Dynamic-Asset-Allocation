@@ -14,6 +14,7 @@ import { buildManualExecutionInput } from "@/app/daa/dashboard/_hooks/asset-work
 import { getAssetDetailReadModel } from "@/src/daa/modules/read/readApi";
 import { executeWorkbenchOrder, patchWorkbenchAsset, previewWorkbenchExecution } from "@/src/daa/modules/workbench/workbenchApi";
 import type { AssetDetailReadModel } from "@/src/daa/modules/read/readModels";
+import { resolvePositionPnlPct } from "@/src/daa/modules/portfolio-state/positionPnl";
 
 import { AssetInfoBar } from "./AssetInfoBar";
 import { AssetDetailTabs } from "./AssetDetailTabs";
@@ -71,13 +72,19 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
     const valuationBase = holdingQty > 0 && fxRateToBase > 0
       ? holdingQty * livePrice.price * fxRateToBase
       : row.valuationBase;
-    const costBasisInBase = Number(row.costBasisInBase ?? 0);
-    const unrealizedPnlBase = valuationBase != null && costBasisInBase > 0
+    const costBasisInBase = row.costBasisInBase == null ? null : Number(row.costBasisInBase);
+    const hasCostBasisInBase = costBasisInBase != null && Number.isFinite(costBasisInBase) && costBasisInBase > 0;
+    const unrealizedPnlBase = valuationBase != null && hasCostBasisInBase
       ? valuationBase - costBasisInBase
       : row.unrealizedPnlBase;
-    const unrealizedPnlPct = unrealizedPnlBase != null && costBasisInBase > 0
-      ? (unrealizedPnlBase / costBasisInBase) * 100
-      : row.unrealizedPnlPct;
+    const unrealizedPnlPct = resolvePositionPnlPct({
+      assetKey: row.assetKey,
+      symbol: row.symbol,
+      holdingQty,
+      costBasisInBase,
+      valuationBase,
+      unrealizedPnlPct: hasCostBasisInBase ? null : row.unrealizedPnlPct,
+    });
 
     return {
       ...row,

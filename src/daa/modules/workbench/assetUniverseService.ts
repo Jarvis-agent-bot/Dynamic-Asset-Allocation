@@ -4,6 +4,7 @@ import {
   resolveFxRateToBase,
   summarizeMarkToMarketPortfolio,
 } from "@/src/daa/modules/portfolio/portfolioValuation";
+import { resolvePositionPnlPct } from "@/src/daa/modules/portfolio-state/positionPnl";
 import type { DaaStoreAssetUniverseRow, DaaStoreFxRate } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { toFinite } from "@/src/daa/utils/normalize";
@@ -80,7 +81,14 @@ export function buildAssetUniverseViewRows(input: {
     const costInBase = row.costBasisInBase ?? null;
     const hasCostInBase = costInBase != null && costInBase > 0;
     const unrealizedPnlBase = valBase > 0 && hasCostInBase ? valBase - costInBase : null;
-    const unrealizedPnlPct = hasCostInBase ? ((valBase - costInBase) / costInBase) * 100 : null;
+    const unrealizedPnlPct = resolvePositionPnlPct({
+      assetKey: row.assetKey,
+      symbol: row.symbol,
+      holdingQty: row.holdingQty,
+      costBasisInBase: costInBase,
+      valuationBase: valBase,
+      unrealizedPnlPct: null,
+    });
 
     return {
       assetKey: row.assetKey,

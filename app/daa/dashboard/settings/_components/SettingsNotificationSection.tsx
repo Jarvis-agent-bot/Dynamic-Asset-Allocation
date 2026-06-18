@@ -37,6 +37,7 @@ function deliveryEventLabel(value: string): string {
   if (normalized === "suggestion_generated") return "建议生成";
   if (normalized === "daily_report") return "每日复核";
   if (normalized === "drift_triggered") return "偏移触发";
+  if (normalized === "risk_triggered") return "风控触发";
   if (normalized === "trade_executed") return "交易执行";
   if (normalized === "test_message") return "测试消息";
   return normalized || "未知事件";
@@ -213,10 +214,12 @@ function ChannelConfigCard(props: {
   enabled: boolean;
   onEnabledChange: (value: boolean) => void;
   onDriftChange: (value: boolean) => void;
+  onRiskChange: (value: boolean) => void;
   onSuggestionChange: (value: boolean) => void;
   onTradeChange: (value: boolean) => void;
   onDailyReportChange: (value: boolean) => void;
   driftEnabled: boolean;
+  riskEnabled: boolean;
   suggestionEnabled: boolean;
   tradeEnabled: boolean;
   dailyReportEnabled: boolean;
@@ -361,6 +364,9 @@ function ChannelConfigCard(props: {
         </CheckboxRow>
         <CheckboxRow checked={props.driftEnabled} onChange={props.onDriftChange}>
           偏移触发时通知
+        </CheckboxRow>
+        <CheckboxRow checked={props.riskEnabled} onChange={props.onRiskChange}>
+          风控触发时通知
         </CheckboxRow>
         <CheckboxRow checked={props.suggestionEnabled} onChange={props.onSuggestionChange}>
           再平衡建议生成时通知
@@ -589,6 +595,22 @@ export function SettingsNotificationSection(props: {
                     : prev,
                 )
               }
+              onRiskChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          telegram: {
+                            ...prev.notification.telegram,
+                            onRiskTriggered: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
               onSuggestionChange={(value) =>
                 setConfig((prev) =>
                   prev
@@ -638,6 +660,7 @@ export function SettingsNotificationSection(props: {
                 )
               }
               driftEnabled={config.notification.telegram.onDriftTrigger}
+              riskEnabled={config.notification.telegram.onRiskTriggered}
               suggestionEnabled={config.notification.telegram.onSuggestionGenerated}
               tradeEnabled={config.notification.telegram.onTradeExecuted}
               dailyReportEnabled={config.notification.telegram.dailyReport}
@@ -681,6 +704,22 @@ export function SettingsNotificationSection(props: {
                           feishu: {
                             ...prev.notification.feishu,
                             onDriftTrigger: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              onRiskChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          feishu: {
+                            ...prev.notification.feishu,
+                            onRiskTriggered: value,
                           },
                         },
                       }
@@ -736,6 +775,7 @@ export function SettingsNotificationSection(props: {
                 )
               }
               driftEnabled={config.notification.feishu.onDriftTrigger}
+              riskEnabled={config.notification.feishu.onRiskTriggered}
               suggestionEnabled={config.notification.feishu.onSuggestionGenerated}
               tradeEnabled={config.notification.feishu.onTradeExecuted}
               dailyReportEnabled={config.notification.feishu.dailyReport}

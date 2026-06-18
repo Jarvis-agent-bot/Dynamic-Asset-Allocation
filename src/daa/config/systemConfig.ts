@@ -180,6 +180,7 @@ export type DaaSystemConfig = {
     telegram: {
       enabled: boolean;
       onDriftTrigger: boolean;
+      onRiskTriggered: boolean;
       onSuggestionGenerated: boolean;
       onTradeExecuted: boolean;
       dailyReport: boolean;
@@ -187,6 +188,7 @@ export type DaaSystemConfig = {
     feishu: {
       enabled: boolean;
       onDriftTrigger: boolean;
+      onRiskTriggered: boolean;
       onSuggestionGenerated: boolean;
       onTradeExecuted: boolean;
       dailyReport: boolean;
@@ -388,6 +390,7 @@ export const DEFAULT_SYSTEM_CONFIG: DaaSystemConfig = {
     telegram: {
       enabled: false,
       onDriftTrigger: false,
+      onRiskTriggered: false,
       onSuggestionGenerated: false,
       onTradeExecuted: false,
       dailyReport: false,
@@ -395,6 +398,7 @@ export const DEFAULT_SYSTEM_CONFIG: DaaSystemConfig = {
     feishu: {
       enabled: false,
       onDriftTrigger: false,
+      onRiskTriggered: false,
       onSuggestionGenerated: false,
       onTradeExecuted: false,
       dailyReport: false,
@@ -857,6 +861,10 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       telegram: {
         enabled: toBool(notificationTelegram.enabled, fallback.notification.telegram.enabled),
         onDriftTrigger: toBool(notificationTelegram.onDriftTrigger, fallback.notification.telegram.onDriftTrigger),
+        onRiskTriggered: toBool(
+          notificationTelegram.onRiskTriggered,
+          toBool(notificationTelegram.onDriftTrigger, fallback.notification.telegram.onRiskTriggered),
+        ),
         onSuggestionGenerated: toBool(notificationTelegram.onSuggestionGenerated, fallback.notification.telegram.onSuggestionGenerated),
         onTradeExecuted: toBool(notificationTelegram.onTradeExecuted, fallback.notification.telegram.onTradeExecuted),
         dailyReport: toBool(notificationTelegram.dailyReport, fallback.notification.telegram.dailyReport),
@@ -864,6 +872,10 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       feishu: {
         enabled: toBool(notificationFeishu.enabled, fallback.notification.feishu.enabled),
         onDriftTrigger: toBool(notificationFeishu.onDriftTrigger, fallback.notification.feishu.onDriftTrigger),
+        onRiskTriggered: toBool(
+          notificationFeishu.onRiskTriggered,
+          toBool(notificationFeishu.onDriftTrigger, fallback.notification.feishu.onRiskTriggered),
+        ),
         onSuggestionGenerated: toBool(notificationFeishu.onSuggestionGenerated, fallback.notification.feishu.onSuggestionGenerated),
         onTradeExecuted: toBool(notificationFeishu.onTradeExecuted, fallback.notification.feishu.onTradeExecuted),
         dailyReport: toBool(notificationFeishu.dailyReport, fallback.notification.feishu.dailyReport),

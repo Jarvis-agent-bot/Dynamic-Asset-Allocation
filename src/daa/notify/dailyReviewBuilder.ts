@@ -1,6 +1,7 @@
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 import { marketRegimeActionLabelZh } from "@/src/daa/modules/marketContext/marketContextLabels";
+import { resolvePositionPnlPct } from "@/src/daa/modules/portfolio-state/positionPnl";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 /**
@@ -41,9 +42,8 @@ export async function buildDailyReviewText(bootstrap: WorkbenchBootstrap): Promi
       const sym = row.symbol.padEnd(12).slice(0, 12);
       const val = fmtMoney(row.valuationBase ?? 0).padStart(8);
       const wt = `${(row.actualWeightPct ?? 0).toFixed(1)}%`.padStart(7);
-      // 使用 unrealizedPnlPct（基准货币 PnL），fallback 到 costBasisInBase 计算
-      const pnlPct = computePnlPct(row);
-      const pnl = `${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%`.padStart(8);
+      const pnlPct = resolvePositionPnlPct(row);
+      const pnl = (pnlPct == null ? "N/A" : `${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%`).padStart(8);
       lines.push(`${sym}${val}${wt}${pnl}`);
     }
     lines.push("</pre>");
@@ -194,15 +194,6 @@ export async function buildDailyReviewText(bootstrap: WorkbenchBootstrap): Promi
 export const DAILY_REVIEW_PARSE_MODE = "HTML";
 
 // ─── Helpers ───
-
-function computePnlPct(row: { unrealizedPnlPct?: number | null; costBasisInBase?: number | null; valuationBase?: number | null }): number {
-  // 优先使用服务层预计算的 PnL
-  if (row.unrealizedPnlPct != null && Number.isFinite(row.unrealizedPnlPct)) return row.unrealizedPnlPct;
-  const costInBase = row.costBasisInBase ?? null;
-  const val = row.valuationBase ?? 0;
-  if (costInBase != null && costInBase > 0 && val > 0) return ((val - costInBase) / costInBase) * 100;
-  return 0;
-}
 
 function fmtNum(n: number): string {
   return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "N/A";

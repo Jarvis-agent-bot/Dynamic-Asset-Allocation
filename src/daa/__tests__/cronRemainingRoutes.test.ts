@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 import {
+  buildAssetUniverseView,
+  buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture,
   buildSystemConfigRow,
 } from '@/src/daa/__tests__/testDataFactories';
 
@@ -20,6 +22,7 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
         telegram: {
           enabled: true,
           onDriftTrigger: true,
+          onRiskTriggered: true,
           onSuggestionGenerated: false,
           onTradeExecuted: false,
           dailyReport: false,
@@ -27,6 +30,7 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
         feishu: {
           enabled: false,
           onDriftTrigger: false,
+          onRiskTriggered: false,
           onSuggestionGenerated: false,
           onTradeExecuted: false,
           dailyReport: false,
@@ -137,10 +141,12 @@ function buildDriftConfig(input: {
       telegram: {
         enabled: input.telegramEnabled ?? true,
         onDriftTrigger: input.telegramEnabled ?? true,
+        onRiskTriggered: input.telegramEnabled ?? true,
       },
       feishu: {
         enabled: input.feishuEnabled ?? false,
         onDriftTrigger: input.feishuEnabled ?? false,
+        onRiskTriggered: input.feishuEnabled ?? false,
       },
     },
   });
@@ -366,6 +372,114 @@ describe('cron-remaining-routes-v1', () => {
     });
     expect(vi.mocked(hasTodayNotification)).toHaveBeenCalledWith('drift_triggered');
     expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
+  });
+
+  it('drift-check 风控通知按统一阈值过滤未触发止损的资产', async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      policy: {
+        execution: { autoGenerateEnabled: false },
+        drift: { enabled: true, outerBandPct: 0.05 },
+      },
+      strategy: {
+        risk: {
+          perAssetStopLossPct: 0.22,
+          perAssetTakeProfitPct: 0.35,
+        },
+      },
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: false,
+          onRiskTriggered: true,
+        },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onRiskTriggered: false,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce(buildWorkbenchBootstrapFixture({
+      account: { cash: 3000, investableCash: 3000, frozenCash: 0, totalEquity: 50000 },
+      baseCurrency: 'USD',
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: 'CRYPTO::ETH-USD',
+          symbol: 'ETH-USD',
+          market: 'CRYPTO',
+          currency: 'USD',
+          holdingQty: 1,
+          holdingPrice: 1000,
+          lastPrice: 772,
+          valuationBase: 772,
+          costBasisInBase: 1000,
+          unrealizedPnlPct: -22.8,
+          actualWeightPct: 0,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 0,
+          fxMissing: false,
+        }),
+        buildAssetUniverseView({
+          assetKey: 'US::MU',
+          symbol: 'MU',
+          market: 'US',
+          currency: 'USD',
+          holdingQty: 10,
+          holdingPrice: 100,
+          lastPrice: 135.5,
+          valuationBase: 1355,
+          costBasisInBase: 1000,
+          unrealizedPnlPct: null,
+          actualWeightPct: 0,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 0,
+          fxMissing: false,
+        }),
+        buildAssetUniverseView({
+          assetKey: 'CRYPTO::SOL-USD',
+          symbol: 'SOL-USD',
+          market: 'CRYPTO',
+          currency: 'USD',
+          holdingQty: 10,
+          holdingPrice: 100,
+          lastPrice: 79.2,
+          valuationBase: 792,
+          costBasisInBase: 1000,
+          unrealizedPnlPct: -20.8,
+          actualWeightPct: 0,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 0,
+          fxMissing: false,
+        }),
+      ],
+      marketContext: { regime: 'risk_on', indicators: [], scopes: [] },
+      policy: { review: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, outerBandPct: 0.05 } },
+      execution: { logs: [] },
+      rebalance: {},
+      latestCycle: null,
+      warnings: [],
+    }));
+
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data).toMatchObject({
+      driftDetected: false,
+      riskTriggeredCount: 2,
+      riskTriggerNotified: true,
+    });
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
+    const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
+    expect(message).toContain('DAA 风控触发通知');
+    expect(message).toContain('止损触发: 1 项，止盈触发: 1 项');
+    expect(message).toContain('ETH-USD: 止损 -22.8%');
+    expect(message).toContain('MU: 止盈 35.5%');
+    expect(message).not.toContain('SOL-USD');
   });
 
   it('hf-ingest 在 fallback_seed 时记录 partial job log', async () => {
