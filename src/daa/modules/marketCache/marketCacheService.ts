@@ -40,6 +40,10 @@ const MARKET_CACHE_DEFAULT_CONCURRENCY = 6;
 const MARKET_CACHE_DEFAULT_REFRESH_BUDGET = 10;
 const MARKET_CACHE_DEFAULT_FRESH_SEC = 15 * 60;
 const MARKET_CACHE_DEFAULT_SERVE_STALE_SEC = 48 * 60 * 60;
+const MARKET_CACHE_DEFAULT_RAW_RETENTION_DAYS = 90;
+const MARKET_CACHE_LATEST_RAW_RETENTION_DAYS = 30;
+const MARKET_CACHE_LATEST_RAW_CLEANUP_BATCH_SIZE = 20_000;
+const MARKET_CACHE_LATEST_RAW_CLEANUP_MAX_BATCHES = 5;
 
 type FetchResult = {
   ok: boolean;
@@ -99,6 +103,24 @@ function resolveSnapshotStatus(snapshot: SnapshotLike | null | undefined, opts: 
     return "stale";
   }
   return classifyByAge(ageSec, opts);
+}
+
+function clampRawRetentionDays(value: unknown, fallback = MARKET_CACHE_DEFAULT_RAW_RETENTION_DAYS): number {
+  return Math.max(7, Math.min(365, Math.trunc(toFinite(value, fallback))));
+}
+
+function resolveRawPayloadRetentionDays(input: {
+  provider: string;
+  resource: string;
+  requestedDays: number;
+}): number {
+  const requestedDays = clampRawRetentionDays(input.requestedDays);
+  const provider = normalizeText(input.provider).toLowerCase();
+  const resource = normalizeText(input.resource).toLowerCase();
+  if (provider === "yfinance" && resource === "yfinance.chart.latest") {
+    return Math.min(requestedDays, MARKET_CACHE_LATEST_RAW_RETENTION_DAYS);
+  }
+  return requestedDays;
 }
 
 function resolveHistoryFallback(input: {
@@ -279,7 +301,7 @@ export async function getMarketPricesWithCache(input: {
   const source = normalizeText(input.source, "market_cache");
   const freshSec = Math.max(60, Math.min(2 * 3600, Math.trunc(toFinite(input.freshSec, MARKET_CACHE_DEFAULT_FRESH_SEC))));
   const serveStaleSec = Math.max(freshSec, Math.min(7 * 24 * 3600, Math.trunc(toFinite(input.serveStaleSec, MARKET_CACHE_DEFAULT_SERVE_STALE_SEC))));
-  const rawRetentionDays = Math.max(7, Math.min(365, Math.trunc(toFinite(input.rawRetentionDays, 90))));
+  const rawRetentionDays = clampRawRetentionDays(input.rawRetentionDays);
   const concurrency = Math.max(1, Math.min(12, Math.trunc(toFinite(input.concurrency, MARKET_CACHE_DEFAULT_CONCURRENCY))));
 
   const deduped = new Map<string, MarketPriceAssetInput>();
@@ -398,9 +420,15 @@ export async function getMarketPricesWithCache(input: {
         let rawRefId: string | null = null;
         if (fetchResult.payloadJson || fetchResult.payloadText) {
           try {
+            const rawResource = "yfinance.chart.latest";
+            const rawResourceRetentionDays = resolveRawPayloadRetentionDays({
+              provider,
+              resource: rawResource,
+              requestedDays: rawRetentionDays,
+            });
             const raw = await appendDaaExternalPayloadRaw({
               provider,
-              resource: "yfinance.chart.latest",
+              resource: rawResource,
               subjectKey: `${current.market}::${current.symbol}`,
               requestUrl: fetchResult.requestUrl || `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfinanceSymbol)}`,
               requestJson: {
@@ -413,7 +441,7 @@ export async function getMarketPricesWithCache(input: {
               payloadJson: fetchResult.payloadJson,
               payloadText: fetchResult.payloadText || null,
               fetchedAt,
-              expireAt: new Date(Date.now() + rawRetentionDays * 24 * 3600 * 1000).toISOString(),
+              expireAt: new Date(Date.now() + rawResourceRetentionDays * 24 * 3600 * 1000).toISOString(),
             });
             rawRefId = raw.id;
           } catch (err) {
@@ -598,12 +626,53 @@ export async function cleanupMarketCacheRawPayload(nowIso?: string): Promise<{ r
   return { removed, at };
 }
 
+async function deleteLatestYfinanceRawPayloadPastRetention(input: {
+  query: (sql: string, params?: unknown[]) => Promise<{ rowCount?: number | null }>;
+  retentionDays?: number;
+  batchSize?: number;
+  maxBatches?: number;
+}): Promise<number> {
+  const retentionDays = Math.min(
+    MARKET_CACHE_LATEST_RAW_RETENTION_DAYS,
+    clampRawRetentionDays(input.retentionDays, MARKET_CACHE_LATEST_RAW_RETENTION_DAYS),
+  );
+  const batchSize = Math.max(100, Math.min(50_000, Math.trunc(toFinite(input.batchSize, MARKET_CACHE_LATEST_RAW_CLEANUP_BATCH_SIZE))));
+  const maxBatches = Math.max(1, Math.min(20, Math.trunc(toFinite(input.maxBatches, MARKET_CACHE_LATEST_RAW_CLEANUP_MAX_BATCHES))));
+  let removed = 0;
+
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    const result = await input.query(
+      `
+        WITH doomed AS (
+          SELECT id
+          FROM daa_external_payload_raw_v1
+          WHERE provider = $1
+            AND resource = $2
+            AND fetched_at < (NOW() - ($3::INT * INTERVAL '1 day'))
+          ORDER BY fetched_at ASC
+          LIMIT $4
+        )
+        DELETE FROM daa_external_payload_raw_v1 raw
+        USING doomed
+        WHERE raw.id = doomed.id
+      `,
+      ["yfinance", "yfinance.chart.latest", retentionDays, batchSize],
+    );
+    const rowCount = Math.max(0, Math.trunc(toFinite(result.rowCount, 0)));
+    removed += rowCount;
+    if (rowCount < batchSize) break;
+  }
+
+  return removed;
+}
+
 /**
  * 统一数据清理：清理所有有 TTL 的表。
  * 由 cache-cleanup cron 每日调用。
  *
  * 保留策略：
- * - 原始 API 响应: 90 天
+ * - 高频 yfinance latest 原始响应: 30 天（分批清理）
+ * - 其他原始 API 响应: 按 expire_at 清理
  * - 外部请求健康日志: 90 天
  * - 价格快照(非 fresh): 30 天
  * - 市场指标快照: 90 天
@@ -622,6 +691,13 @@ export async function runUnifiedDataCleanup(): Promise<Record<string, number>> {
   // 1. 原始 API 响应：90 天（已有逻辑）
   const rawResult = await cleanupMarketCacheRawPayload();
   results.raw_payloads = rawResult.removed;
+
+  // 1.0 高频最新价 raw：只保留短期排障窗口；长期分析依赖结构化 price/history 表。
+  try {
+    results.raw_payload_latest = await deleteLatestYfinanceRawPayloadPastRetention({
+      query: (sql, params) => pool.query(sql, params),
+    });
+  } catch { results.raw_payload_latest = 0; }
 
   // 1.1 外部请求健康日志：90 天，避免健康面板日志无限增长。
   results.external_request_logs = await deleteOldDaaExternalRequestLogs({ retentionDays: 90 });

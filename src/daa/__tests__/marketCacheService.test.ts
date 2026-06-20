@@ -4,6 +4,13 @@ import type {
   DaaStoreMarketPriceSnapshot,
 } from "@/src/daa/store/daaStorePg";
 
+const pgMocks = vi.hoisted(() => ({
+  query: vi.fn(async (_sql: string, _params?: unknown[]): Promise<{ rows: unknown[]; rowCount: number }> => ({
+    rows: [],
+    rowCount: 0,
+  })),
+}));
+
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaExternalPayloadRaw: vi.fn(async () => ({ id: "raw_test_1" })),
   appendDaaMarketPriceHistoryRows: vi.fn(async () => 0),
@@ -43,7 +50,12 @@ vi.mock("@/src/daa/store/jobStore", () => ({
   appendDaaExternalRequestLog: vi.fn(async () => ({ id: "external_log_test" })),
 }));
 
+vi.mock("@/src/daa/pg/daaPg", () => ({
+  daaPgPool: vi.fn(() => ({ query: pgMocks.query })),
+}));
+
 import {
+  appendDaaExternalPayloadRaw,
   appendDaaMarketPriceHistoryRows,
   listDaaMarketPriceSnapshots,
   listLatestDaaMarketPriceHistoryRows,
@@ -52,6 +64,7 @@ import {
 import {
   getMarketPricesWithCache,
   refreshMarketPrices,
+  runUnifiedDataCleanup,
 } from "@/src/daa/modules/marketCache/marketCacheService";
 
 const TEST_NOW = new Date("2026-06-08T12:00:00.000Z");
@@ -116,6 +129,8 @@ describe("market-cache-service-v1", () => {
     vi.useFakeTimers();
     vi.setSystemTime(TEST_NOW);
     vi.clearAllMocks();
+    pgMocks.query.mockReset();
+    pgMocks.query.mockResolvedValue({ rows: [], rowCount: 0 });
     vi.mocked(listDaaMarketPriceSnapshots).mockResolvedValue([]);
     vi.mocked(listLatestDaaMarketPriceHistoryRows).mockResolvedValue([]);
   });
@@ -178,6 +193,22 @@ describe("market-cache-service-v1", () => {
     expect(result["US::MSFT"]?.price).toBe(321.45);
     expect(result["US::MSFT"]?.priceStatus).toBe("fresh");
     expect(vi.mocked(appendDaaMarketPriceHistoryRows)).toHaveBeenCalledTimes(1);
+  });
+
+  it("高频 yfinance latest raw payload 最多保留 30 天，避免 5 分钟 cron 堆满 raw 表", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(buildChartPayload(321.45, new Date().toISOString()), { status: 200 })));
+
+    await getMarketPricesWithCache({
+      assets: [{ market: "US", symbol: "MSFT", currency: "USD" }],
+      allowRefresh: true,
+      forceRefresh: true,
+      refreshBudget: 1,
+      rawRetentionDays: 90,
+    });
+
+    const rawInput = vi.mocked(appendDaaExternalPayloadRaw).mock.calls.at(-1)?.[0];
+    expect(rawInput?.resource).toBe("yfinance.chart.latest");
+    expect(rawInput?.expireAt).toBe("2026-07-08T12:00:00.000Z");
   });
 
   it("latest close 使用行情 bar 日期作为 priceUpdatedAt，而不是抓取时间", async () => {
@@ -328,5 +359,23 @@ describe("market-cache-service-v1", () => {
     expect(result.refreshed).toBe(0);
     expect(result.stale).toBe(1);
     expect(result.missing).toBe(0);
+  });
+
+  it("统一清理会分批删除超过 30 天的 yfinance latest raw payload", async () => {
+    pgMocks.query.mockImplementation(async (sql: string) => ({
+      rows: [],
+      rowCount: sql.includes("resource = $2") ? 3 : 0,
+    }));
+
+    const result = await runUnifiedDataCleanup();
+
+    const latestRawCleanupCall = pgMocks.query.mock.calls.find((call) =>
+      String(call[0]).includes("daa_external_payload_raw_v1")
+      && String(call[0]).includes("provider = $1")
+      && String(call[0]).includes("resource = $2"),
+    );
+    expect(latestRawCleanupCall).toBeTruthy();
+    expect(latestRawCleanupCall?.[1]).toEqual(["yfinance", "yfinance.chart.latest", 30, 20000]);
+    expect(result.raw_payload_latest).toBe(3);
   });
 });
