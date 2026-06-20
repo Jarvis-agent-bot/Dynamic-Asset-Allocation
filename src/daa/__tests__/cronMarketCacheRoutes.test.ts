@@ -85,6 +85,7 @@ vi.mock("@/src/daa/store/jobExecutionLogRepo", () => ({
 
 import { POST as priceRefreshPost } from "@/app/api/daa/cron/price-refresh/route";
 import { POST as cacheCleanupPost } from "@/app/api/daa/cron/cache-cleanup/route";
+import { extractDividendsFromRawPayloads } from "@/src/daa/modules/dividend/dividendExtractor";
 import { refreshMarketPrices, runUnifiedDataCleanup } from "@/src/daa/modules/marketCache/marketCacheService";
 import { appendCurrentDaaEquitySnapshot, getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
@@ -160,6 +161,16 @@ describe("cron-market-cache-routes-v1", () => {
       ts: "2026-03-06T12:00:00.000Z",
       source: "cron_price_refresh_hourly",
     });
+  });
+
+  it("price-refresh 不再执行股息抽取，避免高频 cron 扫描 raw payload", async () => {
+    const response = await priceRefreshPost(new Request("http://localhost/api/daa/cron/price-refresh", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(vi.mocked(extractDividendsFromRawPayloads)).not.toHaveBeenCalled();
+    expect(json.data.dividendExtracted).toBeUndefined();
   });
 
   it("cache-cleanup 返回删除计数", async () => {

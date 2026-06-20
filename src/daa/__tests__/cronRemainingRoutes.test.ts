@@ -77,48 +77,17 @@ vi.mock('@/src/daa/modules/workbench/workbenchRebalanceCycleService', () => ({
   })),
 }));
 
-vi.mock('@/src/daa/agent/autopilotOrchestrator', () => ({
-  runAutopilotLoop: vi.fn(async () => ({
+vi.mock('@/src/daa/automation/riskAutopilotTrigger', () => ({
+  runRiskAutopilotDaily: vi.fn(async () => ({
+    attempted: true,
     skipped: false,
-    reason: null,
-    source: 'cron_drift_check',
-    brainMode: 'autopilot',
-    bootstrapped: { attempted: true, created: 0, errors: [] },
-    cognitiveRun: {
-      attempted: true,
-      runId: 'agent-run-risk-1',
-      thesesUpdated: 1,
-      surprisesCount: 0,
-      totalTokens: 128,
-      durationMs: 50,
-      errors: [],
-    },
-    rebalance: {
-      attempted: true,
-      created: false,
-      cycleId: null,
-      proposalCount: 0,
-      autoExecute: {
-        attempted: false,
-        executed: false,
-        ordersCount: 0,
-        blockedReason: null,
-        error: null,
-      },
-      reason: '未形成新的调仓建议。',
-    },
-    targetWeightPool: {
-      attempted: false,
-      enabled: true,
-      targetPlanAvailable: false,
-      acceptedCount: 0,
-      skippedCount: 0,
-      attemptedCount: 0,
-      persistedCount: 0,
-      failedCount: 0,
-      minConfidence: 0,
-      reason: null,
-    },
+    reason: '未形成新的调仓建议。',
+    runId: 'agent-run-risk-1',
+    cycleId: null,
+    proposalCount: 0,
+    idempotencyKey: 'cron_risk_autopilot:2026-03-10:fixture',
+    jobId: 'risk-agent-job-1',
+    requestId: 'risk-agent-request-1',
   })),
 }));
 
@@ -168,7 +137,7 @@ import { sendTelegramByEnv } from '@/src/daa/notify/telegram';
 import { refreshMarketIndicators } from '@/src/daa/modules/marketContext/marketIndicatorService';
 import { buildWorkbenchBootstrap } from '@/src/daa/modules/workbench/workbenchReadService';
 import { generateWorkbenchRebalanceCycle } from '@/src/daa/modules/workbench/workbenchRebalanceCycleService';
-import { runAutopilotLoop } from '@/src/daa/agent/autopilotOrchestrator';
+import { runRiskAutopilotDaily } from '@/src/daa/automation/riskAutopilotTrigger';
 import { runHumanIngest } from '@/src/daa/hf/hfService';
 import { getDaaSystemConfig } from '@/src/daa/store/daaStorePg';
 import { hasTodayNotification } from '@/src/daa/store/notificationDeliveryLogRepo';
@@ -526,10 +495,14 @@ describe('cron-remaining-routes-v1', () => {
         proposalCount: 0,
       },
     });
-    expect(vi.mocked(runAutopilotLoop)).toHaveBeenCalledWith(expect.objectContaining({
+    expect(vi.mocked(runRiskAutopilotDaily)).toHaveBeenCalledWith(expect.objectContaining({
+      req: expect.any(Request),
       source: 'cron_drift_check',
       reason: '止盈止损触发即时审核',
-      affectedSymbols: ['ETH-USD', 'MU'],
+      triggers: [
+        { symbol: 'ETH-USD', triggerType: 'stop_loss' },
+        { symbol: 'MU', triggerType: 'take_profit' },
+      ],
     }));
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
     const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
@@ -631,7 +604,7 @@ describe('cron-remaining-routes-v1', () => {
         reason: 'no actionable risk triggers',
       },
     });
-    expect(vi.mocked(runAutopilotLoop)).not.toHaveBeenCalled();
+    expect(vi.mocked(runRiskAutopilotDaily)).not.toHaveBeenCalled();
     expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
   });
 

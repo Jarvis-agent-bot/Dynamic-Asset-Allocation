@@ -1,6 +1,6 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
-import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
+import { runRiskAutopilotDaily } from "@/src/daa/automation/riskAutopilotTrigger";
 import {
   buildAccountScopedRequestIdempotencyKey,
   buildUtcCronWindowIdempotencyKey,
@@ -62,11 +62,11 @@ async function runDriftCheckJob(req: Request, idempotencyKey: string | null): Pr
         const result = r as Record<string, unknown>;
         return { created: result.created, driftedAssetCount: result.driftedAssetCount, riskTriggeredCount: result.riskTriggeredCount };
       },
-      handler: async () => runDriftCheck(),
+      handler: async () => runDriftCheck(req),
     });
 }
 
-async function runDriftCheck() {
+async function runDriftCheck(req: Request) {
     const system = await getDaaSystemConfig();
     const policy = resolvePolicyConfig(system.config);
 
@@ -334,19 +334,22 @@ async function runDriftCheck() {
       }
 
       try {
-        const affectedSymbols = [...new Set(riskTriggeredAssets.map((asset) => asset.symbol).filter(Boolean))];
-        const review = await runAutopilotLoop({
+        const review = await runRiskAutopilotDaily({
+          req,
           source: "cron_drift_check",
           reason: "止盈止损触发即时审核",
-          affectedSymbols,
+          triggers: riskTriggeredAssets.map((asset) => ({
+            symbol: asset.symbol,
+            triggerType: asset.triggerType,
+          })),
         });
         riskAgentReview = {
           attempted: true,
           skipped: review.skipped,
-          reason: review.reason ?? review.rebalance.reason ?? null,
-          runId: review.cognitiveRun.runId,
-          cycleId: review.rebalance.cycleId,
-          proposalCount: review.rebalance.proposalCount,
+          reason: review.reason,
+          runId: review.runId,
+          cycleId: review.cycleId,
+          proposalCount: review.proposalCount,
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err || "");

@@ -1477,6 +1477,16 @@ const STORE_RUNTIME_MIGRATIONS: Migration[] = [
       await query("CREATE INDEX IF NOT EXISTS idx_daa_research_threads_owner_last_seen ON daa_research_threads(owner_account_id, last_seen_at DESC)");
     },
   },
+  {
+    id: "20260620_external_payload_raw_resource_fetched_index",
+    async apply(query) {
+      if (!(await tableExists(query, "daa_external_payload_raw_v1"))) return;
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_daa_external_payload_raw_v1_provider_resource_fetched
+        ON daa_external_payload_raw_v1(provider, resource, fetched_at DESC)
+      `);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

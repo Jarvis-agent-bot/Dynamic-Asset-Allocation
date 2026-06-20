@@ -64,4 +64,38 @@ describe("runtime-migrations-v1", () => {
       expect(value).toBe("2026-03-18T16:00:00.000Z");
     }
   });
+
+  it("为 raw payload 的 provider/resource/fetched_at 扫描补充索引", async () => {
+    const statements: string[] = [];
+    const applied = new Set<string>();
+
+    const query = async <Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
+      statements.push(sql);
+      if (sql.includes("CREATE TABLE IF NOT EXISTS daa_schema_migrations_v1")) {
+        return { rows: [] as Row[], rowCount: 0 };
+      }
+      if (sql.includes("SELECT id FROM daa_schema_migrations_v1")) {
+        const id = String(params[0] || "");
+        return { rows: (applied.has(id) ? [{ id }] : []) as unknown as Row[], rowCount: applied.has(id) ? 1 : 0 };
+      }
+      if (sql.includes("INSERT INTO daa_schema_migrations_v1")) {
+        applied.add(String(params[0] || ""));
+        return { rows: [] as Row[], rowCount: 1 };
+      }
+      if (sql.includes("SELECT 1 FROM information_schema.tables WHERE table_name = $1")) {
+        const tableName = String(params[0] || "");
+        return { rows: (tableName === "daa_external_payload_raw_v1" ? [{ ok: 1 }] : []) as unknown as Row[], rowCount: tableName === "daa_external_payload_raw_v1" ? 1 : 0 };
+      }
+      return { rows: [] as Row[], rowCount: 0 };
+    };
+
+    await runDaaStoreRuntimeMigrations(query);
+
+    expect(statements.join("\n")).toContain(
+      "idx_daa_external_payload_raw_v1_provider_resource_fetched",
+    );
+    expect(statements.join("\n")).toContain(
+      "ON daa_external_payload_raw_v1(provider, resource, fetched_at DESC)",
+    );
+  });
 });

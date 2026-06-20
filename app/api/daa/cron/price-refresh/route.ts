@@ -8,7 +8,6 @@ import {
   unwrapSingleAccountCronResult,
 } from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { extractDividendsFromRawPayloads } from "@/src/daa/modules/dividend/dividendExtractor";
 import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getMarketIndicatorRefreshSymbols } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import { WORKBENCH_FEATURED_ASSETS_CATALOG } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
@@ -184,15 +183,6 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
           logSwallowed("priceRefreshRoute.equitySnapshot", err);
         }
 
-        // Extract dividends from raw payloads stored during this refresh (last 10 days window)
-        let dividendExtracted = 0;
-        try {
-          const divResult = await extractDividendsFromRawPayloads({ sinceDays: 1 });
-          dividendExtracted = divResult.extracted;
-        } catch (err) {
-  logSwallowed("priceRefreshRoute.dividendExtraction", err);
-        }
-
         // ── 价格报警检测 ──
         let priceAlertsTriggered = 0;
         try {
@@ -270,7 +260,6 @@ async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): 
           refreshedAssets: refreshedAssetKeys.length,
           equitySnapshot,
           assetKeys: refreshedAssetKeys,
-          dividendExtracted,
           priceAlertsTriggered,
           at: new Date().toISOString(),
         };
