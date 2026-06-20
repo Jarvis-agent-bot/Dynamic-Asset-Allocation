@@ -41,7 +41,7 @@ const MARKET_CACHE_DEFAULT_REFRESH_BUDGET = 10;
 const MARKET_CACHE_DEFAULT_FRESH_SEC = 15 * 60;
 const MARKET_CACHE_DEFAULT_SERVE_STALE_SEC = 48 * 60 * 60;
 const MARKET_CACHE_DEFAULT_RAW_RETENTION_DAYS = 90;
-const MARKET_CACHE_LATEST_RAW_RETENTION_DAYS = 30;
+const MARKET_CACHE_LATEST_RAW_RETENTION_DAYS = 14;
 const MARKET_CACHE_LATEST_RAW_CLEANUP_BATCH_SIZE = 20_000;
 const MARKET_CACHE_LATEST_RAW_CLEANUP_MAX_BATCHES = 5;
 
@@ -671,7 +671,7 @@ async function deleteLatestYfinanceRawPayloadPastRetention(input: {
  * 由 cache-cleanup cron 每日调用。
  *
  * 保留策略：
- * - 高频 yfinance latest 原始响应: 30 天（分批清理）
+ * - 高频 yfinance latest 原始响应: 14 天（分批清理）
  * - 其他原始 API 响应: 按 expire_at 清理
  * - 外部请求健康日志: 90 天
  * - 价格快照(非 fresh): 30 天

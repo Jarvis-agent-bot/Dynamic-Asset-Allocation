@@ -195,7 +195,7 @@ describe("market-cache-service-v1", () => {
     expect(vi.mocked(appendDaaMarketPriceHistoryRows)).toHaveBeenCalledTimes(1);
   });
 
-  it("高频 yfinance latest raw payload 最多保留 30 天，避免 5 分钟 cron 堆满 raw 表", async () => {
+  it("高频 yfinance latest raw payload 最多保留 14 天，避免 5 分钟 cron 堆满 raw 表", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(buildChartPayload(321.45, new Date().toISOString()), { status: 200 })));
 
     await getMarketPricesWithCache({
@@ -208,7 +208,7 @@ describe("market-cache-service-v1", () => {
 
     const rawInput = vi.mocked(appendDaaExternalPayloadRaw).mock.calls.at(-1)?.[0];
     expect(rawInput?.resource).toBe("yfinance.chart.latest");
-    expect(rawInput?.expireAt).toBe("2026-07-08T12:00:00.000Z");
+    expect(rawInput?.expireAt).toBe("2026-06-22T12:00:00.000Z");
   });
 
   it("latest close 使用行情 bar 日期作为 priceUpdatedAt，而不是抓取时间", async () => {
@@ -361,7 +361,7 @@ describe("market-cache-service-v1", () => {
     expect(result.missing).toBe(0);
   });
 
-  it("统一清理会分批删除超过 30 天的 yfinance latest raw payload", async () => {
+  it("统一清理会分批删除超过 14 天的 yfinance latest raw payload", async () => {
     pgMocks.query.mockImplementation(async (sql: string) => ({
       rows: [],
       rowCount: sql.includes("resource = $2") ? 3 : 0,
@@ -375,7 +375,7 @@ describe("market-cache-service-v1", () => {
       && String(call[0]).includes("resource = $2"),
     );
     expect(latestRawCleanupCall).toBeTruthy();
-    expect(latestRawCleanupCall?.[1]).toEqual(["yfinance", "yfinance.chart.latest", 30, 20000]);
+    expect(latestRawCleanupCall?.[1]).toEqual(["yfinance", "yfinance.chart.latest", 14, 20000]);
     expect(result.raw_payload_latest).toBe(3);
   });
 });
