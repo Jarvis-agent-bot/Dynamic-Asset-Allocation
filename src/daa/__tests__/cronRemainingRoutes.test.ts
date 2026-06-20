@@ -77,6 +77,51 @@ vi.mock('@/src/daa/modules/workbench/workbenchRebalanceCycleService', () => ({
   })),
 }));
 
+vi.mock('@/src/daa/agent/autopilotOrchestrator', () => ({
+  runAutopilotLoop: vi.fn(async () => ({
+    skipped: false,
+    reason: null,
+    source: 'cron_drift_check',
+    brainMode: 'autopilot',
+    bootstrapped: { attempted: true, created: 0, errors: [] },
+    cognitiveRun: {
+      attempted: true,
+      runId: 'agent-run-risk-1',
+      thesesUpdated: 1,
+      surprisesCount: 0,
+      totalTokens: 128,
+      durationMs: 50,
+      errors: [],
+    },
+    rebalance: {
+      attempted: true,
+      created: false,
+      cycleId: null,
+      proposalCount: 0,
+      autoExecute: {
+        attempted: false,
+        executed: false,
+        ordersCount: 0,
+        blockedReason: null,
+        error: null,
+      },
+      reason: '未形成新的调仓建议。',
+    },
+    targetWeightPool: {
+      attempted: false,
+      enabled: true,
+      targetPlanAvailable: false,
+      acceptedCount: 0,
+      skippedCount: 0,
+      attemptedCount: 0,
+      persistedCount: 0,
+      failedCount: 0,
+      minConfidence: 0,
+      reason: null,
+    },
+  })),
+}));
+
 vi.mock('@/src/daa/notify/telegram', () => ({
   sendTelegramByEnv: vi.fn(async () => null),
 }));
@@ -123,6 +168,7 @@ import { sendTelegramByEnv } from '@/src/daa/notify/telegram';
 import { refreshMarketIndicators } from '@/src/daa/modules/marketContext/marketIndicatorService';
 import { buildWorkbenchBootstrap } from '@/src/daa/modules/workbench/workbenchReadService';
 import { generateWorkbenchRebalanceCycle } from '@/src/daa/modules/workbench/workbenchRebalanceCycleService';
+import { runAutopilotLoop } from '@/src/daa/agent/autopilotOrchestrator';
 import { runHumanIngest } from '@/src/daa/hf/hfService';
 import { getDaaSystemConfig } from '@/src/daa/store/daaStorePg';
 import { hasTodayNotification } from '@/src/daa/store/notificationDeliveryLogRepo';
@@ -472,7 +518,19 @@ describe('cron-remaining-routes-v1', () => {
       driftDetected: false,
       riskTriggeredCount: 2,
       riskTriggerNotified: true,
+      riskAgentReview: {
+        attempted: true,
+        skipped: false,
+        runId: 'agent-run-risk-1',
+        cycleId: null,
+        proposalCount: 0,
+      },
     });
+    expect(vi.mocked(runAutopilotLoop)).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'cron_drift_check',
+      reason: '止盈止损触发即时审核',
+      affectedSymbols: ['ETH-USD', 'MU'],
+    }));
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
     const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
     expect(message).toContain('DAA 风控触发通知');
@@ -480,6 +538,101 @@ describe('cron-remaining-routes-v1', () => {
     expect(message).toContain('ETH-USD: 止损 -22.8%');
     expect(message).toContain('MU: 止盈 35.5%');
     expect(message).not.toContain('SOL-USD');
+  });
+
+  it('drift-check 只有尘埃仓触发止盈止损时不通知也不触发 agent', async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      policy: {
+        execution: { autoGenerateEnabled: false },
+        drift: { enabled: true, outerBandPct: 0.05 },
+      },
+      strategy: {
+        constraints: {
+          minNotional: 200,
+        },
+        risk: {
+          perAssetStopLossPct: 0.2,
+          perAssetTakeProfitPct: 0.25,
+        },
+      },
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: false,
+          onRiskTriggered: true,
+        },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onRiskTriggered: false,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce(buildWorkbenchBootstrapFixture({
+      account: { cash: 3000, investableCash: 3000, frozenCash: 0, totalEquity: 50000 },
+      baseCurrency: 'USD',
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: 'HK::9988.HK',
+          symbol: '9988.HK',
+          market: 'HK',
+          currency: 'HKD',
+          holdingQty: 0.00000066,
+          holdingPrice: 100,
+          lastPrice: 79.2,
+          valuationBase: 0.79,
+          costBasisInBase: 1,
+          unrealizedPnlPct: -20.8,
+          actualWeightPct: 0,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 0,
+          fxMissing: false,
+        }),
+        buildAssetUniverseView({
+          assetKey: 'US::MU',
+          symbol: 'MU',
+          market: 'US',
+          currency: 'USD',
+          holdingQty: 0.0000000001,
+          holdingPrice: 100,
+          lastPrice: 156.5,
+          valuationBase: 1565,
+          costBasisInBase: 1000,
+          unrealizedPnlPct: 56.5,
+          actualWeightPct: 0,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 0,
+          fxMissing: false,
+        }),
+      ],
+      marketContext: { regime: 'risk_on', indicators: [], scopes: [] },
+      policy: { review: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, outerBandPct: 0.05 } },
+      execution: { logs: [] },
+      rebalance: {},
+      latestCycle: null,
+      warnings: [],
+    }));
+
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data).toMatchObject({
+      driftDetected: false,
+      riskTriggeredCount: 0,
+      riskIgnoredCount: 2,
+      riskTriggerNotified: false,
+      riskAgentReview: {
+        attempted: false,
+        skipped: true,
+        reason: 'no actionable risk triggers',
+      },
+    });
+    expect(vi.mocked(runAutopilotLoop)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
   });
 
   it('hf-ingest 在 fallback_seed 时记录 partial job log', async () => {

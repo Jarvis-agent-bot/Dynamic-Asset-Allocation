@@ -1,3 +1,9 @@
+import {
+  evaluatePositionMateriality,
+  type PositionMaterialityOptions,
+  type PositionMaterialityReason,
+} from "./positionMateriality";
+
 export type PositionPnlRow = {
   assetKey: string;
   symbol: string;
@@ -12,6 +18,12 @@ export type RiskTriggerAsset = {
   symbol: string;
   pnlPct: number;
   triggerType: "stop_loss" | "take_profit";
+};
+
+export type IgnoredRiskTriggerAsset = RiskTriggerAsset & {
+  ignoredReason: PositionMaterialityReason;
+  holdingQty: number | null;
+  valuationBase: number | null;
 };
 
 function toFiniteNumber(value: unknown): number | null {
@@ -43,18 +55,34 @@ export function collectRiskTriggerAssets(input: {
   rows: PositionPnlRow[];
   perAssetStopLossPct: number;
   perAssetTakeProfitPct: number;
+  materiality?: PositionMaterialityOptions | null;
 }): RiskTriggerAsset[] {
+  return collectRiskTriggerEvaluation(input).triggeredAssets;
+}
+
+export function collectRiskTriggerEvaluation(input: {
+  rows: PositionPnlRow[];
+  perAssetStopLossPct: number;
+  perAssetTakeProfitPct: number;
+  materiality?: PositionMaterialityOptions | null;
+}): {
+  triggeredAssets: RiskTriggerAsset[];
+  ignoredAssets: IgnoredRiskTriggerAsset[];
+} {
   const stopLossPct = Math.max(0, input.perAssetStopLossPct) * 100;
   const takeProfitPct = Math.max(0, input.perAssetTakeProfitPct) * 100;
-  const out: RiskTriggerAsset[] = [];
+  const triggeredAssets: RiskTriggerAsset[] = [];
+  const ignoredAssets: IgnoredRiskTriggerAsset[] = [];
 
   for (const row of input.rows) {
     if (!(row.holdingQty > 0)) continue;
     const pnlPct = resolvePositionPnlPct(row);
     if (pnlPct == null) continue;
 
+    const rowHits: RiskTriggerAsset[] = [];
+
     if (stopLossPct > 0 && pnlPct <= -stopLossPct) {
-      out.push({
+      rowHits.push({
         assetKey: row.assetKey,
         symbol: row.symbol,
         pnlPct,
@@ -63,14 +91,33 @@ export function collectRiskTriggerAssets(input: {
     }
 
     if (takeProfitPct > 0 && pnlPct >= takeProfitPct) {
-      out.push({
+      rowHits.push({
         assetKey: row.assetKey,
         symbol: row.symbol,
         pnlPct,
         triggerType: "take_profit",
       });
     }
+
+    if (rowHits.length === 0) continue;
+
+    if (input.materiality) {
+      const materiality = evaluatePositionMateriality(row, input.materiality);
+      if (!materiality.actionable) {
+        for (const hit of rowHits) {
+          ignoredAssets.push({
+            ...hit,
+            ignoredReason: materiality.reason,
+            holdingQty: materiality.holdingQty,
+            valuationBase: materiality.valuationBase,
+          });
+        }
+        continue;
+      }
+    }
+
+    triggeredAssets.push(...rowHits);
   }
 
-  return out;
+  return { triggeredAssets, ignoredAssets };
 }

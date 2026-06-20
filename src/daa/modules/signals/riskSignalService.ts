@@ -1,5 +1,6 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { collectRiskTriggerAssets } from "@/src/daa/modules/portfolio-state/positionPnl";
+import { buildPositionMaterialityOptions } from "@/src/daa/modules/portfolio-state/positionMateriality";
 import type { PortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateTypes";
 
 import type { RiskSignal } from "./signalTypes";
@@ -15,6 +16,9 @@ export function collectRiskSignals(input: {
     rows: input.portfolioState.positions,
     perAssetStopLossPct: risk.perAssetStopLossPct,
     perAssetTakeProfitPct: risk.perAssetTakeProfitPct,
+    materiality: buildPositionMaterialityOptions({
+      minNotionalBase: input.systemConfig.strategy.constraints.minNotional,
+    }),
   })) {
     out.push({
       signalId: `risk:${hit.triggerType}:${hit.assetKey}:${input.portfolioState.asOf}`,

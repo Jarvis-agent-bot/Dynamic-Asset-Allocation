@@ -1,5 +1,6 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
+import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 import {
   buildAccountScopedRequestIdempotencyKey,
   buildUtcCronWindowIdempotencyKey,
@@ -14,7 +15,8 @@ import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
-import { collectRiskTriggerAssets } from "@/src/daa/modules/portfolio-state/positionPnl";
+import { collectRiskTriggerEvaluation } from "@/src/daa/modules/portfolio-state/positionPnl";
+import { buildPositionMaterialityOptions } from "@/src/daa/modules/portfolio-state/positionMateriality";
 import { buildPortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateService";
 import { collectPortfolioSignals } from "@/src/daa/modules/signals/signalCollector";
 import type { DriftSignal } from "@/src/daa/modules/signals/signalTypes";
@@ -236,11 +238,34 @@ async function runDriftCheck() {
 
     // ── Phase D: 止损/止盈自动检测 ──
     const riskConfig = system.config.strategy?.risk;
-    const riskTriggeredAssets = collectRiskTriggerAssets({
+    const riskMateriality = buildPositionMaterialityOptions({
+      minNotionalBase: system.config.strategy?.constraints?.minNotional ?? 0,
+    });
+    const riskEvaluation = collectRiskTriggerEvaluation({
       rows: bootstrap.assetUniverse,
       perAssetStopLossPct: riskConfig?.perAssetStopLossPct ?? 0,
       perAssetTakeProfitPct: riskConfig?.perAssetTakeProfitPct ?? 0,
+      materiality: riskMateriality,
     });
+    const riskTriggeredAssets = riskEvaluation.triggeredAssets;
+    const riskIgnoredAssets = riskEvaluation.ignoredAssets;
+
+    let riskAgentReview: {
+      attempted: boolean;
+      skipped: boolean;
+      reason: string | null;
+      runId: string | null;
+      cycleId: string | null;
+      proposalCount: number;
+      error?: string | null;
+    } = {
+      attempted: false,
+      skipped: true,
+      reason: "no actionable risk triggers",
+      runId: null,
+      cycleId: null,
+      proposalCount: 0,
+    };
 
     // 止损/止盈通知
     let riskTriggerNotified = false;
@@ -260,6 +285,7 @@ async function runDriftCheck() {
       const riskMsg = [
         "DAA 风控触发通知",
         `止损触发: ${stopLossCount} 项，止盈触发: ${takeProfitCount} 项`,
+        ...(riskIgnoredAssets.length > 0 ? [`已忽略尘埃仓: ${riskIgnoredAssets.length} 项`] : []),
         ...riskLines,
       ].join("\n");
 
@@ -278,6 +304,8 @@ async function runDriftCheck() {
                   stopLossCount,
                   takeProfitCount,
                   assets: riskTriggeredAssets.slice(0, 8),
+                  ignoredCount: riskIgnoredAssets.length,
+                  materiality: riskMateriality,
                 },
               }),
             );
@@ -292,6 +320,8 @@ async function runDriftCheck() {
                   stopLossCount,
                   takeProfitCount,
                   assets: riskTriggeredAssets.slice(0, 8),
+                  ignoredCount: riskIgnoredAssets.length,
+                  materiality: riskMateriality,
                 },
               }),
             );
@@ -301,6 +331,35 @@ async function runDriftCheck() {
         }
       } catch (err) {
         logSwallowed("driftCheckRoute.riskNotify", err);
+      }
+
+      try {
+        const affectedSymbols = [...new Set(riskTriggeredAssets.map((asset) => asset.symbol).filter(Boolean))];
+        const review = await runAutopilotLoop({
+          source: "cron_drift_check",
+          reason: "止盈止损触发即时审核",
+          affectedSymbols,
+        });
+        riskAgentReview = {
+          attempted: true,
+          skipped: review.skipped,
+          reason: review.reason ?? review.rebalance.reason ?? null,
+          runId: review.cognitiveRun.runId,
+          cycleId: review.rebalance.cycleId,
+          proposalCount: review.rebalance.proposalCount,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err || "");
+        logSwallowed("driftCheckRoute.riskAgentReview", err);
+        riskAgentReview = {
+          attempted: true,
+          skipped: true,
+          reason: "risk agent review failed",
+          runId: null,
+          cycleId: null,
+          proposalCount: 0,
+          error: message,
+        };
       }
     }
 
@@ -320,8 +379,10 @@ async function runDriftCheck() {
       autoGenerateEnabled: policy.execution.autoGenerateEnabled,
       autoExecute,
       riskTriggeredCount: riskTriggeredAssets.length,
+      riskIgnoredCount: riskIgnoredAssets.length,
       riskTriggerNotified,
       riskTriggerSkippedReason,
+      riskAgentReview,
       at: new Date().toISOString(),
     };
 }

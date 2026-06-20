@@ -27,6 +27,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type AutopilotEventSource =
   | "cron_cognitive_agent"
+  | "cron_drift_check"
   | "cron_news_refresh"
   | "alpaca_ws_realtime"
   | "manual"

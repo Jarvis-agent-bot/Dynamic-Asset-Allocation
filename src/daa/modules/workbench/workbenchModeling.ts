@@ -8,6 +8,7 @@ import type {
 import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { isVisibleHolding } from "@/src/daa/modules/portfolio/holdingVisibility";
 import { collectRiskTriggerAssets, resolvePositionDrawdownPct } from "@/src/daa/modules/portfolio-state/positionPnl";
+import { buildPositionMaterialityOptions } from "@/src/daa/modules/portfolio-state/positionMateriality";
 import {
   getDaaCycleReport,
   getDaaHumanIngestState,
@@ -916,6 +917,9 @@ function buildRiskCycleDraft(input: {
         rows: input.bootstrap.assetUniverse,
         perAssetStopLossPct: input.perAssetStopLossPct,
         perAssetTakeProfitPct: input.perAssetTakeProfitPct,
+        materiality: buildPositionMaterialityOptions({
+            minNotionalBase: input.bootstrap.execution.minNotional,
+        }),
     }).map((hit) => [hit.assetKey, hit]));
     const driftSnapshot: RebalanceCycle["driftSnapshot"] = [];
     for (const row of input.bootstrap.assetUniverse) {
