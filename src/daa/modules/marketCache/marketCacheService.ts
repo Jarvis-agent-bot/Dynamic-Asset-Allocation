@@ -9,6 +9,11 @@ import {
   listLatestDaaMarketPriceHistoryRows,
   upsertDaaMarketPriceSnapshots,
 } from "@/src/daa/store/daaStorePg";
+import {
+  EXTERNAL_PAYLOAD_DEFAULT_RAW_RETENTION_DAYS,
+  EXTERNAL_PAYLOAD_LATEST_PRICE_RAW_RETENTION_DAYS,
+  resolveExternalPayloadRawRetentionDays,
+} from "@/src/daa/modules/externalPayload/externalPayloadPolicy";
 import { addDaysIsoUtc } from "@/src/market/yfinance";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, normalizeUpper, toFinite } from "@/src/daa/utils/normalize";
@@ -40,8 +45,8 @@ const MARKET_CACHE_DEFAULT_CONCURRENCY = 6;
 const MARKET_CACHE_DEFAULT_REFRESH_BUDGET = 10;
 const MARKET_CACHE_DEFAULT_FRESH_SEC = 15 * 60;
 const MARKET_CACHE_DEFAULT_SERVE_STALE_SEC = 48 * 60 * 60;
-const MARKET_CACHE_DEFAULT_RAW_RETENTION_DAYS = 90;
-const MARKET_CACHE_LATEST_RAW_RETENTION_DAYS = 14;
+const MARKET_CACHE_DEFAULT_RAW_RETENTION_DAYS = EXTERNAL_PAYLOAD_DEFAULT_RAW_RETENTION_DAYS;
+const MARKET_CACHE_LATEST_RAW_RETENTION_DAYS = EXTERNAL_PAYLOAD_LATEST_PRICE_RAW_RETENTION_DAYS;
 const MARKET_CACHE_LATEST_RAW_CLEANUP_BATCH_SIZE = 20_000;
 const MARKET_CACHE_LATEST_RAW_CLEANUP_MAX_BATCHES = 5;
 
@@ -114,13 +119,7 @@ function resolveRawPayloadRetentionDays(input: {
   resource: string;
   requestedDays: number;
 }): number {
-  const requestedDays = clampRawRetentionDays(input.requestedDays);
-  const provider = normalizeText(input.provider).toLowerCase();
-  const resource = normalizeText(input.resource).toLowerCase();
-  if (provider === "yfinance" && resource === "yfinance.chart.latest") {
-    return Math.min(requestedDays, MARKET_CACHE_LATEST_RAW_RETENTION_DAYS);
-  }
-  return requestedDays;
+  return resolveExternalPayloadRawRetentionDays(input);
 }
 
 function resolveHistoryFallback(input: {

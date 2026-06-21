@@ -13,6 +13,7 @@ export * from "./cashLedgerStore";
 export * from "./tradeTicketStore";
 export * from "./notificationStore";
 export * from "./marketCacheStore";
+export * from "./fundamentalStore";
 export * from "./jobStore";
 export * from "./targetWeightAuditStore";
 export * from "./storeSchema";

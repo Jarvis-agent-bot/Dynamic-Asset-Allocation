@@ -1487,6 +1487,118 @@ const STORE_RUNTIME_MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260621_fundamental_snapshot_v1",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_fundamental_snapshot_v1 (
+          provider TEXT NOT NULL,
+          normalized_symbol TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          market TEXT NOT NULL DEFAULT 'US',
+          currency TEXT NOT NULL DEFAULT 'USD',
+          market_cap NUMERIC,
+          trailing_pe NUMERIC,
+          pb_ratio NUMERIC,
+          debt_to_equity NUMERIC,
+          free_cashflow NUMERIC,
+          total_revenue NUMERIC,
+          net_income NUMERIC,
+          trailing_eps NUMERIC,
+          snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expire_at TIMESTAMPTZ,
+          raw_ref_id TEXT,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, normalized_symbol)
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_fundamental_snapshot_v1_updated_desc ON daa_fundamental_snapshot_v1(provider, updated_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_fundamental_snapshot_v1_expire ON daa_fundamental_snapshot_v1(expire_at)");
+      if (await tableExists(query, "daa_external_payload_raw_v1")) {
+        await query(`
+          WITH latest AS (
+            SELECT DISTINCT ON (subject_key)
+              id,
+              subject_key,
+              payload_json,
+              fetched_at,
+              expire_at
+            FROM daa_external_payload_raw_v1
+            WHERE provider = 'yfinance'
+              AND resource = 'fundamentals_yahoo_valuation_v4'
+              AND payload_json IS NOT NULL
+            ORDER BY subject_key, fetched_at DESC
+          )
+          INSERT INTO daa_fundamental_snapshot_v1 (
+            provider,
+            normalized_symbol,
+            symbol,
+            market,
+            currency,
+            market_cap,
+            trailing_pe,
+            pb_ratio,
+            debt_to_equity,
+            free_cashflow,
+            total_revenue,
+            net_income,
+            trailing_eps,
+            snapshot_json,
+            fetched_at,
+            expire_at,
+            raw_ref_id,
+            updated_at
+          )
+          SELECT
+            'yfinance',
+            UPPER(subject_key),
+            UPPER(COALESCE(NULLIF(payload_json->>'symbol', ''), subject_key)),
+            CASE
+              WHEN UPPER(subject_key) LIKE '%.HK' THEN 'HK'
+              WHEN UPPER(subject_key) LIKE '%.KS' OR UPPER(subject_key) LIKE '%.KQ' THEN 'KR'
+              WHEN UPPER(subject_key) LIKE '%.T' THEN 'JP'
+              WHEN UPPER(subject_key) LIKE '%-USD' THEN 'CRYPTO'
+              ELSE 'US'
+            END,
+            UPPER(COALESCE(NULLIF(payload_json->>'marketCapCurrency', ''), NULLIF(payload_json->>'marketPriceCurrency', ''), 'USD')),
+            CASE WHEN jsonb_typeof(payload_json->'marketCap') = 'number' THEN (payload_json->>'marketCap')::numeric ELSE NULL END,
+            CASE WHEN jsonb_typeof(payload_json->'trailingPE') = 'number' THEN (payload_json->>'trailingPE')::numeric ELSE NULL END,
+            CASE WHEN jsonb_typeof(payload_json->'pbRatio') = 'number' THEN (payload_json->>'pbRatio')::numeric ELSE NULL END,
+            CASE WHEN jsonb_typeof(payload_json->'debtToEquity') = 'number' THEN (payload_json->>'debtToEquity')::numeric ELSE NULL END,
+            CASE WHEN jsonb_typeof(payload_json->'freeCashflow') = 'number' THEN (payload_json->>'freeCashflow')::numeric ELSE NULL END,
+            CASE WHEN jsonb_typeof(payload_json->'totalRevenue') = 'number' THEN (payload_json->>'totalRevenue')::numeric ELSE NULL END,
+            CASE WHEN jsonb_typeof(payload_json->'netIncome') = 'number' THEN (payload_json->>'netIncome')::numeric ELSE NULL END,
+            CASE WHEN jsonb_typeof(payload_json->'trailingEps') = 'number' THEN (payload_json->>'trailingEps')::numeric ELSE NULL END,
+            payload_json,
+            fetched_at,
+            expire_at,
+            id,
+            NOW()
+          FROM latest
+          ON CONFLICT (provider, normalized_symbol)
+          DO UPDATE SET
+            symbol = EXCLUDED.symbol,
+            market = EXCLUDED.market,
+            currency = EXCLUDED.currency,
+            market_cap = EXCLUDED.market_cap,
+            trailing_pe = EXCLUDED.trailing_pe,
+            pb_ratio = EXCLUDED.pb_ratio,
+            debt_to_equity = EXCLUDED.debt_to_equity,
+            free_cashflow = EXCLUDED.free_cashflow,
+            total_revenue = EXCLUDED.total_revenue,
+            net_income = EXCLUDED.net_income,
+            trailing_eps = EXCLUDED.trailing_eps,
+            snapshot_json = EXCLUDED.snapshot_json,
+            fetched_at = EXCLUDED.fetched_at,
+            expire_at = EXCLUDED.expire_at,
+            raw_ref_id = EXCLUDED.raw_ref_id,
+            updated_at = NOW()
+          WHERE daa_fundamental_snapshot_v1.fetched_at <= EXCLUDED.fetched_at
+        `);
+      }
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

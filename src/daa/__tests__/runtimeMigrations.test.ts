@@ -98,4 +98,36 @@ describe("runtime-migrations-v1", () => {
       "ON daa_external_payload_raw_v1(provider, resource, fetched_at DESC)",
     );
   });
+
+  it("创建 fundamentals 结构化快照表并从现有 raw 缓存回填最新快照", async () => {
+    const statements: string[] = [];
+    const applied = new Set<string>();
+
+    const query = async <Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
+      statements.push(sql);
+      if (sql.includes("CREATE TABLE IF NOT EXISTS daa_schema_migrations_v1")) {
+        return { rows: [] as Row[], rowCount: 0 };
+      }
+      if (sql.includes("SELECT id FROM daa_schema_migrations_v1")) {
+        const id = String(params[0] || "");
+        return { rows: (applied.has(id) ? [{ id }] : []) as unknown as Row[], rowCount: applied.has(id) ? 1 : 0 };
+      }
+      if (sql.includes("INSERT INTO daa_schema_migrations_v1")) {
+        applied.add(String(params[0] || ""));
+        return { rows: [] as Row[], rowCount: 1 };
+      }
+      if (sql.includes("SELECT 1 FROM information_schema.tables WHERE table_name = $1")) {
+        const tableName = String(params[0] || "");
+        return { rows: (tableName === "daa_external_payload_raw_v1" ? [{ ok: 1 }] : []) as unknown as Row[], rowCount: tableName === "daa_external_payload_raw_v1" ? 1 : 0 };
+      }
+      return { rows: [] as Row[], rowCount: 0 };
+    };
+
+    await runDaaStoreRuntimeMigrations(query);
+
+    const sql = statements.join("\n");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS daa_fundamental_snapshot_v1");
+    expect(sql).toContain("INSERT INTO daa_fundamental_snapshot_v1");
+    expect(sql).toContain("fundamentals_yahoo_valuation_v4");
+  });
 });

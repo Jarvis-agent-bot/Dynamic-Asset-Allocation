@@ -362,6 +362,27 @@ export type DaaStoreMarketIndicatorSnapshot = {
   createdAt: string;
 };
 
+export type DaaStoreFundamentalSnapshot = {
+  provider: string;
+  normalizedSymbol: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  marketCap: number | null;
+  trailingPE: number | null;
+  pbRatio: number | null;
+  debtToEquity: number | null;
+  freeCashflow: number | null;
+  totalRevenue: number | null;
+  netIncome: number | null;
+  trailingEps: number | null;
+  snapshotJson: Record<string, unknown>;
+  fetchedAt: string;
+  expireAt: string | null;
+  rawRefId: string | null;
+  updatedAt: string;
+};
+
 export type DaaStoreHfHoldingSnapshot = {
   provider: string;
   fundCode: string;

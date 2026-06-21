@@ -1,12 +1,15 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   appendDaaExternalPayloadRaw,
-  getLatestDaaExternalPayloadRaw,
+  getLatestDaaFundamentalSnapshot,
+  upsertDaaFundamentalSnapshots,
 } from "@/src/daa/store/daaStorePg";
+import { resolveExternalPayloadRawRetentionDays } from "@/src/daa/modules/externalPayload/externalPayloadPolicy";
 import {
   fetchYfinanceFundamentals,
   type YfinanceFundamentalSnapshot,
 } from "@/src/market/yfinanceFundamentals";
+import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 
 export const YFINANCE_FUNDAMENTALS_CACHE_RESOURCE = "fundamentals_yahoo_valuation_v4";
 const FUNDAMENTALS_CACHE_TTL_MS_ = 24 * 60 * 60 * 1000;
@@ -36,17 +39,18 @@ async function readCachedSnapshot(input: {
   freshOnly: boolean;
   now?: Date;
 }): Promise<YfinanceFundamentalSnapshot | null> {
-  const cached = await getLatestDaaExternalPayloadRaw({
+  const normalizedSymbol = normalizeYfinanceSymbol(input.symbol);
+  if (!normalizedSymbol) return null;
+  const cached = await getLatestDaaFundamentalSnapshot({
     provider: "yfinance",
-    resource: YFINANCE_FUNDAMENTALS_CACHE_RESOURCE,
-    subjectKey: input.symbol,
+    normalizedSymbol,
     freshOnly: input.freshOnly,
     nowIso: input.now?.toISOString(),
   }).catch((error) => {
     logSwallowed(`yfinanceFundamentalsCache.cacheRead(${input.symbol})`, error);
     return null;
   });
-  return isSnapshot(cached?.payloadJson) ? cached.payloadJson : null;
+  return isSnapshot(cached?.snapshotJson) ? cached.snapshotJson : null;
 }
 
 export async function fetchYfinanceFundamentalsCached(symbol: string, opts: {
@@ -73,7 +77,14 @@ export async function fetchYfinanceFundamentalsCached(symbol: string, opts: {
       return { snapshot, cacheStatus: "partial_miss" };
     }
 
-    await appendDaaExternalPayloadRaw({
+    const structuredExpireAt = new Date(now.getTime() + FUNDAMENTALS_CACHE_TTL_MS_).toISOString();
+    let rawRefId: string | null = null;
+    const rawRetentionDays = resolveExternalPayloadRawRetentionDays({
+      provider: "yfinance",
+      resource: YFINANCE_FUNDAMENTALS_CACHE_RESOURCE,
+      requestedDays: 90,
+    });
+    const raw = await appendDaaExternalPayloadRaw({
       provider: "yfinance",
       resource: YFINANCE_FUNDAMENTALS_CACHE_RESOURCE,
       subjectKey: symbol,
@@ -81,9 +92,23 @@ export async function fetchYfinanceFundamentalsCached(symbol: string, opts: {
       responseStatus: 200,
       payloadJson: snapshot as unknown as Record<string, unknown>,
       fetchedAt: now.toISOString(),
-      expireAt: new Date(now.getTime() + FUNDAMENTALS_CACHE_TTL_MS_).toISOString(),
+      expireAt: new Date(now.getTime() + rawRetentionDays * 24 * 3600 * 1000).toISOString(),
     }).catch((error) => {
       logSwallowed(`yfinanceFundamentalsCache.cacheWrite(${symbol})`, error);
+      return null;
+    });
+    rawRefId = raw?.id ?? null;
+
+    await upsertDaaFundamentalSnapshots([{
+      provider: "yfinance",
+      normalizedSymbol: snapshot.normalizedSymbol,
+      symbol: snapshot.symbol,
+      snapshotJson: snapshot as unknown as Record<string, unknown>,
+      fetchedAt: now.toISOString(),
+      expireAt: structuredExpireAt,
+      rawRefId,
+    }]).catch((error) => {
+      logSwallowed(`yfinanceFundamentalsCache.snapshotWrite(${symbol})`, error);
     });
     return { snapshot, cacheStatus: "miss" };
   } catch (error) {

@@ -876,6 +876,32 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_upper_symbol_asof_desc
           ON daa_market_price_history_v1(UPPER(symbol), as_of_ts DESC);
 
+        CREATE TABLE IF NOT EXISTS daa_fundamental_snapshot_v1 (
+          provider TEXT NOT NULL,
+          normalized_symbol TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          market TEXT NOT NULL DEFAULT 'US',
+          currency TEXT NOT NULL DEFAULT 'USD',
+          market_cap NUMERIC,
+          trailing_pe NUMERIC,
+          pb_ratio NUMERIC,
+          debt_to_equity NUMERIC,
+          free_cashflow NUMERIC,
+          total_revenue NUMERIC,
+          net_income NUMERIC,
+          trailing_eps NUMERIC,
+          snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expire_at TIMESTAMPTZ,
+          raw_ref_id TEXT,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, normalized_symbol)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_fundamental_snapshot_v1_updated_desc
+          ON daa_fundamental_snapshot_v1(provider, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_fundamental_snapshot_v1_expire
+          ON daa_fundamental_snapshot_v1(expire_at);
+
         CREATE TABLE IF NOT EXISTS daa_market_candles_v1 (
           provider TEXT NOT NULL,
           market TEXT NOT NULL,
