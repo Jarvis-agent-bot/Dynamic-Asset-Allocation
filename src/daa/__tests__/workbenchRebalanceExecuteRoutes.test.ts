@@ -87,4 +87,30 @@ describe("workbench-rebalance-execute-routes", () => {
       executeMode: "all",
     });
   });
+
+  it("市场未开盘时执行路由返回业务错误而不是 500", async () => {
+    mocks.executeRebalanceViaGateway.mockRejectedValueOnce(new Error(`MARKET_CLOSED:${JSON.stringify({
+      code: "MARKET_CLOSED",
+      symbol: "MSFT",
+      marketStatus: {
+        market: "US",
+        reasonCode: "BEFORE_OPEN",
+        reasonZh: "US 当前尚未开盘（2026-06-22 02:44）。",
+      },
+      message: "MSFT 当前不可执行：US 当前尚未开盘（2026-06-22 02:44）。",
+    })}`));
+
+    const response = await executeRoute(new Request("http://localhost/api/daa/workbench/rebalance/execute", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cycleId: "cycle-1", executeMode: "selected" }),
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.ok).toBe(false);
+    expect(json.error.code).toBe("MARKET_CLOSED");
+    expect(json.error.message).toContain("MSFT 当前不可执行");
+    expect(json.error.details.symbol).toBe("MSFT");
+  });
 });

@@ -14,6 +14,7 @@ import {
 
 import { WorkbenchEmptyState } from "@/app/daa/dashboard/_components/WorkbenchFeedback";
 import { daaChartTooltipContentStyle, daaChartTooltipItemStyle, daaChartTooltipLabelStyle } from "@/app/daa/dashboard/_shared/chartTooltipStyles";
+import { summarizeSeriesCoverage } from "@/app/daa/dashboard/_shared/performanceCoverage";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -47,13 +48,6 @@ type ServerChartData = {
   benchmarks?: Array<{ key: string; label: string; changePct: number | null }>;
 };
 
-type SeriesCoverage = {
-  count: number;
-  startDate: string;
-  endDate: string;
-  maxGapDays: number;
-};
-
 const CHART_COLORS = {
   muted: "var(--muted)",
   grid: "var(--border)",
@@ -71,33 +65,6 @@ const BENCHMARK_LINE_COLORS: Record<string, string> = {
 function benchmarkLegendDotClass(benchmarkKey: string): string {
   if (benchmarkKey === "benchmarkQqq") return "bg-[var(--indigo)]";
   return "bg-[var(--success)]";
-}
-
-function daysBetween(leftDate: string, rightDate: string): number {
-  const left = Date.parse(`${leftDate}T00:00:00.000Z`);
-  const right = Date.parse(`${rightDate}T00:00:00.000Z`);
-  if (!Number.isFinite(left) || !Number.isFinite(right)) return 0;
-  return Math.max(0, Math.round((right - left) / 86_400_000));
-}
-
-function summarizeCoverage(data: Array<Record<string, unknown>>): SeriesCoverage | null {
-  const dates = data
-    .map((point) => String(point.date || ""))
-    .filter(Boolean)
-    .sort();
-  if (dates.length === 0) return null;
-
-  let maxGapDays = 0;
-  for (let index = 1; index < dates.length; index += 1) {
-    maxGapDays = Math.max(maxGapDays, daysBetween(dates[index - 1], dates[index]));
-  }
-
-  return {
-    count: dates.length,
-    startDate: dates[0],
-    endDate: dates[dates.length - 1],
-    maxGapDays,
-  };
 }
 
 const TIME_RANGES = [
@@ -298,7 +265,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
     [mode, currentServerData],
   );
   const returnPct = useMemo(() => currentServerData?.changePct ?? null, [currentServerData]);
-  const coverage = useMemo(() => summarizeCoverage(data), [data]);
+  const coverage = useMemo(() => summarizeSeriesCoverage(data), [data]);
 
   const equityChange = useMemo(() => {
     if (mode !== "equity") return null;
@@ -383,12 +350,15 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: Perf
 
       {coverage ? (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted)]">
-          <span>记录 {coverage.count} 条</span>
+          <span>快照 {coverage.pointCount} 条</span>
+          <span>覆盖 {coverage.dateCount} 个自然日</span>
           <span>{coverage.startDate} 至 {coverage.endDate}</span>
-          {coverage.maxGapDays > 3 ? (
+          {coverage.warningGapDays > 0 ? (
             <span className="rounded-[var(--radius-sm)] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-2 py-0.5 text-[var(--amber)]">
-              最大断档 {coverage.maxGapDays} 天
+              最近断档 {coverage.warningGapDays} 天
             </span>
+          ) : coverage.historicalMaxGapDays > 3 ? (
+            <span>早期历史空窗 {coverage.historicalMaxGapDays} 天</span>
           ) : null}
         </div>
       ) : null}
