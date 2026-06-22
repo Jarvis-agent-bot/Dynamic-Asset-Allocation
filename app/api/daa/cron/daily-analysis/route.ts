@@ -17,6 +17,7 @@ import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes"
 import { buildDailyReviewText, DAILY_REVIEW_PARSE_MODE } from "@/src/daa/notify/dailyReviewBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
+import { buildRebalanceSuggestionNotificationText } from "@/src/daa/notify/telegramNotificationComposer";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -52,52 +53,6 @@ type DailyAnalysisJobResult = {
   autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string; blockedReason?: string | null };
   at: string;
 };
-
-function buildNotifyText(input: {
-  cycleId: string;
-  triggerReason: string;
-  riskStatus: string;
-  proposals: Array<{ symbol: string; side: "BUY" | "SELL"; suggestedNotional: number }>;
-  agentDecisionSnapshot?: {
-    status: string;
-    summary: string;
-    keyRisks: string[];
-    keyOpportunities: string[];
-    overallConfidence: number;
-  } | null;
-}) {
-  const lines: string[] = [];
-  lines.push("DAA 自动再平衡建议");
-  lines.push(`周期 ID：${input.cycleId}`);
-  lines.push(`触发原因：${input.triggerReason}`);
-  lines.push(`风控状态：${input.riskStatus}`);
-
-  // Model summary section
-  const snap = input.agentDecisionSnapshot;
-  if (snap && snap.status === "ok" && snap.summary) {
-    lines.push("");
-    lines.push("*模型判断*");
-    lines.push(snap.summary.slice(0, 100));
-    if (snap.keyRisks.length > 0) {
-      lines.push(`风险: ${snap.keyRisks.slice(0, 2).join("; ")}`);
-    }
-    if (snap.keyOpportunities.length > 0) {
-      lines.push(`机会: ${snap.keyOpportunities.slice(0, 2).join("; ")}`);
-    }
-    lines.push(`置信度: ${snap.overallConfidence}%`);
-  }
-
-  lines.push("");
-  lines.push("建议明细：");
-  if (!input.proposals.length) {
-    lines.push("- 当前无建议交易。");
-  } else {
-    for (const row of input.proposals.slice(0, 12)) {
-      lines.push(`- ${row.symbol} ${row.side === "BUY" ? "买入" : "卖出"} ${row.suggestedNotional.toFixed(2)}`);
-    }
-  }
-  return lines.join("\n");
-}
 
 export async function POST(req: Request) {
   return withApiHandler(async () => {
@@ -192,7 +147,7 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
           let telegramSent = false;
           let feishuSent = false;
           if (cycle && generated.created && cycle.proposals.length > 0) {
-            const text = buildNotifyText({
+            const text = buildRebalanceSuggestionNotificationText({
               cycleId: cycle.cycleId,
               triggerReason: cycle.triggerReason,
               riskStatus: cycle.riskCheck.overallStatus,
@@ -202,6 +157,7 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
                 suggestedNotional: row.suggestedNotional,
               })),
               agentDecisionSnapshot: cycle.agentDecisionSnapshot ?? null,
+              source: "daily-analysis",
             });
 
             const sends: Promise<boolean>[] = [];
@@ -211,7 +167,11 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
                 triggerSource: "cron_daily_analysis",
                 jobId,
                 cycleId: cycle.cycleId,
+                parseMode: null,
                 requestJson: {
+                  notificationKind: "review_required",
+                  category: "rebalance",
+                  severity: "actionable",
                   proposalCount: cycle.proposals.length,
                   riskStatus: cycle.riskCheck.overallStatus,
                 },
@@ -224,6 +184,9 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
                 jobId,
                 cycleId: cycle.cycleId,
                 requestJson: {
+                  notificationKind: "review_required",
+                  category: "rebalance",
+                  severity: "actionable",
                   proposalCount: cycle.proposals.length,
                   riskStatus: cycle.riskCheck.overallStatus,
                 },

@@ -240,7 +240,7 @@ describe('cron-remaining-routes-v1', () => {
     expect(vi.mocked(buildWorkbenchBootstrap)).not.toHaveBeenCalled();
   });
 
-  it('drift-check 在自动生成关闭时仍检测偏移并发送通知', async () => {
+  it('drift-check 在自动生成关闭时仍检测偏移但不推送无行动通知', async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildDriftConfig({
       autoGenerateEnabled: false,
       telegramEnabled: true,
@@ -257,13 +257,12 @@ describe('cron-remaining-routes-v1', () => {
       driftedAssetCount: 1,
       autoGenerateEnabled: false,
     });
-    // Should still detect drift and send notification
+    // 仍检测偏移，但无新调仓周期时只进入日报/简报，不再刷 TG。
     expect(vi.mocked(buildWorkbenchBootstrap)).toHaveBeenCalledWith({ syncPrices: false, autoRiskCycle: true });
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
-    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
-    const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
-    expect(message).toContain('DAA 偏移检测通知');
-    expect(message).toContain('未生成新周期：自动生成已关闭');
+    expect(json.data.driftTriggerNotified).toBe(false);
+    expect(json.data.driftTriggerSkippedReason).toBe('drift notification folded into daily review');
+    expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
   });
 
   it('drift-check 成功创建周期时会预热 bootstrap 并发送通知', async () => {
@@ -292,7 +291,9 @@ describe('cron-remaining-routes-v1', () => {
       manual: false,
     });
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
-    expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('cycle-drift-1');
+    const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
+    expect(message).toContain('[行动] 调仓 | 调仓建议已生成');
+    expect(message).toContain('状态: 已生成调仓周期 cycle-drift-1');
     expect(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[1]).toMatchObject({
       cycleId: 'cycle-drift-1',
       requestJson: {
@@ -302,7 +303,7 @@ describe('cron-remaining-routes-v1', () => {
     });
   });
 
-  it('drift-check 未创建新周期时发送检测通知但不把旧周期当成本次建议', async () => {
+  it('drift-check 未创建新周期时不推送偏移流水通知', async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildDriftConfig({
       autoGenerateEnabled: true,
       telegramEnabled: true,
@@ -333,23 +334,10 @@ describe('cron-remaining-routes-v1', () => {
       referenceCycleId: 'cycle-old-1',
       proposalCount: 0,
       driftDetected: true,
-      driftTriggerNotified: true,
+      driftTriggerNotified: false,
+      driftTriggerSkippedReason: 'drift notification folded into daily review',
     });
-    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
-    const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
-    expect(message).toContain('DAA 偏移检测通知');
-    expect(message).toContain('未生成新周期：冷静期生效中，24 小时内不重复自动触发');
-    expect(message).toContain('参考最近周期: cycle-old-1（非本次生成）');
-    expect(message).not.toContain('建议数');
-    expect(message).not.toContain('风控');
-    expect(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[1]).toMatchObject({
-      cycleId: null,
-      requestJson: {
-        newCycleCreated: false,
-        referenceCycleId: 'cycle-old-1',
-        generationMessage: '冷静期生效中，24 小时内不重复自动触发',
-      },
-    });
+    expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
   });
 
   it('drift-check 当天已成功推送漂移通知时不重复发送旧周期提醒', async () => {
@@ -383,9 +371,9 @@ describe('cron-remaining-routes-v1', () => {
       referenceCycleId: 'cycle-drift-1',
       driftDetected: true,
       driftTriggerNotified: false,
-      driftTriggerSkippedReason: 'drift_triggered already delivered today',
+      driftTriggerSkippedReason: 'drift notification folded into daily review',
     });
-    expect(vi.mocked(hasTodayNotification)).toHaveBeenCalledWith('drift_triggered');
+    expect(vi.mocked(hasTodayNotification)).not.toHaveBeenCalledWith('drift_triggered');
     expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
   });
 
@@ -506,8 +494,9 @@ describe('cron-remaining-routes-v1', () => {
     }));
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
     const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
-    expect(message).toContain('DAA 风控触发通知');
-    expect(message).toContain('止损触发: 1 项，止盈触发: 1 项');
+    expect(message).toContain('[紧急] 风控 | 止盈/止损触发');
+    expect(message).toContain('状态: 已完成即时审核，未生成新建议：未形成新的调仓建议。');
+    expect(message).toContain('触发: 止损 1 项 / 止盈 1 项');
     expect(message).toContain('ETH-USD: 止损 -22.8%');
     expect(message).toContain('MU: 止盈 35.5%');
     expect(message).not.toContain('SOL-USD');

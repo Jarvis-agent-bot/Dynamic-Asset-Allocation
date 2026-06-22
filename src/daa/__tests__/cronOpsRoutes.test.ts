@@ -722,9 +722,13 @@ describe("cron-ops-routes-v1", () => {
     expect(json.data.proposalCount).toBe(1);
     expect(json.data.marketRefresh).toEqual(expect.objectContaining({ ok: true, refreshedCount: 4 }));
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
-    expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
+    const tgText = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || "");
+    expect(tgText).toContain("[行动] 调仓 | 调仓建议已生成");
+    expect(tgText).toContain("AAPL");
     expect(vi.mocked(sendFeishuByEnv)).toHaveBeenCalledTimes(1);
-    expect(String(vi.mocked(sendFeishuByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
+    const feishuText = String(vi.mocked(sendFeishuByEnv).mock.calls[0]?.[0] || "");
+    expect(feishuText).toContain("[行动] 调仓 | 调仓建议已生成");
+    expect(feishuText).toContain("AAPL");
   });
 
   it("daily-analysis 自动执行会先应用单笔 NAV 硬上限", async () => {

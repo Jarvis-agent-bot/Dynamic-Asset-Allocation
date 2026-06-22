@@ -12,6 +12,7 @@ import {
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
+import { buildDriftNotificationText, buildRiskTriggerNotificationText } from "@/src/daa/notify/telegramNotificationComposer";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
@@ -128,86 +129,74 @@ async function runDriftCheck(req: Request) {
     const referenceCycle = generated?.created === false ? cycle : null;
     const notif = system.config.notification;
 
-    // Phase B: drift notification (independent of autoGenerateEnabled).
-    // 漂移持续存在时，cron 一天会进来多次；同类通知当天成功投递后不再重复刷屏。
+    // Phase B: drift notification.
+    // 只有偏移产生新调仓周期时即时推送；纯观察类偏移折叠进每日复核/投资助理简报。
     let driftTriggerNotified = false;
     let driftTriggerSkippedReason: string | null = null;
     try {
-      const shouldNotifyTrigger = hasDrift || newlyCreatedCycle != null;
-      if (shouldNotifyTrigger) {
-        const isRepeatedDriftReminder = hasDrift && generated?.created !== true;
-        if (isRepeatedDriftReminder && await hasTodayNotification("drift_triggered")) {
-          driftTriggerSkippedReason = "drift_triggered already delivered today";
-        } else {
-          const topDrift = driftedAssets.slice(0, 5);
-          const driftLines = topDrift.map(
-            (a) => `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
-          );
+      if (hasDrift && !newlyCreatedCycle) {
+        driftTriggerSkippedReason = "drift notification folded into daily review";
+      } else if (newlyCreatedCycle) {
+        const topDrift = driftedAssets.slice(0, 5);
+        const driftLines = topDrift.map(
+          (a) => `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
+        );
 
-          const noNewCycleReason = policy.execution.autoGenerateEnabled
-            ? (generated?.message ?? "未创建新的调仓周期")
-            : "自动生成已关闭";
-          const notificationTitle = hasDrift
-            ? (newlyCreatedCycle ? "DAA 偏移触发通知" : "DAA 偏移检测通知")
-            : "DAA 自动调仓触发通知";
-          const msgParts = [
-            notificationTitle,
-            newlyCreatedCycle ? `Cycle: ${newlyCreatedCycle.cycleId}` : `未生成新周期：${noNewCycleReason}`,
-            `偏移标的: ${driftedAssets.length} 个`,
-            ...driftLines,
-          ];
-          if (referenceCycle) {
-            msgParts.push(`参考最近周期: ${referenceCycle.cycleId}（非本次生成）`);
-          }
-          if (newlyCreatedCycle) {
-            msgParts.push(`建议数: ${newlyCreatedCycle.proposals.length}`);
-            msgParts.push(`风控: ${newlyCreatedCycle.riskCheck.overallStatus}`);
-            if (newlyCreatedCycle.policySnapshot) {
-              msgParts.push(`策略: ${newlyCreatedCycle.policySnapshot.decision.action} / score ${newlyCreatedCycle.policySnapshot.decision.score.toFixed(1)} / ${newlyCreatedCycle.policySnapshot.decision.noTradeBandState}`);
-            }
-          } else if (generated?.message) {
-            msgParts.push(`策略观察: ${generated.message}`);
-          }
-          const driftMsg = msgParts.join("\n");
+        const driftMsg = buildDriftNotificationText({
+          newCycleCreated: true,
+          cycleId: newlyCreatedCycle.cycleId,
+          reason: "偏移量阈值触发",
+          driftedAssetCount: driftedAssets.length,
+          driftLines,
+          proposalCount: newlyCreatedCycle.proposals.length,
+          riskStatus: newlyCreatedCycle.riskCheck.overallStatus,
+          source: "drift-check",
+        });
 
-          const sends: Promise<boolean>[] = [];
-          if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
-            sends.push(sendTelegramByEnv(driftMsg, {
-              eventType: "drift_triggered",
-              triggerSource: "cron_drift_check",
-              cycleId: newlyCreatedCycle?.cycleId || null,
-              requestJson: {
-                driftedAssetCount: driftedAssets.length,
-                autoGenerateEnabled: policy.execution.autoGenerateEnabled,
-                driftThresholdPct: driftThreshold,
-                newCycleCreated: newlyCreatedCycle != null,
-                referenceCycleId: referenceCycle?.cycleId || null,
-                generationMessage: generated?.message ?? null,
-                policyOuterBandPct: policy.drift.outerBandPct,
-                signalCount: signals.length,
-              },
-            }));
-          }
-          if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
-            sends.push(sendFeishuByEnv(driftMsg, {
-              eventType: "drift_triggered",
-              triggerSource: "cron_drift_check",
-              cycleId: newlyCreatedCycle?.cycleId || null,
-              requestJson: {
-                driftedAssetCount: driftedAssets.length,
-                autoGenerateEnabled: policy.execution.autoGenerateEnabled,
-                driftThresholdPct: driftThreshold,
-                newCycleCreated: newlyCreatedCycle != null,
-                referenceCycleId: referenceCycle?.cycleId || null,
-                generationMessage: generated?.message ?? null,
-                policyOuterBandPct: policy.drift.outerBandPct,
-                signalCount: signals.length,
-              },
-            }));
-          }
-          await Promise.allSettled(sends);
-          driftTriggerNotified = sends.length > 0;
+        const sends: Promise<boolean>[] = [];
+        if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
+          sends.push(sendTelegramByEnv(driftMsg, {
+            eventType: "drift_triggered",
+            triggerSource: "cron_drift_check",
+            cycleId: newlyCreatedCycle.cycleId,
+            parseMode: null,
+            requestJson: {
+              notificationKind: "review_required",
+              category: "rebalance",
+              severity: "actionable",
+              driftedAssetCount: driftedAssets.length,
+              autoGenerateEnabled: policy.execution.autoGenerateEnabled,
+              driftThresholdPct: driftThreshold,
+              newCycleCreated: true,
+              referenceCycleId: referenceCycle?.cycleId || null,
+              generationMessage: generated?.message ?? null,
+              policyOuterBandPct: policy.drift.outerBandPct,
+              signalCount: signals.length,
+            },
+          }));
         }
+        if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
+          sends.push(sendFeishuByEnv(driftMsg, {
+            eventType: "drift_triggered",
+            triggerSource: "cron_drift_check",
+            cycleId: newlyCreatedCycle.cycleId,
+            requestJson: {
+              notificationKind: "review_required",
+              category: "rebalance",
+              severity: "actionable",
+              driftedAssetCount: driftedAssets.length,
+              autoGenerateEnabled: policy.execution.autoGenerateEnabled,
+              driftThresholdPct: driftThreshold,
+              newCycleCreated: true,
+              referenceCycleId: referenceCycle?.cycleId || null,
+              generationMessage: generated?.message ?? null,
+              policyOuterBandPct: policy.drift.outerBandPct,
+              signalCount: signals.length,
+            },
+          }));
+        }
+        await Promise.allSettled(sends);
+        driftTriggerNotified = sends.length > 0;
       }
     } catch (err) {
       logSwallowed("driftCheckRoute.notify", err);
@@ -278,61 +267,6 @@ async function runDriftCheck(req: Request) {
         (a) => a.triggerType === "take_profit",
       ).length;
 
-      const riskLines = riskTriggeredAssets.slice(0, 8).map(
-        (a) =>
-          `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: ${a.triggerType === "stop_loss" ? "止损" : "止盈"} ${a.pnlPct.toFixed(1)}%`,
-      );
-      const riskMsg = [
-        "DAA 风控触发通知",
-        `止损触发: ${stopLossCount} 项，止盈触发: ${takeProfitCount} 项`,
-        ...(riskIgnoredAssets.length > 0 ? [`已忽略尘埃仓: ${riskIgnoredAssets.length} 项`] : []),
-        ...riskLines,
-      ].join("\n");
-
-      try {
-        if (await hasTodayNotification("risk_triggered")) {
-          riskTriggerSkippedReason = "risk_triggered already delivered today";
-        } else {
-          const sends: Promise<boolean>[] = [];
-          if (notif.telegram.enabled && notif.telegram.onRiskTriggered) {
-            sends.push(
-              sendTelegramByEnv(riskMsg, {
-                eventType: "risk_triggered",
-                triggerSource: "cron_drift_check",
-                cycleId: null,
-                requestJson: {
-                  stopLossCount,
-                  takeProfitCount,
-                  assets: riskTriggeredAssets.slice(0, 8),
-                  ignoredCount: riskIgnoredAssets.length,
-                  materiality: riskMateriality,
-                },
-              }),
-            );
-          }
-          if (notif.feishu.enabled && notif.feishu.onRiskTriggered) {
-            sends.push(
-              sendFeishuByEnv(riskMsg, {
-                eventType: "risk_triggered",
-                triggerSource: "cron_drift_check",
-                cycleId: null,
-                requestJson: {
-                  stopLossCount,
-                  takeProfitCount,
-                  assets: riskTriggeredAssets.slice(0, 8),
-                  ignoredCount: riskIgnoredAssets.length,
-                  materiality: riskMateriality,
-                },
-              }),
-            );
-          }
-          await Promise.allSettled(sends);
-          riskTriggerNotified = sends.length > 0;
-        }
-      } catch (err) {
-        logSwallowed("driftCheckRoute.riskNotify", err);
-      }
-
       try {
         const review = await runRiskAutopilotDaily({
           req,
@@ -363,6 +297,72 @@ async function runDriftCheck(req: Request) {
           proposalCount: 0,
           error: message,
         };
+      }
+
+      const riskMsg = buildRiskTriggerNotificationText({
+        stopLossCount,
+        takeProfitCount,
+        ignoredCount: riskIgnoredAssets.length,
+        assets: riskTriggeredAssets.slice(0, 8).map((asset) => ({
+          label: formatAssetLabel({ symbol: asset.symbol, assetKey: asset.assetKey }),
+          triggerType: asset.triggerType,
+          pnlPct: asset.pnlPct,
+        })),
+        agentReview: riskAgentReview,
+        source: "drift-check",
+      });
+
+      try {
+        if (await hasTodayNotification("risk_triggered")) {
+          riskTriggerSkippedReason = "risk_triggered already delivered today";
+        } else {
+          const sends: Promise<boolean>[] = [];
+          if (notif.telegram.enabled && notif.telegram.onRiskTriggered) {
+            sends.push(
+              sendTelegramByEnv(riskMsg, {
+                eventType: "risk_triggered",
+                triggerSource: "cron_drift_check",
+                cycleId: riskAgentReview.cycleId,
+                parseMode: null,
+                requestJson: {
+                  notificationKind: "risk_alert",
+                  category: "risk",
+                  severity: "critical",
+                  stopLossCount,
+                  takeProfitCount,
+                  assets: riskTriggeredAssets.slice(0, 8),
+                  ignoredCount: riskIgnoredAssets.length,
+                  materiality: riskMateriality,
+                  agentReview: riskAgentReview,
+                },
+              }),
+            );
+          }
+          if (notif.feishu.enabled && notif.feishu.onRiskTriggered) {
+            sends.push(
+              sendFeishuByEnv(riskMsg, {
+                eventType: "risk_triggered",
+                triggerSource: "cron_drift_check",
+                cycleId: riskAgentReview.cycleId,
+                requestJson: {
+                  notificationKind: "risk_alert",
+                  category: "risk",
+                  severity: "critical",
+                  stopLossCount,
+                  takeProfitCount,
+                  assets: riskTriggeredAssets.slice(0, 8),
+                  ignoredCount: riskIgnoredAssets.length,
+                  materiality: riskMateriality,
+                  agentReview: riskAgentReview,
+                },
+              }),
+            );
+          }
+          await Promise.allSettled(sends);
+          riskTriggerNotified = sends.length > 0;
+        }
+      } catch (err) {
+        logSwallowed("driftCheckRoute.riskNotify", err);
       }
     }
 
