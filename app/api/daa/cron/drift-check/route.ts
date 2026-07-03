@@ -13,10 +13,10 @@ import { requireCronAuth } from "@/src/daa/cron/auth";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { buildDriftNotificationText, buildRiskTriggerNotificationText } from "@/src/daa/notify/telegramNotificationComposer";
-import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { getDaaSystemConfig, listDaaRebalanceCycles } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
-import { collectRiskTriggerEvaluation } from "@/src/daa/modules/portfolio-state/positionPnl";
+import { collectRiskTriggerEvaluation, type RiskTriggerAsset } from "@/src/daa/modules/portfolio-state/positionPnl";
 import { buildPositionMaterialityOptions } from "@/src/daa/modules/portfolio-state/positionMateriality";
 import { buildPortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateService";
 import { collectPortfolioSignals } from "@/src/daa/modules/signals/signalCollector";
@@ -33,6 +33,83 @@ function cronAssetKey(asset: { assetKey?: string | null; market?: string | null;
   const symbol = String(asset.symbol || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
   const market = String(asset.market || "US").trim().toUpperCase() || "US";
   return String(asset.assetKey || `${market}::${symbol}`).trim().toUpperCase();
+}
+
+type RiskAutoExecuteSummary = {
+  attempted: boolean;
+  executed: boolean;
+  ordersCount: number;
+  cycleId: string | null;
+  error?: string | null;
+  blockedReason?: string | null;
+};
+
+const EMPTY_RISK_AUTO_EXECUTE: RiskAutoExecuteSummary = {
+  attempted: false,
+  executed: false,
+  ordersCount: 0,
+  cycleId: null,
+};
+
+function normalizeRiskMatchKey(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+async function executePendingRiskCycleForTriggers(input: {
+  triggeredAssets: RiskTriggerAsset[];
+  systemConfig: Awaited<ReturnType<typeof getDaaSystemConfig>>["config"];
+  totalEquity: number | null | undefined;
+}): Promise<RiskAutoExecuteSummary> {
+  if (input.triggeredAssets.length === 0) return { ...EMPTY_RISK_AUTO_EXECUTE };
+
+  const assetKeys = new Set(input.triggeredAssets.map((asset) => normalizeRiskMatchKey(asset.assetKey)).filter(Boolean));
+  const symbols = new Set(input.triggeredAssets.map((asset) => normalizeRiskMatchKey(asset.symbol)).filter(Boolean));
+  if (assetKeys.size === 0 && symbols.size === 0) return { ...EMPTY_RISK_AUTO_EXECUTE };
+
+  const cycles = await listDaaRebalanceCycles(30).catch((err) => {
+    logSwallowed("driftCheckRoute.riskAutoExecute.listCycles", err);
+    return [];
+  });
+  const riskCycle = cycles.find((cycle) => {
+    if (cycle.triggerSource !== "risk") return false;
+    if (cycle.status !== "generated" && cycle.status !== "reviewing") return false;
+    if (cycle.executedAt || cycle.cancelledAt) return false;
+    return cycle.proposals.some((proposal) => {
+      if (proposal.selected === false || proposal.side !== "SELL") return false;
+      const assetKey = normalizeRiskMatchKey(proposal.assetKey);
+      const symbol = normalizeRiskMatchKey(proposal.symbol);
+      return assetKeys.has(assetKey) || symbols.has(symbol);
+    });
+  });
+  if (!riskCycle) return { ...EMPTY_RISK_AUTO_EXECUTE };
+
+  try {
+    const result = await executeAutoRebalanceCycle({
+      cycle: riskCycle,
+      systemConfig: input.systemConfig,
+      triggerSource: "risk",
+      totalEquity: input.totalEquity,
+    });
+    return {
+      attempted: result.attempted,
+      executed: result.executed,
+      ordersCount: result.ordersCount,
+      cycleId: riskCycle.cycleId,
+      error: result.error || null,
+      blockedReason: result.blockedReason || null,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err || "");
+    logSwallowed("driftCheckRoute.riskAutoExecute", err);
+    return {
+      attempted: true,
+      executed: false,
+      ordersCount: 0,
+      cycleId: riskCycle.cycleId,
+      error: message,
+      blockedReason: message,
+    };
+  }
 }
 
 export async function POST(req: Request) {
@@ -255,6 +332,7 @@ async function runDriftCheck(req: Request) {
       cycleId: null,
       proposalCount: 0,
     };
+    let riskAutoExecute: RiskAutoExecuteSummary = { ...EMPTY_RISK_AUTO_EXECUTE };
 
     // 止损/止盈通知
     let riskTriggerNotified = false;
@@ -266,6 +344,12 @@ async function runDriftCheck(req: Request) {
       const takeProfitCount = riskTriggeredAssets.filter(
         (a) => a.triggerType === "take_profit",
       ).length;
+
+      riskAutoExecute = await executePendingRiskCycleForTriggers({
+        triggeredAssets: riskTriggeredAssets,
+        systemConfig: system.config,
+        totalEquity: bootstrap.account.totalEquity,
+      });
 
       try {
         const review = await runRiskAutopilotDaily({
@@ -309,6 +393,7 @@ async function runDriftCheck(req: Request) {
           pnlPct: asset.pnlPct,
         })),
         agentReview: riskAgentReview,
+        riskAutoExecute,
         source: "drift-check",
       });
 
@@ -334,6 +419,7 @@ async function runDriftCheck(req: Request) {
                   ignoredCount: riskIgnoredAssets.length,
                   materiality: riskMateriality,
                   agentReview: riskAgentReview,
+                  riskAutoExecute,
                 },
               }),
             );
@@ -354,6 +440,7 @@ async function runDriftCheck(req: Request) {
                   ignoredCount: riskIgnoredAssets.length,
                   materiality: riskMateriality,
                   agentReview: riskAgentReview,
+                  riskAutoExecute,
                 },
               }),
             );
@@ -386,6 +473,7 @@ async function runDriftCheck(req: Request) {
       riskTriggerNotified,
       riskTriggerSkippedReason,
       riskAgentReview,
+      riskAutoExecute,
       at: new Date().toISOString(),
     };
 }

@@ -203,7 +203,7 @@ docker compose up -d daa-web
 | `*/30 * * * *` | `news-refresh` | 每 30 分钟批量刷新新闻（Alpaca REST + Yahoo RSS；WS 实时推送另走 daa-ws-news） |
 | `*/30 * * * *` | `market-indicators-refresh` | 每 30 分钟刷新 VIX / 比率类指标 |
 | `0 * * * *` | `daily-analysis` | 每小时生成宏观 LLM 分析 |
-| `0 1,9 * * *` | `drift-check` | 01:00 和 09:00 做漂移检测与调仓建议生成 |
+| `3 * * * 1-5` | `drift-check` | 工作日每小时做漂移/止盈止损检测，便于在各市场开盘窗口补执行风险周期 |
 | `0 8 * * *` | `hf-ingest` | 每日 08:00 同步基金经理持仓 |
 | `30 1 * * *` | `dividend-refresh` | 每日 01:30 刷新分红数据 |
 | `20 0 * * *` | `cache-cleanup` | 每日 00:20 统一清理过期缓存 |

@@ -129,7 +129,7 @@ services:
           printf '%s\n' '17,47 * * * * daa-cron-curl /api/daa/cron/market-indicators-refresh'
           printf '%s\n' '20 0 * * * daa-cron-curl /api/daa/cron/cache-cleanup'
           printf '%s\n' '2 * * * * daa-cron-curl /api/daa/cron/daily-analysis'
-          printf '%s\n' '3 1,9 * * * daa-cron-curl /api/daa/cron/drift-check'
+          printf '%s\n' '3 * * * 1-5 daa-cron-curl /api/daa/cron/drift-check'
           printf '%s\n' '8 8 * * * daa-cron-curl /api/daa/cron/hf-ingest'
           printf '%s\n' '33 1 * * * daa-cron-curl /api/daa/cron/dividend-refresh'
           printf '%s\n' '10,40 * * * * daa-cron-curl /api/daa/cron/health-check'

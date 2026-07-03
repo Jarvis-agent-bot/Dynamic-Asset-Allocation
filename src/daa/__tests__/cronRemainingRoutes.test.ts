@@ -38,6 +38,7 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
       },
     },
   })),
+  listDaaRebalanceCycles: vi.fn(async () => []),
   listDaaTradeTickets: vi.fn(async () => []),
 }));
 
@@ -91,6 +92,17 @@ vi.mock('@/src/daa/automation/riskAutopilotTrigger', () => ({
   })),
 }));
 
+vi.mock('@/src/daa/automation/autoRebalanceExecution', () => ({
+  executeAutoRebalanceCycle: vi.fn(async () => ({
+    attempted: true,
+    executed: false,
+    ordersCount: 0,
+    blockedReason: '自动执行未开启。',
+    error: '自动执行未开启。',
+    authority: null,
+  })),
+}));
+
 vi.mock('@/src/daa/notify/telegram', () => ({
   sendTelegramByEnv: vi.fn(async () => null),
 }));
@@ -138,8 +150,9 @@ import { refreshMarketIndicators } from '@/src/daa/modules/marketContext/marketI
 import { buildWorkbenchBootstrap } from '@/src/daa/modules/workbench/workbenchReadService';
 import { generateWorkbenchRebalanceCycle } from '@/src/daa/modules/workbench/workbenchRebalanceCycleService';
 import { runRiskAutopilotDaily } from '@/src/daa/automation/riskAutopilotTrigger';
+import { executeAutoRebalanceCycle } from '@/src/daa/automation/autoRebalanceExecution';
 import { runHumanIngest } from '@/src/daa/hf/hfService';
-import { getDaaSystemConfig } from '@/src/daa/store/daaStorePg';
+import { getDaaSystemConfig, listDaaRebalanceCycles } from '@/src/daa/store/daaStorePg';
 import { hasTodayNotification } from '@/src/daa/store/notificationDeliveryLogRepo';
 
 function buildDriftConfig(input: {
@@ -221,6 +234,15 @@ describe('cron-remaining-routes-v1', () => {
     vi.clearAllMocks();
     vi.mocked(requireCronAuth).mockResolvedValue(null);
     vi.mocked(hasTodayNotification).mockResolvedValue(false);
+    vi.mocked(listDaaRebalanceCycles).mockResolvedValue([]);
+    vi.mocked(executeAutoRebalanceCycle).mockResolvedValue({
+      attempted: true,
+      executed: false,
+      ordersCount: 0,
+      blockedReason: '自动执行未开启。',
+      error: '自动执行未开启。',
+      authority: null,
+    });
   });
 
   it('drift-check 未通过 cron 鉴权时返回 401', async () => {
@@ -500,6 +522,140 @@ describe('cron-remaining-routes-v1', () => {
     expect(message).toContain('ETH-USD: 止损 -22.8%');
     expect(message).toContain('MU: 止盈 35.5%');
     expect(message).not.toContain('SOL-USD');
+  });
+
+  it('drift-check 有待处理风险周期时会先尝试自动执行止损周期', async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      policy: {
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: true,
+        },
+        drift: { enabled: true, outerBandPct: 0.05 },
+      },
+      strategy: {
+        risk: {
+          perAssetStopLossPct: 0.2,
+          perAssetTakeProfitPct: 0.35,
+        },
+      },
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: false,
+          onRiskTriggered: true,
+        },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onRiskTriggered: false,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce(buildWorkbenchBootstrapFixture({
+      account: { cash: 3000, investableCash: 3000, frozenCash: 0, totalEquity: 50000 },
+      baseCurrency: 'USD',
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: 'HK::1810.HK',
+          symbol: '1810.HK',
+          market: 'HK',
+          currency: 'HKD',
+          holdingQty: 764.879,
+          holdingPrice: 30.7,
+          lastPrice: 22.6,
+          valuationBase: 2204.12,
+          costBasisInBase: 2999.22,
+          unrealizedPnlPct: -26.5,
+          actualWeightPct: 2.2,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 2.2,
+          fxMissing: false,
+        }),
+      ],
+      marketContext: { regime: 'risk_on', indicators: [], scopes: [] },
+      policy: { review: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, outerBandPct: 0.05 } },
+      execution: { logs: [] },
+      rebalance: {},
+      latestCycle: null,
+      warnings: [],
+    }));
+    vi.mocked(listDaaRebalanceCycles).mockResolvedValueOnce([
+      {
+        cycleId: 'risk-cycle-1810',
+        status: 'generated',
+        triggerSource: 'risk',
+        triggerReason: '1810.HK 触发止损(26.50%)',
+        snapshotAt: '2026-07-03T01:03:16.000Z',
+        equitySnapshot: 50000,
+        driftSnapshot: [],
+        proposals: [{
+          assetKey: 'HK::1810.HK',
+          symbol: '1810.HK',
+          currency: 'HKD',
+          fxRateToBase: 0.1275,
+          side: 'SELL',
+          suggestedQty: 764.879,
+          suggestedNotional: 2204.12,
+          price: 22.6,
+          sellAll: true,
+          reason: '触发止损阈值：浮亏 26.50%',
+          selected: true,
+          hfContribution: null,
+        }],
+        riskCheck: {
+          overallStatus: 'warn',
+          items: [{ rule: 'stop_loss_breach', status: 'warn', current: 26.5, limit: 20, message: '存在持仓浮亏' }],
+        },
+        executionStartedAt: null,
+        executedAt: null,
+        executedOrders: [],
+        executionSummary: null,
+        cancelledAt: null,
+        cancelReason: null,
+        notes: null,
+        marketContext: null,
+        policyDecisionId: null,
+        intentIds: [],
+        signalIds: [],
+        policySnapshot: null,
+        proposalPlanId: null,
+        createdAt: '2026-07-03T01:03:16.000Z',
+      } as Awaited<ReturnType<typeof listDaaRebalanceCycles>>[number],
+    ]);
+    vi.mocked(executeAutoRebalanceCycle).mockResolvedValueOnce({
+      attempted: true,
+      executed: true,
+      ordersCount: 1,
+      blockedReason: null,
+      error: null,
+      authority: null,
+    });
+
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.riskAutoExecute).toMatchObject({
+      attempted: true,
+      executed: true,
+      ordersCount: 1,
+      cycleId: 'risk-cycle-1810',
+    });
+    expect(vi.mocked(executeAutoRebalanceCycle)).toHaveBeenCalledWith(expect.objectContaining({
+      triggerSource: 'risk',
+      totalEquity: 50000,
+      cycle: expect.objectContaining({
+        cycleId: 'risk-cycle-1810',
+      }),
+    }));
+    const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
+    expect(message).toContain('状态: 风险周期 risk-cycle-1810 已自动执行 1 笔');
+    expect(message).toContain('风险执行: 风险周期 risk-cycle-1810 已自动执行 1 笔');
+    expect(message).toContain('下一步: 风险周期 risk-cycle-1810 已自动执行；请查看成交记录和仓位变化。');
+    expect(message).not.toContain('继续观察');
   });
 
   it('drift-check 只有尘埃仓触发止盈止损时不通知也不触发 agent', async () => {

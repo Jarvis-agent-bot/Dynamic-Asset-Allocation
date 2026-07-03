@@ -342,7 +342,7 @@ await runLoggedJob({
 ## 7. 数据流示例：漂移检测一次调仓
 
 ```
-[cron] drift-check 01:00 UTC
+[cron] drift-check 工作日每小时
    │
    ▼
 GET /api/daa/cron/drift-check

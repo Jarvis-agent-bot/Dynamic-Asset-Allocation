@@ -38,6 +38,15 @@ type RiskAgentReview = {
   error?: string | null;
 };
 
+type RiskAutoExecuteSummary = {
+  attempted: boolean;
+  executed: boolean;
+  ordersCount: number;
+  cycleId: string | null;
+  error?: string | null;
+  blockedReason?: string | null;
+};
+
 const SEVERITY_LABELS: Record<DaaNotificationSeverity, string> = {
   critical: "紧急",
   actionable: "行动",
@@ -89,6 +98,14 @@ function riskReviewStatus(review: RiskAgentReview | null | undefined): string {
   if (review.proposalCount > 0) return `已完成即时审核，生成 ${review.proposalCount} 条建议`;
   if (review.skipped) return `已完成即时审核，未生成新建议：${compactText(review.reason || "无可执行项")}`;
   return `已完成即时审核，未生成新建议：${compactText(review.reason || "无可执行项")}`;
+}
+
+function riskAutoExecuteStatus(execution: RiskAutoExecuteSummary | null | undefined): string | null {
+  if (!execution || !execution.attempted) return null;
+  const cycleLabel = execution.cycleId ? `风险周期 ${execution.cycleId}` : "风险周期";
+  if (execution.executed) return `${cycleLabel} 已自动执行 ${execution.ordersCount} 笔`;
+  const reason = compactText(execution.blockedReason || execution.error || "未产生订单");
+  return `${cycleLabel} 自动执行未成交：${reason}`;
 }
 
 export function buildDaaNotificationText(event: DaaNotificationEvent): string {
@@ -229,21 +246,30 @@ export function buildRiskTriggerNotificationText(input: {
   ignoredCount: number;
   assets: Array<{ label: string; triggerType: "stop_loss" | "take_profit"; pnlPct: number }>;
   agentReview?: RiskAgentReview | null;
+  riskAutoExecute?: RiskAutoExecuteSummary | null;
   source?: string | null;
   occurredAt?: string | Date | null;
 }): string {
   const review = input.agentReview ?? null;
+  const riskExecution = input.riskAutoExecute ?? null;
+  const riskExecutionStatus = riskAutoExecuteStatus(riskExecution);
   const facts: DaaNotificationFact[] = [
     { label: "触发", value: `止损 ${input.stopLossCount} 项 / 止盈 ${input.takeProfitCount} 项` },
   ];
   if (input.ignoredCount > 0) {
     facts.push({ label: "尘埃仓", value: `已忽略 ${input.ignoredCount} 项` });
   }
+  if (riskExecution?.cycleId) facts.push({ label: "风险周期", value: riskExecution.cycleId });
+  if (riskExecutionStatus) facts.push({ label: "风险执行", value: riskExecutionStatus });
   if (review?.runId) facts.push({ label: "审核 Run", value: review.runId });
-  if (review?.cycleId) facts.push({ label: "风险周期", value: review.cycleId });
+  if (review?.cycleId) facts.push({ label: "审核周期", value: review.cycleId });
 
   let nextAction = "请查看工作台风险复核结果。";
-  if (review?.cycleId) {
+  if (riskExecution?.executed) {
+    nextAction = `风险周期 ${riskExecution.cycleId || ""} 已自动执行；请查看成交记录和仓位变化。`.replace(/\s+/g, " ").trim();
+  } else if (riskExecution?.attempted && (riskExecution.blockedReason || riskExecution.error)) {
+    nextAction = `风险周期 ${riskExecution.cycleId || ""} 自动执行未成交，请检查阻断原因并手动处理。`.replace(/\s+/g, " ").trim();
+  } else if (review?.cycleId) {
     nextAction = `请优先查看风险调仓周期 ${review.cycleId}。`;
   } else if (review?.proposalCount === 0 && review.attempted && !review.error) {
     nextAction = "本轮未生成调仓建议；继续观察，后续每日复核会跟踪。";
@@ -256,7 +282,7 @@ export function buildRiskTriggerNotificationText(input: {
     category: "risk",
     kind: "risk_alert",
     title: "止盈/止损触发",
-    status: riskReviewStatus(review),
+    status: riskExecutionStatus || riskReviewStatus(review),
     facts,
     highlights: input.assets.map((asset) => `${asset.label}: ${triggerLabel(asset.triggerType)} ${asset.pnlPct.toFixed(1)}%`),
     nextAction,
