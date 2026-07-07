@@ -81,6 +81,35 @@ function isAutoCooldownGuardTrigger(input: {
   return !input.manual && input.triggerSource !== "risk";
 }
 
+type CycleExecutionSummary = NonNullable<RebalanceCycle["executionSummary"]>;
+
+export function mergeCycleExecutionProgress(input: {
+  existingOrderIds?: string[] | null;
+  newOrderIds: string[];
+  existingSummary?: RebalanceCycle["executionSummary"] | null;
+  newSummary: CycleExecutionSummary;
+}): {
+  executedOrders: string[];
+  executionSummary: CycleExecutionSummary;
+} {
+  const executedOrders = [...new Set([
+    ...(input.existingOrderIds ?? []),
+    ...input.newOrderIds,
+  ].map((item) => String(item || "").trim()).filter(Boolean))];
+  const existing = input.existingSummary ?? null;
+
+  return {
+    executedOrders,
+    executionSummary: {
+      ordersExecuted: Math.max(0, (existing?.ordersExecuted ?? 0) + input.newSummary.ordersExecuted),
+      ordersSubmitted: Math.max(0, (existing?.ordersSubmitted ?? 0) + (input.newSummary.ordersSubmitted ?? 0)),
+      ordersFailed: Math.max(0, (existing?.ordersFailed ?? 0) + input.newSummary.ordersFailed),
+      totalNotional: Math.max(0, (existing?.totalNotional ?? 0) + input.newSummary.totalNotional),
+      newMaxDriftPct: Math.max(0, input.newSummary.newMaxDriftPct),
+    },
+  };
+}
+
 function isCycleWithinCooldownWindow(input: {
   cycle: DaaStoreRebalanceCycle;
   cooldownMs: number;
@@ -1223,19 +1252,26 @@ export async function executeWorkbenchRebalanceCycle(input: {
     ? `\n[目标权重] 已将 ${persistedTargetCount} 个已成交标的的目标权重写入持久目标，避免后续 drift 反向卖出。`
     : "";
   const hasOpenOrders = submittedCount > 0;
+  const runExecutionSummary = {
+    ordersExecuted: executedCount,
+    ordersSubmitted: submittedCount,
+    ordersFailed: failedCount,
+    totalNotional,
+    newMaxDriftPct,
+  };
+  const mergedExecutionProgress = mergeCycleExecutionProgress({
+    existingOrderIds: cycle.executedOrders,
+    newOrderIds: createdTicketIds,
+    existingSummary: cycle.executionSummary,
+    newSummary: runExecutionSummary,
+  });
 
   const completed = await patchDaaRebalanceCycle({
     cycleId: input.cycleId,
     status: hasOpenOrders ? "executing" : "completed",
     executedAt: hasOpenOrders ? null : new Date().toISOString(),
-    executedOrders: createdTicketIds,
-    executionSummary: {
-      ordersExecuted: executedCount,
-      ordersSubmitted: submittedCount,
-      ordersFailed: failedCount,
-      totalNotional,
-      newMaxDriftPct,
-    },
+    executedOrders: mergedExecutionProgress.executedOrders,
+    executionSummary: mergedExecutionProgress.executionSummary,
     notes: (cycle.notes || "") + executionNotes + targetWeightNotes || null,
   });
 

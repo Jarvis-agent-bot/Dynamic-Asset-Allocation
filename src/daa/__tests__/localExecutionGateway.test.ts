@@ -187,6 +187,38 @@ describe("local-execution-gateway", () => {
     expect(sendFeishuByEnvMock).toHaveBeenCalledTimes(1);
   });
 
+  it("再平衡通知只报告本轮执行金额，不重复历史累计 summary", async () => {
+    executeWorkbenchRebalanceCycleMock.mockResolvedValue({
+      cycle: {
+        cycleId: "cycle-partial",
+        executedOrders: ["ticket-old", "ticket-current"],
+        executionSummary: {
+          ordersExecuted: 2,
+          ordersSubmitted: 0,
+          ordersFailed: 0,
+          totalNotional: 10_300,
+          newMaxDriftPct: 1.2,
+        },
+      },
+      logs: [{
+        ticketId: "ticket-current",
+        qty: 3,
+        price: 100,
+        status: "executed",
+      }],
+    });
+
+    await executeRebalanceViaGateway({
+      cycleId: "cycle-partial",
+      executeMode: "selected",
+    });
+
+    const firstTelegramCall = sendTelegramByEnvMock.mock.calls[0] as unknown[] | undefined;
+    const message = String(firstTelegramCall?.[0] || "");
+    expect(message).toContain("300.00 USD");
+    expect(message).not.toContain("10300.00 USD");
+  });
+
   it("预览调用会透传到底层服务", async () => {
     previewManualTradeMock.mockResolvedValue({ assetKey: "US::AAPL", canSubmit: true });
 

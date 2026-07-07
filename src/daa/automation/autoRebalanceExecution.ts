@@ -11,7 +11,7 @@ import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { PreTradeRiskCheck, RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
-import { listDaaTradeTickets } from "@/src/daa/store/daaStorePg";
+import { listDaaTradeTickets, patchDaaRebalanceCycle } from "@/src/daa/store/daaStorePg";
 
 import {
   filterAutoTradeStability,
@@ -61,6 +61,29 @@ function selectedProposals(proposals: RebalanceProposal[]): RebalanceProposal[] 
   return proposals.filter((row) => row.selected !== false);
 }
 
+function proposalExecutionKey(proposal: RebalanceProposal): string {
+  return [
+    String(proposal.assetKey || "").trim().toUpperCase(),
+    String(proposal.side || "").trim().toUpperCase(),
+    String(proposal.symbol || "").trim().toUpperCase(),
+  ].join("::");
+}
+
+function withSelectedProposalKeys(proposals: RebalanceProposal[], selectedKeys: Set<string>): RebalanceProposal[] {
+  return proposals.map((proposal) => (
+    proposal.selected === false
+      ? proposal
+      : { ...proposal, selected: selectedKeys.has(proposalExecutionKey(proposal)) }
+  ));
+}
+
+function appendCycleNote(existing: string | null | undefined, note: string): string {
+  const current = String(existing || "").trim();
+  if (!current) return note;
+  if (current.includes(note)) return current;
+  return `${current}\n${note}`.trim();
+}
+
 function shouldApplyExecutionStabilityGuard(triggerSource: AutomationAuthorityTrigger): boolean {
   return triggerSource !== "manual" && triggerSource !== "manual_api" && triggerSource !== "risk";
 }
@@ -84,6 +107,7 @@ function findAutoExecutionRiskBreach(input: {
 
 export async function executeAutoRebalanceCycle(input: {
   cycle: Pick<RebalanceCycle, "cycleId" | "proposals"> & {
+    notes?: string | null;
     riskCheck?: PreTradeRiskCheck | null;
     policySnapshot?: PolicyDecisionSnapshot | null;
   };
@@ -102,20 +126,27 @@ export async function executeAutoRebalanceCycle(input: {
 
   const selectedProposalCount = selectedProposals(input.cycle.proposals).length;
   const fullyAutonomousAgent = input.triggerSource === "agent_trigger";
-  const closedProposal = selectedProposals(input.cycle.proposals)
-    .map((proposal) => {
-      const parsed = parseDaaAssetKey(proposal.assetKey);
-      const guard = resolveMarketExecutionGuard({
-        market: parsed?.market || "US",
-        symbol: proposal.symbol,
-        orderType: "market",
-      });
-      return guard.allowed ? null : { proposal, guard };
-    })
-    .find((row): row is { proposal: RebalanceProposal; guard: ReturnType<typeof resolveMarketExecutionGuard> } => Boolean(row));
+  const marketSessionRows = selectedProposals(input.cycle.proposals).map((proposal) => {
+    const parsed = parseDaaAssetKey(proposal.assetKey);
+    const guard = resolveMarketExecutionGuard({
+      market: parsed?.market || "US",
+      symbol: proposal.symbol,
+      orderType: "market",
+    });
+    return { proposal, guard };
+  });
+  const closedMarketSessionRows = marketSessionRows.filter((row) => !row.guard.allowed);
+  const executableMarketSessionRows = marketSessionRows.filter((row) => row.guard.allowed);
+  const deferredRiskMarketKeys = new Set(closedMarketSessionRows.map((row) => proposalExecutionKey(row.proposal)));
+  const immediateRiskMarketKeys = new Set(executableMarketSessionRows.map((row) => proposalExecutionKey(row.proposal)));
+  const deferredRiskMarketReason = input.triggerSource === "risk"
+    && closedMarketSessionRows.length > 0
+    && executableMarketSessionRows.length > 0
+    ? `[market-session 延后] ${closedMarketSessionRows.map((row) => row.guard.message).join("；")}；已先执行 ${executableMarketSessionRows.length} 项当前可交易风险提案，未开盘提案将在后续重试。`
+    : null;
 
-  if (closedProposal) {
-    const message = `[market-session 守门] ${closedProposal.guard.message}`;
+  if (closedMarketSessionRows.length > 0 && !deferredRiskMarketReason) {
+    const message = `[market-session 守门] ${closedMarketSessionRows[0]!.guard.message}`;
     logSwallowed(`${input.triggerSource}.autoExecuteMarketSessionGate`, new Error(message));
     return {
       ...base,
@@ -275,11 +306,28 @@ export async function executeAutoRebalanceCycle(input: {
   }
 
   try {
+    if (deferredRiskMarketReason) {
+      await patchDaaRebalanceCycle({
+        cycleId: input.cycle.cycleId,
+        status: "reviewing",
+        proposals: withSelectedProposalKeys(input.cycle.proposals, immediateRiskMarketKeys),
+        notes: appendCycleNote(input.cycle.notes, deferredRiskMarketReason),
+      });
+    }
     const execResult = await executeRebalanceViaGateway({
       cycleId: input.cycle.cycleId,
       executeMode: "selected",
       notifyMode: "fanout",
     });
+    if (deferredRiskMarketReason) {
+      await patchDaaRebalanceCycle({
+        cycleId: input.cycle.cycleId,
+        status: "reviewing",
+        executedAt: null,
+        proposals: withSelectedProposalKeys(input.cycle.proposals, deferredRiskMarketKeys),
+        notes: appendCycleNote(execResult.cycle?.notes ?? input.cycle.notes, deferredRiskMarketReason),
+      });
+    }
     const executedCount = execResult.logs.filter((row) => (
       row.status === "executed" && row.cycleId === input.cycle.cycleId
     )).length;
@@ -287,11 +335,20 @@ export async function executeAutoRebalanceCycle(input: {
       ...base,
       executed: executedCount > 0,
       ordersCount: executedCount,
+      blockedReason: deferredRiskMarketReason,
       authority,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || "");
     logSwallowed(`${input.triggerSource}.autoExecute`, error);
+    if (deferredRiskMarketReason) {
+      await patchDaaRebalanceCycle({
+        cycleId: input.cycle.cycleId,
+        status: "reviewing",
+        proposals: input.cycle.proposals,
+        notes: appendCycleNote(input.cycle.notes, `${deferredRiskMarketReason}\n[market-session 恢复] 子集执行失败，已恢复原提案选择：${message}`.trim()),
+      }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteMarketSessionRestore`, err));
+    }
     await notifyAutoExecutionIssue({
       systemConfig: input.systemConfig,
       eventType: "auto_execute_failed",

@@ -135,7 +135,7 @@ async function fanoutRebalanceExecutionNotification(
       submittedCount,
       failedCount,
       totalCount: cycleLogs.length,
-      totalNotional: result.cycle.executionSummary?.totalNotional ?? cycleLogs.reduce((sum, row) => sum + (row.qty * row.price), 0),
+      totalNotional: cycleLogs.reduce((sum, row) => sum + (row.qty * row.price), 0),
       logs: cycleLogs,
     });
     const meta = {
@@ -145,9 +145,9 @@ async function fanoutRebalanceExecutionNotification(
       requestJson: {
         gatewayMode: LOCAL_EXECUTION_GATEWAY_STATUS.mode,
         executeMode,
-        ordersExecuted: result.cycle.executionSummary?.ordersExecuted ?? executedCount,
-        ordersSubmitted: result.cycle.executionSummary?.ordersSubmitted ?? submittedCount,
-        ordersFailed: result.cycle.executionSummary?.ordersFailed ?? failedCount,
+        ordersExecuted: executedCount,
+        ordersSubmitted: submittedCount,
+        ordersFailed: failedCount,
       },
     };
     await Promise.allSettled([

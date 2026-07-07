@@ -21,6 +21,7 @@ vi.mock("@/src/daa/notify/feishu", () => ({
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   listDaaTradeTickets: vi.fn(async () => []),
+  patchDaaRebalanceCycle: vi.fn(async (input) => ({ ...input })),
 }));
 
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
@@ -28,7 +29,7 @@ import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
-import { listDaaTradeTickets } from "@/src/daa/store/daaStorePg";
+import { listDaaTradeTickets, patchDaaRebalanceCycle } from "@/src/daa/store/daaStorePg";
 
 function policySnapshot(action: PolicyDecisionSnapshot["decision"]["action"]): PolicyDecisionSnapshot {
   return {
@@ -248,6 +249,87 @@ describe("auto-rebalance-execution-policy-gate", () => {
     expect(result.blockedReason).toContain("当前不可执行");
     expect(executeRebalanceViaGateway).not.toHaveBeenCalledWith(expect.objectContaining({
       cycleId: "cycle-market-closed",
+    }));
+  });
+
+  it("风险周期混合开市和闭市市场时只执行当前可交易提案并保留闭市提案", async () => {
+    vi.setSystemTime(new Date("2026-06-08T14:00:00.000Z"));
+    vi.mocked(executeRebalanceViaGateway).mockResolvedValueOnce({
+      logs: [{
+        status: "executed",
+        cycleId: "cycle-risk-mixed-market",
+      }],
+    } as Awaited<ReturnType<typeof executeRebalanceViaGateway>>);
+
+    const openProposal = {
+      assetKey: "US::AMD",
+      symbol: "AMD",
+      currency: "USD",
+      fxRateToBase: 1,
+      side: "SELL" as const,
+      suggestedQty: 2,
+      suggestedNotional: 300,
+      price: 150,
+      reason: "触发止盈阈值：浮盈 30.20%",
+      selected: true,
+      hfContribution: null,
+    };
+    const closedProposal = {
+      assetKey: "HK::1810.HK",
+      symbol: "1810.HK",
+      currency: "HKD",
+      fxRateToBase: 0.1275,
+      side: "SELL" as const,
+      suggestedQty: 100,
+      suggestedNotional: 220,
+      price: 22,
+      reason: "触发止损阈值：浮亏 26.50%",
+      selected: true,
+      hfContribution: null,
+    };
+
+    const result = await executeAutoRebalanceCycle({
+      cycle: {
+        cycleId: "cycle-risk-mixed-market",
+        proposals: [openProposal, closedProposal],
+        riskCheck: { overallStatus: "warn", items: [] },
+        policySnapshot: policySnapshot("authorize_auto_execute"),
+      },
+      systemConfig: normalizeSystemConfig({
+        policy: {
+          execution: {
+            autoGenerateEnabled: true,
+            autoExecuteEnabled: true,
+          },
+        },
+      }),
+      triggerSource: "risk",
+      totalEquity: 10_000,
+    });
+
+    expect(result.executed).toBe(true);
+    expect(result.ordersCount).toBe(1);
+    expect(result.blockedReason).toContain("1810.HK");
+    expect(result.blockedReason).toContain("后续重试");
+    expect(patchDaaRebalanceCycle).toHaveBeenCalledWith(expect.objectContaining({
+      cycleId: "cycle-risk-mixed-market",
+      proposals: [
+        expect.objectContaining({ assetKey: "US::AMD", selected: true }),
+        expect.objectContaining({ assetKey: "HK::1810.HK", selected: false }),
+      ],
+    }));
+    expect(patchDaaRebalanceCycle).toHaveBeenLastCalledWith(expect.objectContaining({
+      cycleId: "cycle-risk-mixed-market",
+      status: "reviewing",
+      executedAt: null,
+      proposals: [
+        expect.objectContaining({ assetKey: "US::AMD", selected: false }),
+        expect.objectContaining({ assetKey: "HK::1810.HK", selected: true }),
+      ],
+    }));
+    expect(executeRebalanceViaGateway).toHaveBeenCalledWith(expect.objectContaining({
+      cycleId: "cycle-risk-mixed-market",
+      executeMode: "selected",
     }));
   });
 });
