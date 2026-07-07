@@ -254,6 +254,13 @@ describe("auto-rebalance-execution-policy-gate", () => {
 
   it("风险周期混合开市和闭市市场时只执行当前可交易提案并保留闭市提案", async () => {
     vi.setSystemTime(new Date("2026-06-08T14:00:00.000Z"));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce({
+      account: { totalEquity: 10_000 },
+      assetUniverse: [
+        { assetKey: "US::AMD", holdingQty: 2.356222 },
+        { assetKey: "HK::1810.HK", holdingQty: 764.879236 },
+      ],
+    } as Awaited<ReturnType<typeof buildWorkbenchBootstrap>>);
     vi.mocked(executeRebalanceViaGateway).mockResolvedValueOnce({
       logs: [{
         status: "executed",
@@ -330,6 +337,64 @@ describe("auto-rebalance-execution-policy-gate", () => {
     expect(executeRebalanceViaGateway).toHaveBeenCalledWith(expect.objectContaining({
       cycleId: "cycle-risk-mixed-market",
       executeMode: "selected",
+    }));
+  });
+
+  it("风险周期会在执行前取消当前无持仓的过期卖单，避免生成 rejected ticket", async () => {
+    vi.setSystemTime(new Date("2026-07-07T05:03:00.000Z"));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce({
+      account: { totalEquity: 10_000 },
+      assetUniverse: [
+        { assetKey: "HK::1810.HK", holdingQty: 0 },
+      ],
+    } as Awaited<ReturnType<typeof buildWorkbenchBootstrap>>);
+
+    const result = await executeAutoRebalanceCycle({
+      cycle: {
+        cycleId: "cycle-stale-risk-sell",
+        notes: "existing note",
+        proposals: [{
+          assetKey: "HK::1810.HK",
+          symbol: "1810.HK",
+          currency: "HKD",
+          fxRateToBase: 0.1275,
+          side: "SELL",
+          suggestedQty: 764.879236,
+          suggestedNotional: 2110.25,
+          price: 21.64,
+          sellAll: true,
+          reason: "触发止损阈值：浮亏 29.63%",
+          selected: true,
+          hfContribution: null,
+        }],
+        riskCheck: { overallStatus: "warn", items: [] },
+        policySnapshot: policySnapshot("authorize_auto_execute"),
+      },
+      systemConfig: normalizeSystemConfig({
+        policy: {
+          execution: {
+            autoGenerateEnabled: true,
+            autoExecuteEnabled: true,
+          },
+        },
+      }),
+      triggerSource: "risk",
+      totalEquity: 10_000,
+    });
+
+    expect(result.executed).toBe(false);
+    expect(result.ordersCount).toBe(0);
+    expect(result.blockedReason).toContain("当前无持仓");
+    expect(patchDaaRebalanceCycle).toHaveBeenCalledWith(expect.objectContaining({
+      cycleId: "cycle-stale-risk-sell",
+      status: "reviewing",
+      proposals: [
+        expect.objectContaining({ assetKey: "HK::1810.HK", selected: false }),
+      ],
+      notes: expect.stringContaining("当前无持仓"),
+    }));
+    expect(executeRebalanceViaGateway).not.toHaveBeenCalledWith(expect.objectContaining({
+      cycleId: "cycle-stale-risk-sell",
     }));
   });
 });

@@ -69,6 +69,10 @@ function proposalExecutionKey(proposal: RebalanceProposal): string {
   ].join("::");
 }
 
+function normalizeProposalAssetKey(proposal: RebalanceProposal): string {
+  return String(proposal.assetKey || "").trim().toUpperCase();
+}
+
 function withSelectedProposalKeys(proposals: RebalanceProposal[], selectedKeys: Set<string>): RebalanceProposal[] {
   return proposals.map((proposal) => (
     proposal.selected === false
@@ -124,9 +128,50 @@ export async function executeAutoRebalanceCycle(input: {
     authority: null,
   };
 
-  const selectedProposalCount = selectedProposals(input.cycle.proposals).length;
+  let cycleProposals = input.cycle.proposals;
+  let cycleNotes = input.cycle.notes ?? null;
+
+  if (input.triggerSource === "risk" && selectedProposals(cycleProposals).some((proposal) => proposal.side === "SELL")) {
+    const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+    const holdingQtyByAssetKey = new Map(
+      (bootstrap.assetUniverse ?? []).map((row) => [
+        String(row.assetKey || "").trim().toUpperCase(),
+        Math.max(0, Number(row.holdingQty) || 0),
+      ] as const),
+    );
+    const staleSellRows = selectedProposals(cycleProposals).filter((proposal) => (
+      proposal.side === "SELL" && (holdingQtyByAssetKey.get(normalizeProposalAssetKey(proposal)) ?? 0) <= 0
+    ));
+
+    if (staleSellRows.length > 0) {
+      const staleKeys = new Set(staleSellRows.map(proposalExecutionKey));
+      const staleReason = `[risk-position 守门] ${staleSellRows.map((row) => `${row.symbol} 当前无持仓`).join("；")}，已取消过期风险卖单，避免重复卖出。`;
+      cycleProposals = cycleProposals.map((proposal) => (
+        staleKeys.has(proposalExecutionKey(proposal))
+          ? { ...proposal, selected: false }
+          : proposal
+      ));
+      cycleNotes = appendCycleNote(cycleNotes, staleReason);
+      await patchDaaRebalanceCycle({
+        cycleId: input.cycle.cycleId,
+        status: "reviewing",
+        proposals: cycleProposals,
+        notes: cycleNotes,
+      });
+
+      if (selectedProposals(cycleProposals).length === 0) {
+        return {
+          ...base,
+          blockedReason: staleReason,
+          error: null,
+        };
+      }
+    }
+  }
+
+  const selectedProposalCount = selectedProposals(cycleProposals).length;
   const fullyAutonomousAgent = input.triggerSource === "agent_trigger";
-  const marketSessionRows = selectedProposals(input.cycle.proposals).map((proposal) => {
+  const marketSessionRows = selectedProposals(cycleProposals).map((proposal) => {
     const parsed = parseDaaAssetKey(proposal.assetKey);
     const guard = resolveMarketExecutionGuard({
       market: parsed?.market || "US",
@@ -207,7 +252,7 @@ export async function executeAutoRebalanceCycle(input: {
         .filter(([assetKey]) => assetKey),
     );
     const stability = filterAutoTradeStability({
-      proposals: input.cycle.proposals,
+      proposals: cycleProposals,
       recentTrades,
       totalEquity,
       currentTargetWeightPctByAssetKey,
@@ -236,7 +281,7 @@ export async function executeAutoRebalanceCycle(input: {
     const breachingProposal = findAutoExecuteSingleOrderBreach({
       totalEquity,
       maxSinglePct,
-      proposals: input.cycle.proposals,
+      proposals: cycleProposals,
     });
     if (breachingProposal) {
       const message = breachingProposal.message;
@@ -261,7 +306,7 @@ export async function executeAutoRebalanceCycle(input: {
     const turnoverBreach = findAutoExecuteTurnoverBreach({
       totalEquity,
       maxTurnoverPct: input.systemConfig.strategy.constraints.maxOrderPctOfNav,
-      proposals: input.cycle.proposals,
+      proposals: cycleProposals,
     });
     if (turnoverBreach) {
       const message = turnoverBreach.message;
@@ -285,7 +330,7 @@ export async function executeAutoRebalanceCycle(input: {
   if (!fullyAutonomousAgent) {
     const riskBreach = findAutoExecutionRiskBreach({
       riskCheck: input.cycle.riskCheck ?? null,
-      proposals: input.cycle.proposals,
+      proposals: cycleProposals,
     });
     if (riskBreach) {
       logSwallowed(`${input.triggerSource}.autoExecuteRiskGate`, new Error(riskBreach));
@@ -310,8 +355,8 @@ export async function executeAutoRebalanceCycle(input: {
       await patchDaaRebalanceCycle({
         cycleId: input.cycle.cycleId,
         status: "reviewing",
-        proposals: withSelectedProposalKeys(input.cycle.proposals, immediateRiskMarketKeys),
-        notes: appendCycleNote(input.cycle.notes, deferredRiskMarketReason),
+        proposals: withSelectedProposalKeys(cycleProposals, immediateRiskMarketKeys),
+        notes: appendCycleNote(cycleNotes, deferredRiskMarketReason),
       });
     }
     const execResult = await executeRebalanceViaGateway({
@@ -324,8 +369,8 @@ export async function executeAutoRebalanceCycle(input: {
         cycleId: input.cycle.cycleId,
         status: "reviewing",
         executedAt: null,
-        proposals: withSelectedProposalKeys(input.cycle.proposals, deferredRiskMarketKeys),
-        notes: appendCycleNote(execResult.cycle?.notes ?? input.cycle.notes, deferredRiskMarketReason),
+        proposals: withSelectedProposalKeys(cycleProposals, deferredRiskMarketKeys),
+        notes: appendCycleNote(execResult.cycle?.notes ?? cycleNotes, deferredRiskMarketReason),
       });
     }
     const executedCount = execResult.logs.filter((row) => (
@@ -345,8 +390,8 @@ export async function executeAutoRebalanceCycle(input: {
       await patchDaaRebalanceCycle({
         cycleId: input.cycle.cycleId,
         status: "reviewing",
-        proposals: input.cycle.proposals,
-        notes: appendCycleNote(input.cycle.notes, `${deferredRiskMarketReason}\n[market-session 恢复] 子集执行失败，已恢复原提案选择：${message}`.trim()),
+        proposals: cycleProposals,
+        notes: appendCycleNote(cycleNotes, `${deferredRiskMarketReason}\n[market-session 恢复] 子集执行失败，已恢复原提案选择：${message}`.trim()),
       }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteMarketSessionRestore`, err));
     }
     await notifyAutoExecutionIssue({
