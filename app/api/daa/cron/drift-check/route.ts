@@ -66,50 +66,86 @@ async function executePendingRiskCycleForTriggers(input: {
   const symbols = new Set(input.triggeredAssets.map((asset) => normalizeRiskMatchKey(asset.symbol)).filter(Boolean));
   if (assetKeys.size === 0 && symbols.size === 0) return { ...EMPTY_RISK_AUTO_EXECUTE };
 
-  const cycles = await listDaaRebalanceCycles(30).catch((err) => {
+  const cycles = await listDaaRebalanceCycles(120).catch((err) => {
     logSwallowed("driftCheckRoute.riskAutoExecute.listCycles", err);
     return [];
   });
-  const riskCycle = cycles.find((cycle) => {
-    if (cycle.triggerSource !== "risk") return false;
-    if (cycle.status !== "generated" && cycle.status !== "reviewing") return false;
-    if (cycle.executedAt || cycle.cancelledAt) return false;
-    return cycle.proposals.some((proposal) => {
-      if (proposal.selected === false || proposal.side !== "SELL") return false;
-      const assetKey = normalizeRiskMatchKey(proposal.assetKey);
-      const symbol = normalizeRiskMatchKey(proposal.symbol);
-      return assetKeys.has(assetKey) || symbols.has(symbol);
+  const claimedAssetKeys = new Set<string>();
+  const claimedSymbols = new Set<string>();
+  const riskCycles = cycles
+    .filter((cycle) => {
+      if (cycle.triggerSource !== "risk") return false;
+      if (cycle.status !== "generated" && cycle.status !== "reviewing") return false;
+      if (cycle.executedAt || cycle.cancelledAt) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const bTime = Date.parse(b.createdAt || b.snapshotAt || "");
+      const aTime = Date.parse(a.createdAt || a.snapshotAt || "");
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })
+    .filter((cycle) => {
+      const matchedProposals = cycle.proposals.filter((proposal) => {
+        if (proposal.selected === false || proposal.side !== "SELL") return false;
+        const assetKey = normalizeRiskMatchKey(proposal.assetKey);
+        const symbol = normalizeRiskMatchKey(proposal.symbol);
+        const alreadyClaimed = (assetKey && claimedAssetKeys.has(assetKey)) || (symbol && claimedSymbols.has(symbol));
+        if (alreadyClaimed) return false;
+        return assetKeys.has(assetKey) || symbols.has(symbol);
+      });
+      if (matchedProposals.length === 0) return false;
+      for (const proposal of matchedProposals) {
+        const assetKey = normalizeRiskMatchKey(proposal.assetKey);
+        const symbol = normalizeRiskMatchKey(proposal.symbol);
+        if (assetKey) claimedAssetKeys.add(assetKey);
+        if (symbol) claimedSymbols.add(symbol);
+      }
+      return true;
     });
-  });
-  if (!riskCycle) return { ...EMPTY_RISK_AUTO_EXECUTE };
+  if (riskCycles.length === 0) return { ...EMPTY_RISK_AUTO_EXECUTE };
 
-  try {
-    const result = await executeAutoRebalanceCycle({
-      cycle: riskCycle,
-      systemConfig: input.systemConfig,
-      triggerSource: "risk",
-      totalEquity: input.totalEquity,
-    });
-    return {
-      attempted: result.attempted,
-      executed: result.executed,
-      ordersCount: result.ordersCount,
-      cycleId: riskCycle.cycleId,
-      error: result.error || null,
-      blockedReason: result.blockedReason || null,
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err || "");
-    logSwallowed("driftCheckRoute.riskAutoExecute", err);
-    return {
-      attempted: true,
-      executed: false,
-      ordersCount: 0,
-      cycleId: riskCycle.cycleId,
-      error: message,
-      blockedReason: message,
-    };
+  const summaries: RiskAutoExecuteSummary[] = [];
+  for (const riskCycle of riskCycles) {
+    try {
+      const result = await executeAutoRebalanceCycle({
+        cycle: riskCycle,
+        systemConfig: input.systemConfig,
+        triggerSource: "risk",
+        totalEquity: input.totalEquity,
+      });
+      summaries.push({
+        attempted: result.attempted,
+        executed: result.executed,
+        ordersCount: result.ordersCount,
+        cycleId: riskCycle.cycleId,
+        error: result.error || null,
+        blockedReason: result.blockedReason || null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err || "");
+      logSwallowed("driftCheckRoute.riskAutoExecute", err);
+      summaries.push({
+        attempted: true,
+        executed: false,
+        ordersCount: 0,
+        cycleId: riskCycle.cycleId,
+        error: message,
+        blockedReason: message,
+      });
+    }
   }
+
+  const cycleIds = summaries.map((row) => row.cycleId).filter((cycleId): cycleId is string => Boolean(cycleId));
+  const errors = summaries.map((row) => row.error).filter((message): message is string => Boolean(message));
+  const blockedReasons = summaries.map((row) => row.blockedReason).filter((message): message is string => Boolean(message));
+  return {
+    attempted: summaries.some((row) => row.attempted),
+    executed: summaries.some((row) => row.executed),
+    ordersCount: summaries.reduce((sum, row) => sum + row.ordersCount, 0),
+    cycleId: cycleIds.length > 0 ? cycleIds.join(",") : null,
+    error: errors.length > 0 ? errors.join("；") : null,
+    blockedReason: blockedReasons.length > 0 ? blockedReasons.join("；") : null,
+  };
 }
 
 export async function POST(req: Request) {

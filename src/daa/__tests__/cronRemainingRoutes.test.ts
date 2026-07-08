@@ -658,6 +658,230 @@ describe('cron-remaining-routes-v1', () => {
     expect(message).not.toContain('继续观察');
   });
 
+  it('drift-check 会按资产执行多个最新有效风险周期并跳过无持仓旧周期', async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      policy: {
+        execution: { autoGenerateEnabled: false, autoExecuteEnabled: true },
+        drift: { enabled: true, outerBandPct: 0.05 },
+      },
+      strategy: {
+        constraints: { minNotional: 200 },
+        risk: {
+          perAssetStopLossPct: 0.2,
+          perAssetTakeProfitPct: 0.25,
+        },
+      },
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: false,
+          onRiskTriggered: true,
+        },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onRiskTriggered: false,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValueOnce(buildWorkbenchBootstrapFixture({
+      account: { cash: 3000, investableCash: 3000, frozenCash: 0, totalEquity: 50000 },
+      baseCurrency: 'USD',
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: 'US::AMD',
+          symbol: 'AMD',
+          market: 'US',
+          currency: 'USD',
+          holdingQty: 2.36,
+          holdingPrice: 424.1,
+          lastPrice: 542.52,
+          valuationBase: 1280,
+          costBasisInBase: 999,
+          unrealizedPnlPct: 28.1,
+          actualWeightPct: 2.6,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 0,
+          fxMissing: false,
+        }),
+        buildAssetUniverseView({
+          assetKey: 'KR::005930.KS',
+          symbol: '005930.KS',
+          market: 'KR',
+          currency: 'KRW',
+          holdingQty: 27.65,
+          holdingPrice: 270500,
+          lastPrice: 349000,
+          valuationBase: 6400,
+          costBasisInBase: 5000,
+          unrealizedPnlPct: 28,
+          actualWeightPct: 12.8,
+          targetWeightPct: 0,
+          targetWeightHint: 0,
+          gapPct: 0,
+          fxMissing: false,
+        }),
+      ],
+      marketContext: { regime: 'risk_on', indicators: [], scopes: [] },
+      policy: { review: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, outerBandPct: 0.05 } },
+      execution: { logs: [] },
+      rebalance: {},
+      latestCycle: null,
+      warnings: [],
+    }));
+    vi.mocked(listDaaRebalanceCycles).mockResolvedValueOnce([
+      {
+        cycleId: 'old-no-position-1810',
+        status: 'generated',
+        triggerSource: 'risk',
+        triggerReason: '1810.HK 旧止损',
+        snapshotAt: '2026-06-30T01:00:00.000Z',
+        equitySnapshot: 50000,
+        driftSnapshot: [],
+        proposals: [{
+          assetKey: 'HK::1810.HK',
+          symbol: '1810.HK',
+          currency: 'HKD',
+          fxRateToBase: 0.1275,
+          side: 'SELL',
+          suggestedQty: 764.879,
+          suggestedNotional: 2100,
+          price: 21.64,
+          sellAll: true,
+          reason: '触发止损阈值：浮亏 29.63%',
+          selected: true,
+          hfContribution: null,
+        }],
+        riskCheck: { overallStatus: 'warn', items: [] },
+        executionStartedAt: null,
+        executedAt: null,
+        executedOrders: [],
+        executionSummary: null,
+        cancelledAt: null,
+        cancelReason: null,
+        notes: null,
+        marketContext: null,
+        policyDecisionId: null,
+        intentIds: [],
+        signalIds: [],
+        policySnapshot: null,
+        proposalPlanId: null,
+        createdAt: '2026-06-30T01:00:00.000Z',
+      } as Awaited<ReturnType<typeof listDaaRebalanceCycles>>[number],
+      {
+        cycleId: 'risk-cycle-amd-latest',
+        status: 'reviewing',
+        triggerSource: 'risk',
+        triggerReason: 'AMD 触发止盈',
+        snapshotAt: '2026-07-02T01:00:00.000Z',
+        equitySnapshot: 50000,
+        driftSnapshot: [],
+        proposals: [{
+          assetKey: 'US::AMD',
+          symbol: 'AMD',
+          currency: 'USD',
+          fxRateToBase: 1,
+          side: 'SELL',
+          suggestedQty: 1.18,
+          suggestedNotional: 640,
+          price: 542.52,
+          sellAll: false,
+          reason: '触发止盈阈值：浮盈 28.10%',
+          selected: true,
+          hfContribution: null,
+        }],
+        riskCheck: { overallStatus: 'warn', items: [] },
+        executionStartedAt: null,
+        executedAt: null,
+        executedOrders: [],
+        executionSummary: null,
+        cancelledAt: null,
+        cancelReason: null,
+        notes: null,
+        marketContext: null,
+        policyDecisionId: null,
+        intentIds: [],
+        signalIds: [],
+        policySnapshot: null,
+        proposalPlanId: null,
+        createdAt: '2026-07-02T01:00:00.000Z',
+      } as Awaited<ReturnType<typeof listDaaRebalanceCycles>>[number],
+      {
+        cycleId: 'risk-cycle-samsung-latest',
+        status: 'generated',
+        triggerSource: 'risk',
+        triggerReason: '005930.KS 触发止盈',
+        snapshotAt: '2026-06-25T01:00:00.000Z',
+        equitySnapshot: 50000,
+        driftSnapshot: [],
+        proposals: [{
+          assetKey: 'KR::005930.KS',
+          symbol: '005930.KS',
+          currency: 'KRW',
+          fxRateToBase: 0.00069,
+          side: 'SELL',
+          suggestedQty: 13.82,
+          suggestedNotional: 3300,
+          price: 349000,
+          sellAll: false,
+          reason: '触发止盈阈值：浮盈 28.00%',
+          selected: true,
+          hfContribution: null,
+        }],
+        riskCheck: { overallStatus: 'warn', items: [] },
+        executionStartedAt: null,
+        executedAt: null,
+        executedOrders: [],
+        executionSummary: null,
+        cancelledAt: null,
+        cancelReason: null,
+        notes: null,
+        marketContext: null,
+        policyDecisionId: null,
+        intentIds: [],
+        signalIds: [],
+        policySnapshot: null,
+        proposalPlanId: null,
+        createdAt: '2026-06-25T01:00:00.000Z',
+      } as Awaited<ReturnType<typeof listDaaRebalanceCycles>>[number],
+    ]);
+    vi.mocked(executeAutoRebalanceCycle)
+      .mockResolvedValueOnce({
+        attempted: true,
+        executed: true,
+        ordersCount: 1,
+        blockedReason: null,
+        error: null,
+        authority: null,
+      })
+      .mockResolvedValueOnce({
+        attempted: true,
+        executed: true,
+        ordersCount: 1,
+        blockedReason: null,
+        error: null,
+        authority: null,
+      });
+
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.riskAutoExecute).toMatchObject({
+      attempted: true,
+      executed: true,
+      ordersCount: 2,
+      cycleId: 'risk-cycle-amd-latest,risk-cycle-samsung-latest',
+    });
+    expect(vi.mocked(executeAutoRebalanceCycle)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(executeAutoRebalanceCycle).mock.calls.map((call) => call[0].cycle.cycleId)).toEqual([
+      'risk-cycle-amd-latest',
+      'risk-cycle-samsung-latest',
+    ]);
+  });
+
   it('drift-check 只有尘埃仓触发止盈止损时不通知也不触发 agent', async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
       policy: {
