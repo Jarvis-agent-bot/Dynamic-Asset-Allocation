@@ -34,6 +34,8 @@ export interface PortfolioSnapshot {
     valuationBase?: number | null;
     weightPct: number;
     unrealizedPnlPct: number | null;
+    /** 基准货币未实现盈亏，用于摘要展示实际账户贡献。 */
+    unrealizedPnlBase?: number | null;
     targetWeightHint?: number;
     gapPct?: number | null;
   }>;

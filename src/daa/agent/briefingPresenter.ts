@@ -65,6 +65,8 @@ export interface BriefingPortfolioMeta {
     targetWeightHint?: number;
     gapPct?: number | null;
     valuationBase?: number | null;
+    /** 基准货币未实现盈亏；优先用于推送的美元贡献归因。 */
+    unrealizedPnlBase?: number | null;
   }>;
   totalEquity: number;
   cashPct: number;
@@ -243,15 +245,49 @@ export function presentBriefing(briefing: DailyBriefing, portfolio?: BriefingPor
 
 // ── 渲染辅助 ──
 
-function fmtK(v: number): string {
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-  return v.toFixed(0);
+function fmtUsd(v: number): string {
+  const rounded = Math.round(Math.abs(Number.isFinite(v) ? v : 0));
+  return `${v < 0 ? "-" : ""}$${rounded.toLocaleString("en-US")}`;
 }
 
-function portfolioOverviewLine(p: BriefingPortfolioMeta): string {
-  const holdingsValue = p.holdings.reduce((s, h) => s + (h.valuationBase ?? 0), 0);
-  return `总权益 <code>$${fmtK(p.totalEquity)}</code> | 持仓 <code>$${fmtK(holdingsValue)}</code> (${p.holdings.length}个) | 现金 <code>${(p.cashPct * 100).toFixed(0)}%</code>`;
+function resolveHoldingPnlBase(h: BriefingPortfolioMeta["holdings"][number]): number | null {
+  if (h.unrealizedPnlBase != null && Number.isFinite(h.unrealizedPnlBase)) {
+    return h.unrealizedPnlBase;
+  }
+  const value = Number(h.valuationBase);
+  const pct = Number(h.unrealizedPnlPct);
+  if (!(value > 0) || !Number.isFinite(pct) || pct <= -1) return null;
+  return value - value / (1 + pct);
+}
+
+function formatContribution(h: BriefingPortfolioMeta["holdings"][number], pnl: number): string {
+  const signed = pnl >= 0 ? `+${fmtUsd(pnl)}` : fmtUsd(pnl);
+  return `${formatAssetLabel({ symbol: h.symbol, assetKey: h.assetKey })} ${signed}`;
+}
+
+function portfolioOverviewLines(p: BriefingPortfolioMeta): string[] {
+  const cashPct = Math.max(0, Math.min(1, Number(p.cashPct) || 0));
+  const holdingsPct = Math.max(0, 1 - cashPct);
+  const lines = [
+    `权益 <code>${fmtUsd(p.totalEquity)}</code> · 持仓 <code>${(holdingsPct * 100).toFixed(0)}%</code> · 现金 <code>${(cashPct * 100).toFixed(0)}%</code>`,
+  ];
+
+  const contributions = p.holdings
+    .map((holding) => ({ holding, pnl: resolveHoldingPnlBase(holding) }))
+    .filter((item): item is { holding: BriefingPortfolioMeta["holdings"][number]; pnl: number } => item.pnl != null);
+  if (contributions.length === 0) return lines;
+
+  const totalPnl = contributions.reduce((sum, item) => sum + item.pnl, 0);
+  const accountPct = p.totalEquity > 0 ? totalPnl / p.totalEquity : 0;
+  lines.push(`浮盈亏 <code>${fmtUsd(totalPnl)}</code>（账户 ${accountPct >= 0 ? "+" : ""}${(accountPct * 100).toFixed(2)}%）`);
+
+  const winners = contributions.filter((item) => item.pnl >= 1).sort((a, b) => b.pnl - a.pnl).slice(0, 2);
+  const losers = contributions.filter((item) => item.pnl <= -1).sort((a, b) => a.pnl - b.pnl).slice(0, 2);
+  const parts: string[] = [];
+  if (winners.length > 0) parts.push(winners.map((item) => formatContribution(item.holding, item.pnl)).join("、"));
+  if (losers.length > 0) parts.push(losers.map((item) => formatContribution(item.holding, item.pnl)).join("、"));
+  if (parts.length > 0) lines.push(`主要：${parts.join("｜")}`);
+  return lines;
 }
 
 function renderAssetRiskLine(g: AssetThesisRiskGroup): string[] {
@@ -277,81 +313,35 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: Briefin
   const lines: string[] = [];
 
   if (p.mode === "digest") {
-    lines.push("<b>\u{1F9ED} 复核简报</b> · 今日无需操作");
-    if (meta.portfolio) lines.push(portfolioOverviewLine(meta.portfolio));
+    lines.push("<b>\u{1F9ED} 组合日报</b> · 今日无需操作");
+    if (meta.portfolio) lines.push(...portfolioOverviewLines(meta.portfolio));
     const watching: string[] = [];
     if (p.counts.surprises > 0) watching.push(`变化 ${p.counts.surprises} 条`);
     if (p.counts.dueForReview > 0) watching.push(`投资判断复核 ${p.counts.dueForReview} 个`);
     if (p.counts.riskAssets > 0) watching.push(`投资判断风险 ${p.counts.riskAssets} 项`);
-    lines.push(watching.length > 0 ? `观察中：${watching.join(" · ")} — 详情见 Web 工作站` : "今日平稳，无观察项。");
+    if (watching.length > 0) {
+      lines.push(`观察：${watching.join(" · ")} · 详情见 Web`);
+    } else if (!meta.portfolio) {
+      lines.push("今日平稳，无观察项。");
+    }
     return lines.join("\n");
   }
 
-  lines.push("<b>\u{1F9ED} 复核简报</b>\n");
-
-  lines.push("<b>\u{1F4CC} 今日待办</b>");
-  for (const a of p.actions) lines.push(`• ${a.text}`);
-  lines.push("");
+  lines.push("<b>\u{1F9ED} 组合日报</b>");
+  lines.push(`<b>\u{1F4CC} 需处理 ${p.actions.length} 项</b>`);
+  for (const a of p.actions.slice(0, 3)) lines.push(`• ${a.text}`);
+  if (p.plan?.reasoning) lines.push(`  ↳ ${p.plan.reasoning}`);
 
   if (meta.portfolio) {
-    lines.push("<b>\u{1F4B0} 组合概览</b>");
-    lines.push(portfolioOverviewLine(meta.portfolio));
-    const sorted = [...meta.portfolio.holdings].sort((a, b) => (b.valuationBase ?? 0) - (a.valuationBase ?? 0));
-    for (const h of sorted.slice(0, 8)) {
-      const pnl = h.unrealizedPnlPct != null ? `${h.unrealizedPnlPct >= 0 ? "+" : ""}${(h.unrealizedPnlPct * 100).toFixed(1)}%` : "";
-      lines.push(`• ${formatAssetLabel({ symbol: h.symbol, assetKey: h.assetKey })} ${(h.weightPct * 100).toFixed(1)}% $${fmtK(h.valuationBase ?? 0)} ${pnl}`);
-    }
     lines.push("");
-  }
-
-  if (p.surprises.length > 0) {
-    lines.push("<b>⚡ 需要复核的变化</b>");
-    for (const s of p.surprises) {
-      lines.push(`• [${s.severityScore}/10] ${s.title}`);
-      lines.push(`  ${formatBriefingTextExcerpt(s.description, 120)}`);
-    }
-    lines.push("");
-  }
-
-  if (p.dueForReview.length > 0) {
-    lines.push("<b>\u{1F50D} 投资判断复核</b>");
-    for (const g of p.dueForReview) {
-      lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
-      if (g.suggestedInvestigation) lines.push(`  ↳ ${formatBriefingTextExcerpt(g.suggestedInvestigation, 80)}`);
-    }
-    lines.push("");
-  }
-
-  if (p.mindChangeConditions.length > 0) {
-    lines.push("<b>\u{1F504} 改变判断的条件</b>");
-    for (const m of p.mindChangeConditions) {
-      lines.push(`• 「${m.thesisTitle}」(${m.currentConviction})`);
-      lines.push(`  ${formatBriefingTextExcerpt(m.conditions.slice(0, 2).join("; "), 120)}`);
-    }
-    lines.push("");
-  }
-
-  if (p.thesisRisks.length > 0) {
-    lines.push("<b>⚠️ 投资判断风险</b> <i>(按持仓聚合)</i>");
-    for (const g of p.thesisRisks) lines.push(...renderAssetRiskLine(g));
-    lines.push("");
-  }
-
-  if (p.plan) {
-    lines.push("<b>\u{1F916} 目标权重计划</b>");
-    if (p.plan.regimeOverride) {
-      lines.push(`• Regime: ${p.plan.regimeOverride.from}→${p.plan.regimeOverride.to} (${p.plan.regimeOverride.confidence}%)`);
-    }
-    if (p.plan.intents.length > 0) {
-      lines.push(`• ${p.plan.intents.map(i => `${i.label}→${i.targetPct.toFixed(1)}% (${i.confidence.toFixed(0)}%)`).join(", ")}`);
-    }
-    if (p.plan.reasoning) lines.push(`• 理由: ${p.plan.reasoning}`);
-    lines.push("");
+    lines.push(...portfolioOverviewLines(meta.portfolio));
   }
 
   if (p.autopilotLine) {
     lines.push(`<i>\u{1F9ED} ${p.autopilotLine}</i>`);
   }
+
+  lines.push("<i>完整依据见 Web 工作站</i>");
 
   return lines.join("\n").trimEnd();
 }

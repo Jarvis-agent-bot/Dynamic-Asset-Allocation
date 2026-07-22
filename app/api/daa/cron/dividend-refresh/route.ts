@@ -11,6 +11,7 @@ import { requireCronAuth } from "@/src/daa/cron/auth";
 import { extractDividendsFromRawPayloads } from "@/src/daa/modules/dividend/dividendExtractor";
 import {
   creditPendingDividends,
+  getDividendHoldingQtyOnExDate,
   getDividendSummary,
   processDividendIncome,
   listDividendHistory,
@@ -19,7 +20,6 @@ import { buildFxLookupToBase } from "@/src/daa/modules/portfolio/portfolioValuat
 import {
   appendDaaCashLedgerEntry,
   getDaaSystemConfig,
-  listDaaAssetUniverse,
   listDaaFxRates,
 } from "@/src/daa/store/daaStorePg";
 
@@ -58,27 +58,24 @@ async function runDividendRefreshJob(req: Request, idempotencyKey: string | null
         // Step 1: Extract dividend records from stored Yahoo Finance raw payloads (90 days)
         const extraction = await extractDividendsFromRawPayloads({ sinceDays: 90 });
 
-        // Step 2: For newly extracted dividends, match against current holdings to create income entries
-        const [system, assetRows, fxRows] = await Promise.all([
+        // Step 2: 按除息日开盘前的成交历史回放持仓，不能使用当前持仓回填历史分红。
+        const [system, fxRows] = await Promise.all([
           getDaaSystemConfig(),
-          listDaaAssetUniverse(),
           listDaaFxRates(),
         ]);
         const baseCurrency = system.config.strategy.account.baseCurrency || "USD";
         const fxLookup = buildFxLookupToBase(fxRows);
 
-        const holdingsBySymbol = new Map(
-          assetRows
-            .filter((row) => row.holdingQty > 0)
-            .map((row) => [row.symbol.toUpperCase(), row]),
-        );
-
         // Process income for recent dividends (last 90 days)
         const recentDividends = await listDividendHistory({ limit: 200 });
         let incomeProcessed = 0;
         for (const div of recentDividends) {
-          const holding = holdingsBySymbol.get(div.symbol.toUpperCase());
-          if (!holding) continue;
+          const holdingQty = await getDividendHoldingQtyOnExDate({
+            symbol: div.symbol,
+            market: div.market,
+            exDate: div.exDate,
+          });
+          if (!(holdingQty > 0)) continue;
 
           const fxRate = fxLookup.get(`${div.currency}/${baseCurrency}`)
             ?? (div.currency === baseCurrency ? 1 : null);
@@ -90,7 +87,7 @@ async function runDividendRefreshJob(req: Request, idempotencyKey: string | null
             exDate: div.exDate,
             amountPerShare: div.amount,
             currency: div.currency,
-            holdingQty: holding.holdingQty,
+            holdingQty,
             fxRate,
             baseCurrency,
           });

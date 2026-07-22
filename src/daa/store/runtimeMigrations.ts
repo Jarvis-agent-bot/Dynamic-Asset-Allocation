@@ -1599,6 +1599,223 @@ const STORE_RUNTIME_MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    id: "20260722_dividend_entitlement_cost_basis_repair",
+    async apply(query) {
+      const hasDividendIncome = await tableExists(query, "daa_dividend_income");
+      const hasTradeTickets = await tableExists(query, "daa_trade_tickets");
+      const hasPositions = await tableExists(query, "daa_positions_v2");
+      const hasLedger = await tableExists(query, "daa_portfolio_ledger_events");
+
+      if (hasDividendIncome) {
+        await query("ALTER TABLE daa_dividend_income ADD COLUMN IF NOT EXISTS owner_account_id TEXT NOT NULL DEFAULT 'default'");
+        await query("ALTER TABLE daa_dividend_income ADD COLUMN IF NOT EXISTS reversal_ledger_entry_id TEXT");
+        await query("ALTER TABLE daa_dividend_income DROP CONSTRAINT IF EXISTS daa_dividend_income_status_check");
+        await query(`
+          ALTER TABLE daa_dividend_income
+          ADD CONSTRAINT daa_dividend_income_status_check
+          CHECK (status IN ('pending', 'credited', 'reinvested', 'reversed'))
+        `);
+        await query("ALTER TABLE daa_dividend_income DROP CONSTRAINT IF EXISTS daa_dividend_income_symbol_market_ex_date_key");
+        await query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_dividend_income_owner_symbol_market_ex
+          ON daa_dividend_income(owner_account_id, symbol, market, ex_date)
+        `);
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_dividend_income_owner_status
+          ON daa_dividend_income(owner_account_id, status, created_at DESC)
+        `);
+      }
+
+      if (hasDividendIncome && hasTradeTickets && hasLedger) {
+        // 原逻辑把当前持仓当成除息日持仓。对除息日前没有持仓却已经入账的记录，
+        // 新增一笔可审计的冲销流水，而不是删除历史流水。
+        await query(`
+          WITH invalid_dividends AS (
+            SELECT d.*
+            FROM daa_dividend_income d
+            WHERE d.status = 'credited'
+              AND COALESCE((
+                SELECT SUM(CASE WHEN t.side = 'BUY' THEN t.qty ELSE -t.qty END)
+                FROM daa_trade_tickets t
+                WHERE t.owner_account_id = d.owner_account_id
+                  AND t.status = 'executed'
+                  AND UPPER(t.symbol) = UPPER(d.symbol)
+                  AND UPPER(t.market) = UPPER(d.market)
+                  AND t.executed_at < (
+                    d.ex_date::date::timestamp AT TIME ZONE CASE UPPER(d.market)
+                      WHEN 'HK' THEN 'Asia/Hong_Kong'
+                      WHEN 'KR' THEN 'Asia/Seoul'
+                      WHEN 'CN' THEN 'Asia/Shanghai'
+                      WHEN 'JP' THEN 'Asia/Tokyo'
+                      ELSE 'America/New_York'
+                    END
+                  )
+              ), 0) <= 0
+          )
+          INSERT INTO daa_portfolio_ledger_events (
+            owner_account_id, event_id, ts, event_kind, side, amount, base_currency,
+            account_base_currency, amount_in_account_base, fx_rate_to_account,
+            note, event_payload_json, created_at
+          )
+          SELECT
+            d.owner_account_id,
+            'dividend_reversal:' || d.id,
+            NOW(),
+            'cash_transfer',
+            'withdraw',
+            d.amount_in_base,
+            a.base_currency,
+            a.base_currency,
+            d.amount_in_base,
+            1,
+            '冲销无除息日持仓的历史分红: ' || d.symbol || ' ' || d.ex_date,
+            jsonb_build_object(
+              'kind', 'dividend_reversal',
+              'dividendIncomeId', d.id,
+              'originalLedgerEntryId', d.cash_ledger_entry_id,
+              'reason', 'no_holding_before_ex_date'
+            ),
+            NOW()
+          FROM invalid_dividends d
+          JOIN daa_account_state_v2 a ON a.id = d.owner_account_id
+          ON CONFLICT (event_id) DO NOTHING
+        `);
+
+        await query(`
+          WITH corrections AS (
+            SELECT d.owner_account_id, SUM(d.amount_in_base) AS amount
+            FROM daa_dividend_income d
+            JOIN daa_portfolio_ledger_events l
+              ON l.owner_account_id = d.owner_account_id
+             AND l.event_id = 'dividend_reversal:' || d.id
+            WHERE d.status = 'credited'
+            GROUP BY d.owner_account_id
+          )
+          UPDATE daa_account_state_v2 a
+          SET cash = GREATEST(0, a.cash - c.amount),
+              investable_cash = GREATEST(0, a.investable_cash - c.amount),
+              total_equity = CASE
+                WHEN a.total_equity IS NULL THEN NULL
+                ELSE GREATEST(0, a.total_equity - c.amount)
+              END,
+              updated_at = NOW()
+          FROM corrections c
+          WHERE a.id = c.owner_account_id
+        `);
+
+        await query(`
+          UPDATE daa_dividend_income d
+          SET status = 'reversed',
+              reversal_ledger_entry_id = 'dividend_reversal:' || d.id
+          WHERE d.status = 'credited'
+            AND EXISTS (
+              SELECT 1
+              FROM daa_portfolio_ledger_events l
+              WHERE l.owner_account_id = d.owner_account_id
+                AND l.event_id = 'dividend_reversal:' || d.id
+            )
+        `);
+
+        await query(`
+          UPDATE daa_dividend_income d
+          SET status = 'reversed'
+          WHERE d.status = 'pending'
+            AND COALESCE((
+              SELECT SUM(CASE WHEN t.side = 'BUY' THEN t.qty ELSE -t.qty END)
+              FROM daa_trade_tickets t
+              WHERE t.owner_account_id = d.owner_account_id
+                AND t.status = 'executed'
+                AND UPPER(t.symbol) = UPPER(d.symbol)
+                AND UPPER(t.market) = UPPER(d.market)
+                AND t.executed_at < (
+                  d.ex_date::date::timestamp AT TIME ZONE CASE UPPER(d.market)
+                    WHEN 'HK' THEN 'Asia/Hong_Kong'
+                    WHEN 'KR' THEN 'Asia/Seoul'
+                    WHEN 'CN' THEN 'Asia/Shanghai'
+                    WHEN 'JP' THEN 'Asia/Tokyo'
+                    ELSE 'America/New_York'
+                  END
+                )
+            ), 0) <= 0
+        `);
+      }
+
+      if (hasTradeTickets && hasPositions) {
+        // 旧迁移曾使用迁移当日 FX 估算基准成本。这里按每笔成交自己的执行汇率
+        // 回放移动平均成本，只更新数量能与成交账本精确对上的持仓。
+        await query(`
+          WITH RECURSIVE ordered_trades AS (
+            SELECT
+              t.owner_account_id,
+              t.asset_key,
+              t.side,
+              t.qty,
+              t.gross_notional,
+              t.notional_in_base,
+              ROW_NUMBER() OVER (
+                PARTITION BY t.owner_account_id, t.asset_key
+                ORDER BY t.executed_at, t.created_at, t.ticket_id
+              ) AS rn,
+              COUNT(*) OVER (PARTITION BY t.owner_account_id, t.asset_key) AS trade_count
+            FROM daa_trade_tickets t
+            WHERE t.status = 'executed'
+              AND t.executed_at IS NOT NULL
+          ),
+          cost_replay AS (
+            SELECT
+              o.owner_account_id,
+              o.asset_key,
+              o.rn,
+              o.trade_count,
+              CASE WHEN o.side = 'BUY' THEN o.qty ELSE -o.qty END::numeric AS qty_after,
+              CASE WHEN o.side = 'BUY' THEN o.gross_notional ELSE 0 END::numeric AS cost_after_instrument,
+              CASE WHEN o.side = 'BUY' THEN o.notional_in_base ELSE 0 END::numeric AS cost_after_base
+            FROM ordered_trades o
+            WHERE o.rn = 1
+
+            UNION ALL
+
+            SELECT
+              o.owner_account_id,
+              o.asset_key,
+              o.rn,
+              o.trade_count,
+              CASE WHEN o.side = 'BUY' THEN r.qty_after + o.qty ELSE r.qty_after - o.qty END,
+              CASE
+                WHEN o.side = 'BUY' THEN r.cost_after_instrument + o.gross_notional
+                WHEN r.qty_after > 0 THEN GREATEST(0, r.cost_after_instrument - r.cost_after_instrument * o.qty / r.qty_after)
+                ELSE 0
+              END,
+              CASE
+                WHEN o.side = 'BUY' THEN r.cost_after_base + o.notional_in_base
+                WHEN r.qty_after > 0 THEN GREATEST(0, r.cost_after_base - r.cost_after_base * o.qty / r.qty_after)
+                ELSE 0
+              END
+            FROM cost_replay r
+            JOIN ordered_trades o
+              ON o.owner_account_id = r.owner_account_id
+             AND o.asset_key = r.asset_key
+             AND o.rn = r.rn + 1
+          ),
+          replay AS (
+            SELECT owner_account_id, asset_key, qty_after, cost_after_instrument, cost_after_base
+            FROM cost_replay
+            WHERE rn = trade_count
+          )
+          UPDATE daa_positions_v2 p
+          SET cost_basis = replay.cost_after_instrument,
+              cost_basis_in_base = replay.cost_after_base,
+              updated_at = NOW()
+          FROM replay
+          WHERE p.owner_account_id = replay.owner_account_id
+            AND p.asset_key = replay.asset_key
+            AND p.qty > 0
+            AND ABS(p.qty - replay.qty_after) <= 0.00000001
+        `);
+      }
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

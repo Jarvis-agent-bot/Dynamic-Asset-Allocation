@@ -108,6 +108,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
         valuationBase: valuationByAssetKey.get(r.assetKey)?.baseValue ?? null,
         weightPct: totalEquity > 0 ? (valuationByAssetKey.get(r.assetKey)?.baseValue ?? 0) / totalEquity : 0,
         unrealizedPnlPct: r.unrealizedPnlPct != null ? r.unrealizedPnlPct / 100 : null,
+        unrealizedPnlBase: r.unrealizedPnlBase,
         targetWeightHint: r.targetWeightHint,
         gapPct: r.gapPct,
       }));

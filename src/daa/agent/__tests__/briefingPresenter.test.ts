@@ -50,14 +50,14 @@ describe("digest 模式", () => {
     const html = formatBriefingForTelegram(briefing, { portfolio: mockPortfolio });
 
     expect(html).toContain("今日无需操作");
-    expect(html).toContain("观察中：变化 1 条 · 投资判断复核 1 个");
-    expect(html).toContain("总权益 <code>$99.9K</code>");
+    expect(html).toContain("观察：变化 1 条 · 投资判断复核 1 个 · 详情见 Web");
+    expect(html).toContain("权益 <code>$99,900</code>");
     // 完整板块不应出现
     expect(html).not.toContain("今日待办");
     expect(html).not.toContain("需要复核的变化");
     expect(html).not.toContain("中等变化");
-    // 三行以内
-    expect(html.split("\n").length).toBeLessThanOrEqual(3);
+    // 账户摘要、主要贡献和观察计数合计不超过五行
+    expect(html.split("\n").length).toBeLessThanOrEqual(5);
   });
 
   it("空 briefing 输出平稳摘要", () => {
@@ -82,8 +82,35 @@ describe("digest 模式", () => {
         }],
       },
     });
-    expect(html).toContain("持仓 <code>$1.0K</code>");
+    expect(html).toContain("持仓 <code>10%</code>");
     expect(html).not.toContain("$7.8K");
+  });
+
+  it("组合概览只保留账户摘要和主要盈亏贡献，不逐项罗列持仓", () => {
+    const html = formatBriefingForTelegram(makeBriefing(), {
+      portfolio: {
+        totalEquity: 99_653.92,
+        cashPct: 0.572,
+        holdings: [
+          { assetKey: "US::AAPL", symbol: "AAPL", holdingQty: 26.62, lastPrice: 327.74, valuationBase: 8_724.07, weightPct: 0.0875, unrealizedPnlPct: 0.0916, unrealizedPnlBase: 732.29 },
+          { assetKey: "HK::0700.HK", symbol: "0700.HK", holdingQty: 120.91, lastPrice: 440.6, valuationBase: 6_793.97, weightPct: 0.0682, unrealizedPnlPct: -0.0361, unrealizedPnlBase: -254.33 },
+          { assetKey: "US::MSFT", symbol: "MSFT", holdingQty: 16.57, lastPrice: 397.75, valuationBase: 6_592.23, weightPct: 0.0662, unrealizedPnlPct: -0.0573, unrealizedPnlBase: -400.59 },
+          { assetKey: "US::TSM", symbol: "TSM", holdingQty: 12.35, lastPrice: 424.61, valuationBase: 5_245.14, weightPct: 0.0526, unrealizedPnlPct: 0.0501, unrealizedPnlBase: 250.27 },
+          { assetKey: "KR::005930.KS", symbol: "005930.KS", holdingQty: 27.66, lastPrice: 260_500, valuationBase: 4_866.36, weightPct: 0.0488, unrealizedPnlPct: -0.0257, unrealizedPnlBase: -128.51 },
+          { assetKey: "US::SPY", symbol: "SPY", holdingQty: 4.05, lastPrice: 748.28, valuationBase: 3_033.86, weightPct: 0.0304, unrealizedPnlPct: 0.0123, unrealizedPnlBase: 36.94 },
+          { assetKey: "US::QQQ", symbol: "QQQ", holdingQty: 2.82, lastPrice: 708.97, valuationBase: 1_998.06, weightPct: 0.02, unrealizedPnlPct: 0.0001, unrealizedPnlBase: 0.11 },
+          { assetKey: "US::NVDA", symbol: "NVDA", holdingQty: 8.87, lastPrice: 207.29, valuationBase: 1_838.07, weightPct: 0.0184, unrealizedPnlPct: -0.08, unrealizedPnlBase: -159.87 },
+          { assetKey: "COMMODITY::GC=F", symbol: "GC=F", holdingQty: 0.44, lastPrice: 4_125.2, valuationBase: 1_804.97, weightPct: 0.0181, unrealizedPnlPct: -0.0963, unrealizedPnlBase: -192.25 },
+          { assetKey: "US::GOOGL", symbol: "GOOGL", holdingQty: 5.04, lastPrice: 347.15, valuationBase: 1_748.59, weightPct: 0.0175, unrealizedPnlPct: -0.1251, unrealizedPnlBase: -249.99 },
+        ],
+      },
+    });
+
+    expect(html).toContain("权益 <code>$99,654</code> · 持仓 <code>43%</code> · 现金 <code>57%</code>");
+    expect(html).toContain("浮盈亏 <code>-$366</code>（账户 -0.37%）");
+    expect(html).toContain("主要：苹果 AAPL +$732、台积电 TSM +$250｜微软 MSFT -$401、腾讯控股 0700.HK -$254");
+    expect(html).not.toContain("• 苹果 AAPL 8.8%");
+    expect(html.split("\n").length).toBeLessThanOrEqual(5);
   });
 });
 
@@ -96,11 +123,11 @@ describe("full 模式", () => {
     });
     const html = formatBriefingForTelegram(briefing, { portfolio: mockPortfolio });
 
-    expect(html).toContain("今日待办");
+    expect(html).toContain("需处理 1 项");
     expect(html).toContain("[8/10] 复核「黄金突破历史新高」");
-    expect(html).toContain("需要复核的变化");
-    expect(html).toContain("组合概览");
-    expect(html).toContain("苹果 AAPL 7.8%");
+    expect(html).toContain("权益 <code>$99,900</code>");
+    expect(html).not.toContain("需要复核的变化");
+    expect(html).not.toContain("• 苹果 AAPL 7.8%");
   });
 
   it("目标权重计划触发完整简报，展示计划详情", () => {
@@ -118,9 +145,8 @@ describe("full 模式", () => {
     const html = formatBriefingForTelegram(briefing);
 
     expect(html).toContain("复核目标权重计划 1 条：NVDA→3.0%");
-    expect(html).toContain("目标权重计划");
-    expect(html).toContain("NVDA→3.0% (86%)");
-    expect(html).toContain("理由: NVDA 投资判断失效风险抬升");
+    expect(html).toContain("↳ NVDA 投资判断失效风险抬升，先降至观察仓。");
+    expect(html).not.toContain("NVDA→3.0% (86%)");
   });
 
   it("regime 覆盖建议进入今日待办", () => {
@@ -142,7 +168,8 @@ describe("full 模式", () => {
       surprises: [{ title: "现金仓位异常偏高", description: longDescription, relatedThesisId: null, severityScore: 8, suggestedAction: "复核建仓节奏" }],
     });
     const html = formatBriefingForTelegram(briefing);
-    expect(html).toContain("需要优先复核建仓节奏。…");
+    expect(html).toContain("复核「现金仓位异常偏高」 — 复核建仓节奏");
+    expect(html).not.toContain("需要优先复核建仓节奏。…");
     expect(html).not.toContain("VIX仅");
   });
 });
@@ -194,7 +221,7 @@ describe("投资判断风险板块（按资产聚合）", () => {
         },
       ],
     });
-    const html = formatBriefingForTelegram(briefing, { portfolio: mockPortfolio });
+    const html = formatBriefingForChat(briefing, { portfolio: mockPortfolio });
 
     expect(html).toContain("投资判断风险");
     // AAPL 一行同时聚合风险判断与判断不一致

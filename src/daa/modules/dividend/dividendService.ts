@@ -1,5 +1,6 @@
 import { daaPgPool, withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { randomUUID } from "node:crypto";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ type DaaDividendIncome = {
   currency: string;
   amountInBase: number;     // converted to base currency
   fxRate: number;
-  status: "pending" | "credited" | "reinvested";
+  status: "pending" | "credited" | "reinvested" | "reversed";
   cashLedgerEntryId: string | null;
   createdAt: string;
 };
@@ -111,6 +112,7 @@ async function ensureDividendSchema(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS daa_dividend_income (
         id TEXT PRIMARY KEY,
+        owner_account_id TEXT NOT NULL DEFAULT 'default',
         symbol TEXT NOT NULL,
         market TEXT NOT NULL,
         ex_date TEXT NOT NULL,
@@ -120,17 +122,64 @@ async function ensureDividendSchema(): Promise<void> {
         currency TEXT NOT NULL DEFAULT 'USD',
         amount_in_base NUMERIC NOT NULL DEFAULT 0,
         fx_rate NUMERIC NOT NULL DEFAULT 1,
-        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'credited', 'reinvested')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'credited', 'reinvested', 'reversed')),
         cash_ledger_entry_id TEXT,
+        reversal_ledger_entry_id TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE (symbol, market, ex_date)
+        UNIQUE (owner_account_id, symbol, market, ex_date)
       );
 
-      CREATE INDEX IF NOT EXISTS idx_daa_dividend_income_status
-        ON daa_dividend_income(status, created_at DESC);
+      ALTER TABLE daa_dividend_income
+        ADD COLUMN IF NOT EXISTS owner_account_id TEXT NOT NULL DEFAULT 'default';
+      ALTER TABLE daa_dividend_income
+        ADD COLUMN IF NOT EXISTS reversal_ledger_entry_id TEXT;
+      ALTER TABLE daa_dividend_income
+        DROP CONSTRAINT IF EXISTS daa_dividend_income_status_check;
+      ALTER TABLE daa_dividend_income
+        ADD CONSTRAINT daa_dividend_income_status_check
+        CHECK (status IN ('pending', 'credited', 'reinvested', 'reversed'));
+      ALTER TABLE daa_dividend_income
+        DROP CONSTRAINT IF EXISTS daa_dividend_income_symbol_market_ex_date_key;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_dividend_income_owner_symbol_market_ex
+        ON daa_dividend_income(owner_account_id, symbol, market, ex_date);
+      CREATE INDEX IF NOT EXISTS idx_daa_dividend_income_owner_status
+        ON daa_dividend_income(owner_account_id, status, created_at DESC);
     `);
   });
   return schemaInitPromise;
+}
+
+/**
+ * 回放除息日开盘前已经完成的成交，得到实际享有该次分红的持仓数量。
+ * 使用市场本地日界线，避免把除息日当天买入误算为有权分红。
+ */
+export async function getDividendHoldingQtyOnExDate(input: {
+  symbol: string;
+  market: string;
+  exDate: string;
+}): Promise<number> {
+  const ownerAccountId = getDaaAccountScopeId();
+  const pool = daaPgPool();
+  const { rows } = await pool.query<{ holding_qty: number | string | null }>(
+    `SELECT COALESCE(SUM(CASE WHEN side = 'BUY' THEN qty ELSE -qty END), 0) AS holding_qty
+     FROM daa_trade_tickets
+     WHERE owner_account_id = $1
+       AND status = 'executed'
+       AND UPPER(symbol) = UPPER($2)
+       AND UPPER(market) = UPPER($3)
+       AND executed_at < (
+         $4::date::timestamp AT TIME ZONE CASE UPPER($3)
+           WHEN 'HK' THEN 'Asia/Hong_Kong'
+           WHEN 'KR' THEN 'Asia/Seoul'
+           WHEN 'CN' THEN 'Asia/Shanghai'
+           WHEN 'JP' THEN 'Asia/Tokyo'
+           ELSE 'America/New_York'
+         END
+       )`,
+    [ownerAccountId, input.symbol.toUpperCase(), input.market.toUpperCase(), input.exDate],
+  );
+  return Math.max(0, Number(rows[0]?.holding_qty) || 0);
 }
 
 // ── Dividend History CRUD ──────────────────────────────────────────────
@@ -227,6 +276,7 @@ export async function processDividendIncome(input: {
   if (!(input.holdingQty > 0) || !(input.amountPerShare > 0)) return null;
 
   const pool = daaPgPool();
+  const ownerAccountId = getDaaAccountScopeId();
   const id = randomUUID();
   const totalAmount = input.holdingQty * input.amountPerShare;
   const fxRate = input.fxRate > 0 ? input.fxRate : 1;
@@ -234,11 +284,11 @@ export async function processDividendIncome(input: {
 
   const { rows } = await pool.query<DividendIncomeRow>(
     `INSERT INTO daa_dividend_income
-       (id, symbol, market, ex_date, holding_qty, amount_per_share, total_amount, currency, amount_in_base, fx_rate, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
-     ON CONFLICT (symbol, market, ex_date) DO NOTHING
+       (id, owner_account_id, symbol, market, ex_date, holding_qty, amount_per_share, total_amount, currency, amount_in_base, fx_rate, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')
+     ON CONFLICT (owner_account_id, symbol, market, ex_date) DO NOTHING
      RETURNING *`,
-    [id, input.symbol.toUpperCase(), input.market.toUpperCase(), input.exDate,
+    [id, ownerAccountId, input.symbol.toUpperCase(), input.market.toUpperCase(), input.exDate,
      input.holdingQty, input.amountPerShare, totalAmount, input.currency, amountInBase, fxRate],
   );
 
@@ -278,11 +328,13 @@ export async function creditPendingDividends(input: {
 }): Promise<{ credited: number; totalAmountBase: number }> {
   await ensureDividendSchema();
   const pool = daaPgPool();
+  const ownerAccountId = getDaaAccountScopeId();
 
   const { rows } = await pool.query<DividendIncomeRow>(
     `SELECT * FROM daa_dividend_income
-     WHERE status = 'pending'
+     WHERE owner_account_id = $1 AND status = 'pending'
      ORDER BY ex_date ASC`,
+    [ownerAccountId],
   );
 
   let credited = 0;
@@ -302,8 +354,10 @@ export async function creditPendingDividends(input: {
       });
 
       await pool.query(
-        `UPDATE daa_dividend_income SET status = 'credited', cash_ledger_entry_id = $1 WHERE id = $2`,
-        [ledgerEntry.id, row.id],
+        `UPDATE daa_dividend_income
+         SET status = 'credited', cash_ledger_entry_id = $1
+         WHERE owner_account_id = $2 AND id = $3`,
+        [ledgerEntry.id, ownerAccountId, row.id],
       );
 
       credited++;
@@ -322,11 +376,14 @@ export async function creditPendingDividends(input: {
 export async function getDividendSummary(): Promise<DividendSummary> {
   await ensureDividendSchema();
   const pool = daaPgPool();
+  const ownerAccountId = getDaaAccountScopeId();
 
   const { rows: statusRows } = await pool.query<DividendStatusSummaryRow>(
     `SELECT status, SUM(amount_in_base) as total, COUNT(*) as cnt
      FROM daa_dividend_income
+     WHERE owner_account_id = $1 AND status <> 'reversed'
      GROUP BY status`,
+    [ownerAccountId],
   );
 
   let totalDividendsBase = 0;
@@ -345,12 +402,17 @@ export async function getDividendSummary(): Promise<DividendSummary> {
   const { rows: bySymbolRows } = await pool.query<DividendBySymbolSummaryRow>(
     `SELECT symbol, SUM(amount_in_base) as total, COUNT(*) as cnt
      FROM daa_dividend_income
+     WHERE owner_account_id = $1 AND status <> 'reversed'
      GROUP BY symbol
      ORDER BY total DESC`,
+    [ownerAccountId],
   );
 
   const { rows: lastRow } = await pool.query<DividendLastDateRow>(
-    `SELECT MAX(ex_date) as last_date FROM daa_dividend_income`,
+    `SELECT MAX(ex_date) as last_date
+     FROM daa_dividend_income
+     WHERE owner_account_id = $1 AND status <> 'reversed'`,
+    [ownerAccountId],
   );
 
   return {

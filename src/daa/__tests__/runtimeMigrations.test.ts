@@ -130,4 +130,38 @@ describe("runtime-migrations-v1", () => {
     expect(sql).toContain("INSERT INTO daa_fundamental_snapshot_v1");
     expect(sql).toContain("fundamentals_yahoo_valuation_v4");
   });
+
+  it("修正无除息日持仓的历史分红并按成交汇率回放持仓成本", async () => {
+    const statements: string[] = [];
+    const applied = new Set<string>();
+
+    const query = async <Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
+      statements.push(sql);
+      if (sql.includes("CREATE TABLE IF NOT EXISTS daa_schema_migrations_v1")) {
+        return { rows: [] as Row[], rowCount: 0 };
+      }
+      if (sql.includes("SELECT id FROM daa_schema_migrations_v1")) {
+        const id = String(params[0] || "");
+        return { rows: (applied.has(id) ? [{ id }] : []) as unknown as Row[], rowCount: applied.has(id) ? 1 : 0 };
+      }
+      if (sql.includes("INSERT INTO daa_schema_migrations_v1")) {
+        applied.add(String(params[0] || ""));
+        return { rows: [] as Row[], rowCount: 1 };
+      }
+      if (sql.includes("SELECT 1 FROM information_schema.tables WHERE table_name = $1")) {
+        const tableName = String(params[0] || "");
+        const exists = ["daa_dividend_income", "daa_trade_tickets", "daa_positions_v2", "daa_portfolio_ledger_events"].includes(tableName);
+        return { rows: (exists ? [{ ok: 1 }] : []) as unknown as Row[], rowCount: exists ? 1 : 0 };
+      }
+      return { rows: [] as Row[], rowCount: 0 };
+    };
+
+    await runDaaStoreRuntimeMigrations(query);
+
+    const sql = statements.join("\n");
+    expect(sql).toContain("dividend_reversal");
+    expect(sql).toContain("status = 'reversed'");
+    expect(sql).toContain("WITH RECURSIVE ordered_trades");
+    expect(sql).toContain("cost_basis_in_base = replay.cost_after_base");
+  });
 });
